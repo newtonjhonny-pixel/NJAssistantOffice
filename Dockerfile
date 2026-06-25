@@ -21,7 +21,10 @@ RUN npm ci
 
 COPY . .
 
-# Gera o Prisma Client (usa schema sem banco real)
+# Usa schema PostgreSQL para produção
+RUN cp prisma/schema.production.prisma prisma/schema.prisma
+
+# Gera o Prisma Client com provider postgresql
 RUN npx prisma generate
 
 # Build do Next.js (standalone)
@@ -47,10 +50,15 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copia schema Prisma para migrations em runtime
+# Copia schema e migrations Prisma para deploy em runtime
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Entrypoint: executa migrations e inicia servidor
+COPY scripts/docker-entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
@@ -59,4 +67,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["./entrypoint.sh"]

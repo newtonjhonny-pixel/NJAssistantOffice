@@ -1,0 +1,355 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks             Task[]
+  agentInteractions AgentInteraction[]
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  origin       String?
+  priority     String    @default("MEDIA")
+  status       String    @default("PENDENTE")
+  person       String?
+  observations String?
+  dueDate      DateTime?
+  inboxItemId  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  history     TaskHistory[]
+  suggestions AiSuggestion[]
+  inboxItem   InboxItem?    @relation(fields: [inboxItemId], references: [id])
+}
+
+model TaskHistory {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  action      String
+  description String
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── INBOX ────────────────────────────────────────────────────────────────────
+
+model InboxItem {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  provider   String   @default("SIMULATED")
+
+  accountId  String?
+  account    EmailAccount? @relation(fields: [accountId], references: [id])
+
+  externalId String?
+
+  folderId   String?
+  folder     EmailFolder? @relation(fields: [folderId], references: [id])
+
+  sender      String
+  senderEmail String?
+
+  subject     String
+  bodyPreview String?
+  body        String
+  receivedAt  DateTime @default(now())
+
+  isRead      Boolean  @default(false)
+  isIgnored   Boolean  @default(false)
+  taskCreated Boolean  @default(false)
+  hasAttachments Boolean @default(false)
+
+  summary              String?
+  aiSuggestedTaskTitle String?
+  aiSuggestedPriority  String?
+  aiSuggestedDueDate   String?
+  aiSuggestedResponse  String?
+
+  suggestedTask  String?
+  suggestedReply String?
+
+  tasks Task[]
+
+  @@unique([provider, externalId])
+}
+
+// ─── EMAIL ACCOUNTS ──────────────────────────────────────────────────────────
+
+model EmailAccount {
+  id           String   @id @default(cuid())
+  provider     String
+  email        String
+  displayName  String?
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  connectedAt  DateTime @default(now())
+  lastSyncAt   DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folders    EmailFolder[]
+  inboxItems InboxItem[]
+
+  @@unique([provider, email])
+}
+
+model EmailFolder {
+  id               String   @id @default(cuid())
+  accountId        String
+  account          EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  providerFolderId String
+  name             String
+  isSelected       Boolean  @default(false)
+  totalCount       Int?
+  unreadCount      Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  inboxItems InboxItem[]
+
+  @@unique([accountId, providerFolderId])
+}
+
+// ─── IA / AGENTES ─────────────────────────────────────────────────────────────
+
+model AiSuggestion {
+  id        String   @id @default(cuid())
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent     String
+  content   String
+  type      String
+  createdAt DateTime @default(now())
+}
+
+model AgentInteraction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  agent     String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  type        String
+  title       String
+  message     String
+  relatedType String?
+  relatedId   String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── PROJETOS ─────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  objective   String?
+  responsible String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  priority    String    @default("MEDIA")
+  status      String    @default("PLANEJADO")
+  progress    Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  stages     ProjectStage[]
+  tasks      ProjectTask[]
+  milestones ProjectMilestone[]
+  history    ProjectHistory[]
+}
+
+model ProjectStage {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  order       Int       @default(0)
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String    @default("NAO_INICIADA")
+  progress    Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks ProjectTask[]
+}
+
+model ProjectTask {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId     String?
+  stage       ProjectStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  responsible String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String    @default("PENDENTE")
+  priority    String    @default("MEDIA")
+  progress    Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ProjectMilestone {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  dueDate      DateTime?
+  completedAt  DateTime?
+  status       String    @default("PENDENTE")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ProjectHistory {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── CONFERÊNCIA ──────────────────────────────────────────────────────────────
+
+model Conference {
+  id                 String    @id @default(cuid())
+  title              String
+  processType        String
+  competence         String?
+  companyUnit        String?
+  analystName        String?
+  coordinatorName    String?
+  conferenceDate     DateTime?
+  correctionDueDate  DateTime?
+  status             String    @default("PENDENTE")
+  priority           String    @default("MEDIA")
+  description        String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  checklist   ConferenceChecklistItem[]
+  issues      ConferenceIssue[]
+  corrections ConferenceCorrection[]
+  analyses    ConferenceAiAnalysis[]
+  history     ConferenceHistory[]
+}
+
+model ConferenceChecklistItem {
+  id                    String    @id @default(cuid())
+  conferenceId          String
+  conference            Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  description           String
+  result                String    @default("PENDENTE_ANALISE")
+  notes                 String?
+  correctionResponsible String?
+  correctionDueDate     DateTime?
+  order                 Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model ConferenceIssue {
+  id                    String    @id @default(cuid())
+  conferenceId          String
+  conference            Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String?
+  severity              String    @default("MEDIA")
+  impact                String?
+  probableCause         String?
+  recommendedSolution   String?
+  correctionResponsible String?
+  correctionDueDate     DateTime?
+  correctionStatus      String    @default("ABERTA")
+  finalNotes            String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  corrections ConferenceCorrection[]
+}
+
+model ConferenceCorrection {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        ConferenceIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  responsible  String?
+  dueDate      DateTime?
+  status       String    @default("ABERTA")
+  notes        String?
+  correctedAt  DateTime?
+  validatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ConferenceAiAnalysis {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  analysisType String
+  content      String
+  aiPowered    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
+
+model ConferenceHistory {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  type         String
+  title        String
+  description  String?
+  createdAt    DateTime  @default(now())
+}
