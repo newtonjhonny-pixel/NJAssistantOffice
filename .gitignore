@@ -1,0 +1,49 @@
+# ── Dependências ──────────────────────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.js
+
+# ── Next.js ───────────────────────────────────────────────────────────────────
+/.next/
+/out/
+.next/
+
+# ── Prisma ────────────────────────────────────────────────────────────────────
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+
+# ── Variáveis de ambiente (NUNCA commitar) ────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev.log
+dev.err
+logs/
+
+# ── Builds / Cache ────────────────────────────────────────────────────────────
+/dist
+/build
+.cache/
+.turbo/
+
+# ── Sistema ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+
+# ── Vercel ────────────────────────────────────────────────────────────────────
+.vercel
+
+# ── TypeScript ────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks             Task[]
+  agentInteractions AgentInteraction[]
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  origin       String?
+  priority     String    @default("MEDIA")
+  status       String    @default("PENDENTE")
+  person       String?
+  observations String?
+  dueDate      DateTime?
+  inboxItemId  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  history     TaskHistory[]
+  suggestions AiSuggestion[]
+  inboxItem   InboxItem?    @relation(fields: [inboxItemId], references: [id])
+}
+
+model TaskHistory {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  action      String
+  description String
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── INBOX ────────────────────────────────────────────────────────────────────
+
+model InboxItem {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  // Origem: SIMULATED | OUTLOOK | GMAIL
+  provider   String   @default("SIMULATED")
+
+  // Vínculo com conta de e-mail real (nullable → dados simulados não têm)
+  accountId  String?
+  account    EmailAccount? @relation(fields: [accountId], references: [id])
+
+  // ID externo único do provedor (para deduplicação)
+  externalId String?
+
+  // Pasta/label de origem
+  folderId   String?
+  folder     EmailFolder? @relation(fields: [folderId], references: [id])
+
+  // Remetente
+  sender      String
+  senderEmail String?
+
+  // Conteúdo
+  subject     String
+  bodyPreview String?
+  body        String
+  receivedAt  DateTime @default(now())
+
+  // Flags
+  isRead      Boolean  @default(false)
+  isIgnored   Boolean  @default(false)
+  taskCreated Boolean  @default(false)
+  hasAttachments Boolean @default(false)
+
+  // Análise IA
+  summary              String?
+  aiSuggestedTaskTitle String?
+  aiSuggestedPriority  String?
+  aiSuggestedDueDate   String?
+  aiSuggestedResponse  String?
+
+  // Campos legados — mantidos para dados simulados existentes
+  suggestedTask  String?
+  suggestedReply String?
+
+  tasks Task[]
+
+  @@unique([provider, externalId])
+}
+
+// ─── EMAIL ACCOUNTS ──────────────────────────────────────────────────────────
+
+model EmailAccount {
+  id           String   @id @default(cuid())
+  provider     String   // OUTLOOK | GMAIL
+  email        String
+  displayName  String?
+  accessToken  String   // criptografado em produção
+  refreshToken String?
+  expiresAt    DateTime?
+  connectedAt  DateTime @default(now())
+  lastSyncAt   DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folders    EmailFolder[]
+  inboxItems InboxItem[]
+
+  @@unique([provider, email])
+}
+
+model EmailFolder {
+  id               String   @id @default(cuid())
+  accountId        String
+  account          EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  providerFolderId String
+  name             String
+  isSelected       Boolean  @default(false)
+  totalCount       Int?
+  unreadCount      Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  inboxItems InboxItem[]
+
+  @@unique([accountId, providerFolderId])
+}
+
+// ─── IA / AGENTES ─────────────────────────────────────────────────────────────
+
+model AiSuggestion {
+  id        String   @id @default(cuid())
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent     String
+  content   String
+  type      String
+  createdAt DateTime @default(now())
+}
+
+model AgentInteraction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  agent     String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  type        String   // TASK_CREATED | TASK_URGENT | TASK_OVERDUE | TASK_WAITING | EMAIL_RECEIVED | AI_SUGGESTION
+  title       String
+  message     String
+  relatedType String?  // task | inbox
+  relatedId   String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── PROJETOS ─────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  objective   String?
+  responsible String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  priority    String   @default("MEDIA")   // BAIXA | MEDIA | ALTA | URGENTE
+  status      String   @default("PLANEJADO") // PLANEJADO | EM_ANDAMENTO | PAUSADO | ATRASADO | CONCLUIDO | CANCELADO
+  progress    Int      @default(0)          // 0-100 calculado
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stages     ProjectStage[]
+  tasks      ProjectTask[]
+  milestones ProjectMilestone[]
+  history    ProjectHistory[]
+}
+
+model ProjectStage {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  order       Int      @default(0)
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String   @default("NAO_INICIADA") // NAO_INICIADA | EM_ANDAMENTO | AGUARDANDO | CONCLUIDA | ATRASADA | CANCELADA
+  progress    Int      @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks ProjectTask[]
+}
+
+model ProjectTask {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId     String?
+  stage       ProjectStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  responsible String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String   @default("PENDENTE") // PENDENTE | EM_ANDAMENTO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA | ATRASADA
+  priority    String   @default("MEDIA")
+  progress    Int      @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProjectMilestone {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  dueDate      DateTime?
+  completedAt  DateTime?
+  status       String    @default("PENDENTE") // PENDENTE | CONCLUIDA | ATRASADA | CANCELADA
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ProjectHistory {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type        String   // CRIACAO | STATUS | PRAZO | ETAPA_CRIADA | ETAPA_CONCLUIDA | TAREFA_CRIADA | TAREFA_CONCLUIDA | MARCO_CRIADO | MARCO_CUMPRIDO | EDICAO | IA_ANALISE
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── CONFERÊNCIA ──────────────────────────────────────────────────────────────
+
+model Conference {
+  id                 String    @id @default(cuid())
+  title              String
+  processType        String    // FOLHA | RESCISAO | FERIAS | ADMISSAO | BENEFICIOS | ENCARGOS | PAGAMENTO | MOVIMENTACAO | PONTO | ESOCIAL | FGTS | IRRF | DCTFWEB | OUTROS
+  competence         String?   // ex: "06/2026"
+  companyUnit        String?
+  analystName        String?
+  coordinatorName    String?
+  conferenceDate     DateTime?
+  correctionDueDate  DateTime?
+  status             String    @default("PENDENTE") // PENDENTE | EM_CONFERENCIA | COM_INCONSISTENCIA | AGUARDANDO_CORRECAO | CORRIGIDO | APROVADO | REPROVADO | CANCELADO
+  priority           String    @default("MEDIA")    // BAIXA | MEDIA | ALTA | URGENTE
+  description        String?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  checklist   ConferenceChecklistItem[]
+  issues      ConferenceIssue[]
+  corrections ConferenceCorrection[]
+  analyses    ConferenceAiAnalysis[]
+  history     ConferenceHistory[]
+}
+
+model ConferenceChecklistItem {
+  id                   String    @id @default(cuid())
+  conferenceId         String
+  conference           Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  description          String
+  result               String    @default("PENDENTE_ANALISE") // CONFORME | NAO_CONFORME | NAO_APLICA | PENDENTE_ANALISE
+  notes                String?
+  correctionResponsible String?
+  correctionDueDate    DateTime?
+  order                Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+model ConferenceIssue {
+  id                    String    @id @default(cuid())
+  conferenceId          String
+  conference            Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String?
+  severity              String    @default("MEDIA")  // BAIXA | MEDIA | ALTA | CRITICA
+  impact                String?
+  probableCause         String?
+  recommendedSolution   String?
+  correctionResponsible String?
+  correctionDueDate     DateTime?
+  correctionStatus      String    @default("ABERTA") // ABERTA | EM_CORRECAO | CORRIGIDA | VALIDADA | CANCELADA
+  finalNotes            String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  corrections ConferenceCorrection[]
+}
+
+model ConferenceCorrection {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        ConferenceIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  responsible  String?
+  dueDate      DateTime?
+  status       String    @default("ABERTA") // ABERTA | EM_CORRECAO | CORRIGIDA | VALIDADA | CANCELADA
+  notes        String?
+  correctedAt  DateTime?
+  validatedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ConferenceAiAnalysis {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  analysisType String    // COMPLETA | TEXTO_CORRECAO | ORIENTACAO_ANALISTA | PARECER_FINAL | PLANO_PREVENCAO | CHECKLIST_SUGERIDO
+  content      String
+  aiPowered    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
+
+model ConferenceHistory {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  type         String    // CRIACAO | STATUS | ITEM_CONFERIDO | INCONSISTENCIA | IA_ANALISE | CORRECAO_SOLICITADA | CORRECAO_REALIZADA | APROVADA | REPROVADA | EDICAO
+  title        String
+  description  String?
+  createdAt    DateTime  @default(now())
+}
