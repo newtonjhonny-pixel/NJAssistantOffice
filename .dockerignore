@@ -1,0 +1,44 @@
+# Dependências (reinstaladas no build)
+node_modules
+npm-debug.log*
+
+# Build do Next.js
+.next
+out
+
+# Banco de dados local
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+
+# Variáveis de ambiente (injetadas em runtime)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Logs
+*.log
+logs/
+dev.log
+dev.err
+
+# Cache e builds locais
+.cache/
+.turbo/
+dist/
+build/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.pem
+
+# Git
+.git
+.gitignore
+
+# Documentação
+README.md
