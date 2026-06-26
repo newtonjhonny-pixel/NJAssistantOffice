@@ -27,17 +27,20 @@ model Task {
   priority     String    @default("MEDIA")
   status       String    @default("PENDENTE")
   person       String?
+  responsible  String?
   observations String?
   dueDate      DateTime?
+  receivedAt   DateTime?
   inboxItemId  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  userId      String
-  user        User          @relation(fields: [userId], references: [id])
-  history     TaskHistory[]
-  suggestions AiSuggestion[]
-  inboxItem   InboxItem?    @relation(fields: [inboxItemId], references: [id])
+  userId        String
+  user          User                @relation(fields: [userId], references: [id])
+  history       TaskHistory[]
+  statusHistory TaskStatusHistory[]
+  suggestions   AiSuggestion[]
+  inboxItem     InboxItem?          @relation(fields: [inboxItemId], references: [id])
 }
 
 model TaskHistory {
@@ -49,6 +52,19 @@ model TaskHistory {
   oldValue    String?
   newValue    String?
   createdAt   DateTime @default(now())
+}
+
+model TaskStatusHistory {
+  id             String   @id @default(cuid())
+  taskId         String
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  statusAnterior String
+  statusNovo     String
+  observacao     String
+  responsavel    String
+  waitingFor     String?
+  waitingReason  String?
+  createdAt      DateTime @default(now())
 }
 
 // ─── INBOX ────────────────────────────────────────────────────────────────────

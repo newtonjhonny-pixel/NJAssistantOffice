@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNotification } from '@/lib/notifications'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const task = await prisma.task.findUnique({
     where: { id: params.id },
     include: {
-      history: { orderBy: { createdAt: 'desc' } },
-      suggestions: { orderBy: { createdAt: 'desc' } },
+      history:       { orderBy: { createdAt: 'desc' } },
+      statusHistory: { orderBy: { createdAt: 'asc'  } },
+      suggestions:   { orderBy: { createdAt: 'desc' } },
     },
   })
 
@@ -20,45 +23,35 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const existing = await prisma.task.findUnique({ where: { id: params.id } })
   if (!existing) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 })
 
+  // Status changes must go through /api/tasks/[id]/status
+  const { status: _ignored, ...safeBody } = body
+
   const task = await prisma.task.update({
     where: { id: params.id },
     data: {
-      ...(body.title !== undefined && { title: body.title }),
-      ...(body.description !== undefined && { description: body.description }),
-      ...(body.origin !== undefined && { origin: body.origin }),
-      ...(body.priority !== undefined && { priority: body.priority }),
-      ...(body.status !== undefined && { status: body.status }),
-      ...(body.person !== undefined && { person: body.person }),
-      ...(body.observations !== undefined && { observations: body.observations }),
-      ...(body.dueDate !== undefined && { dueDate: body.dueDate ? new Date(body.dueDate) : null }),
+      ...(safeBody.title       !== undefined && { title:       safeBody.title }),
+      ...(safeBody.description !== undefined && { description: safeBody.description }),
+      ...(safeBody.origin      !== undefined && { origin:      safeBody.origin }),
+      ...(safeBody.priority    !== undefined && { priority:    safeBody.priority }),
+      ...(safeBody.person      !== undefined && { person:      safeBody.person }),
+      ...(safeBody.responsible !== undefined && { responsible: safeBody.responsible }),
+      ...(safeBody.observations !== undefined && { observations: safeBody.observations }),
+      ...(safeBody.dueDate     !== undefined && { dueDate:     safeBody.dueDate ? new Date(safeBody.dueDate) : null }),
+      ...(safeBody.receivedAt  !== undefined && { receivedAt:  safeBody.receivedAt ? new Date(safeBody.receivedAt) : null }),
     },
   })
 
-  // Registrar histórico de mudanças
-  const changes: string[] = []
-  if (body.status && body.status !== existing.status) {
-    changes.push(`Status alterado de "${existing.status}" para "${body.status}"`)
-    await prisma.taskHistory.create({
-      data: {
-        taskId: task.id,
-        action: 'STATUS',
-        description: `Status alterado`,
-        oldValue: existing.status,
-        newValue: body.status,
-      },
-    })
-  }
-  if (body.priority && body.priority !== existing.priority) {
+  if (safeBody.priority && safeBody.priority !== existing.priority) {
     await prisma.taskHistory.create({
       data: {
         taskId: task.id,
         action: 'PRIORIDADE',
-        description: `Prioridade alterada`,
+        description: 'Prioridade alterada',
         oldValue: existing.priority,
-        newValue: body.priority,
+        newValue: safeBody.priority,
       },
     })
-    if (body.priority === 'URGENTE') {
+    if (safeBody.priority === 'URGENTE') {
       createNotification({
         type: 'TASK_URGENT',
         title: '🔴 Tarefa marcada como urgente',
@@ -68,33 +61,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       })
     }
   }
-  if (body.status && body.status !== existing.status && body.status === 'AGUARDANDO_RETORNO') {
-    createNotification({
-      type: 'TASK_WAITING',
-      title: '⏳ Tarefa aguardando retorno',
-      message: task.title,
-      relatedType: 'task',
-      relatedId: task.id,
-    })
-  }
-  if (body.dueDate && String(body.dueDate) !== String(existing.dueDate)) {
+
+  if (safeBody.dueDate !== undefined && String(safeBody.dueDate) !== String(existing.dueDate)) {
     await prisma.taskHistory.create({
       data: {
         taskId: task.id,
         action: 'PRAZO',
-        description: `Prazo alterado`,
+        description: 'Prazo alterado',
         oldValue: existing.dueDate?.toISOString(),
-        newValue: body.dueDate,
+        newValue: safeBody.dueDate,
       },
     })
   }
-  if (changes.length === 0 && Object.keys(body).length > 0) {
+
+  if (!safeBody.priority && !safeBody.dueDate) {
     await prisma.taskHistory.create({
-      data: {
-        taskId: task.id,
-        action: 'EDICAO',
-        description: 'Tarefa editada',
-      },
+      data: { taskId: task.id, action: 'EDICAO', description: 'Tarefa editada' },
     })
   }
 
@@ -105,17 +87,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const existing = await prisma.task.findUnique({ where: { id: params.id } })
   if (!existing) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 })
 
-  await prisma.task.update({
-    where: { id: params.id },
-    data: { status: 'CANCELADA' },
-  })
-
+  await prisma.task.update({ where: { id: params.id }, data: { status: 'CANCELADA' } })
   await prisma.taskHistory.create({
-    data: {
-      taskId: params.id,
-      action: 'CANCELAMENTO',
-      description: 'Tarefa cancelada',
-    },
+    data: { taskId: params.id, action: 'CANCELAMENTO', description: 'Tarefa cancelada' },
   })
 
   return NextResponse.json({ ok: true })

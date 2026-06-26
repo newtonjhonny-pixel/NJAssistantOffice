@@ -159,23 +159,37 @@ export async function getAgentResponse(
 export async function analyzeTask(taskId: string): Promise<AgentResponse[]> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { history: { orderBy: { createdAt: 'desc' }, take: 10 } },
+    include: {
+      history:       { orderBy: { createdAt: 'desc' }, take: 10 },
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+    },
   })
   if (!task) return []
 
   const taskCtx: TaskContext = {
-    title: task.title,
+    title:       task.title,
     description: task.description,
-    origin: task.origin,
-    priority: task.priority,
-    status: task.status,
-    person: task.person,
-    dueDate: task.dueDate?.toISOString() ?? null,
+    origin:      task.origin,
+    priority:    task.priority,
+    status:      task.status,
+    person:      task.person,
+    responsible: task.responsible,
+    dueDate:     task.dueDate?.toISOString()    ?? null,
+    receivedAt:  task.receivedAt?.toISOString() ?? null,
     observations: task.observations,
     history: task.history.map(h => ({
-      action: h.action,
+      action:      h.action,
       description: h.description,
-      createdAt: h.createdAt.toISOString(),
+      createdAt:   h.createdAt.toISOString(),
+    })),
+    statusHistory: task.statusHistory.map(h => ({
+      statusAnterior: h.statusAnterior,
+      statusNovo:     h.statusNovo,
+      observacao:     h.observacao,
+      responsavel:    h.responsavel,
+      waitingFor:     h.waitingFor,
+      waitingReason:  h.waitingReason,
+      createdAt:      h.createdAt.toISOString(),
     })),
   }
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNotification } from '@/lib/notifications'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
@@ -37,14 +39,16 @@ export async function POST(req: NextRequest) {
 
   const task = await prisma.task.create({
     data: {
-      title: body.title,
+      title:       body.title,
       description: body.description,
-      origin: body.origin,
-      priority: body.priority || 'MEDIA',
-      status: body.status || 'PENDENTE',
-      person: body.person,
+      origin:      body.origin,
+      priority:    body.priority    || 'MEDIA',
+      status:      body.status      || 'PENDENTE',
+      person:      body.person,
+      responsible: body.responsible,
       observations: body.observations,
-      dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+      dueDate:     body.dueDate    ? new Date(body.dueDate)    : undefined,
+      receivedAt:  body.receivedAt ? new Date(body.receivedAt) : undefined,
       userId: 'default-user',
       ...(body.inboxItemId && { inboxItemId: body.inboxItemId }),
     },

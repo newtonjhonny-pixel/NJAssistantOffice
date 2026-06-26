@@ -1,3 +1,13 @@
+export interface TaskStatusHistoryEntry {
+  statusAnterior: string
+  statusNovo: string
+  observacao: string
+  responsavel: string
+  waitingFor?: string | null
+  waitingReason?: string | null
+  createdAt: string
+}
+
 export interface TaskContext {
   title: string
   description?: string | null
@@ -5,9 +15,12 @@ export interface TaskContext {
   priority: string
   status: string
   person?: string | null
+  responsible?: string | null
   dueDate?: string | null
+  receivedAt?: string | null
   observations?: string | null
   history?: { action: string; description: string; createdAt: string }[]
+  statusHistory?: TaskStatusHistoryEntry[]
 }
 
 export interface SystemContext {
@@ -44,7 +57,23 @@ function formatTaskContext(task: TaskContext): string {
     txt += `Prazo: ${d.toLocaleDateString('pt-BR')}${overdue ? ' ⚠️ PRAZO VENCIDO' : ''}\n`
   }
   if (task.observations) txt += `Observações: ${task.observations}\n`
-  if (task.history?.length) {
+  if (task.receivedAt) txt += `Recebida em: ${new Date(task.receivedAt).toLocaleString('pt-BR')}\n`
+  if (task.responsible) txt += `Responsável: ${task.responsible}\n`
+
+  if (task.statusHistory?.length) {
+    const STATUS: Record<string, string> = {
+      PENDENTE: 'Pendente', EM_ANDAMENTO: 'Em andamento',
+      AGUARDANDO_RETORNO: 'Aguardando retorno', CONCLUIDA: 'Concluída', CANCELADA: 'Cancelada'
+    }
+    txt += `\nHistórico completo de alterações de status:\n`
+    task.statusHistory.forEach(h => {
+      const dt = new Date(h.createdAt).toLocaleString('pt-BR')
+      txt += `- [${dt}] ${STATUS[h.statusAnterior] ?? h.statusAnterior} → ${STATUS[h.statusNovo] ?? h.statusNovo}\n`
+      txt += `  Responsável: ${h.responsavel} | Observação: ${h.observacao}\n`
+      if (h.waitingFor)    txt += `  Aguardando retorno de: ${h.waitingFor}\n`
+      if (h.waitingReason) txt += `  Motivo: ${h.waitingReason}\n`
+    })
+  } else if (task.history?.length) {
     txt += `\nHistórico recente:\n`
     task.history.slice(0, 5).forEach(h => {
       txt += `- [${new Date(h.createdAt).toLocaleDateString('pt-BR')}] ${h.description}\n`
@@ -154,39 +183,49 @@ ${formatSystemContext(ctx)}`
 export function buildTaskAnalysisPrompt(agent: string, task: TaskContext, sysCtx: SystemContext): string {
   const taskBlock = formatTaskContext(task)
 
+  const hasStatusHistory = (task.statusHistory?.length ?? 0) > 0
+
   const instructions: Record<string, string> = {
-    ASSISTENTE: `Analise esta tarefa e responda:
-1. Resumo da demanda
-2. Como ela se encaixa na agenda atual (considerando as outras tarefas)
-3. Sugestão de quando/como executar
-4. Próximos passos concretos`,
+    ASSISTENTE: `Analise esta tarefa considerando TODO o histórico de alterações de status e responda:
+1. **Resumo da situação atual** — o que está acontecendo com esta tarefa?
+2. **Problema encontrado** — há algo bloqueando ou retardando?
+3. **Como ela se encaixa na agenda atual**
+4. **Próximos passos concretos e objetivos**
+5. **Tempo estimado para conclusão**
+${hasStatusHistory ? '6. **Texto sugerido para responder ao solicitante** (baseado no histórico)' : ''}`,
 
-    ANALISTA: `Analise esta tarefa em profundidade e responda:
-1. Entendimento da demanda
-2. Informações faltantes que precisam ser obtidas
-3. Plano de ação detalhado (numerado)
-4. Riscos identificados
-5. Sugestão de resolução`,
+    ANALISTA: `Analise esta tarefa em profundidade com base no histórico completo e responda:
+1. **Resumo da situação**
+2. **Problema identificado** — o que está impedindo a conclusão?
+3. **Motivo dos atrasos** (se houver) — analise cada transição de status
+4. **Informações faltantes**
+5. **Plano de ação detalhado** (numerado) para finalizar
+6. **Riscos** se não for resolvida rapidamente
+7. **Nível de prioridade recomendado**`,
 
-    REDATOR: `Com base nesta tarefa, gere (quando aplicável):
-1. Sugestão de resposta de e-mail para a pessoa envolvida
-2. Sugestão de mensagem curta de WhatsApp
-3. Se a tarefa estiver atrasada ou aguardando retorno, gere também um texto de cobrança
-Coloque cada texto entre linhas "---".`,
+    REDATOR: `Com base nesta tarefa e todo o seu histórico, gere:
+1. **Texto para responder ao solicitante** — explique a situação atual de forma profissional
+2. **Texto para enviar ao gestor** — resumo executivo da tarefa e situação
+3. Se houver atraso ou aguardando retorno: **texto de cobrança**
+Coloque cada texto entre linhas "---".
+Baseie os textos nos dados reais do histórico de status.`,
 
-    PENDENCIAS: `Analise o status desta tarefa como Gestor de Pendências:
-1. Nível de risco (🔴 Crítico / 🟡 Atenção / 🟢 Monitorar)
-2. Análise do atraso ou risco de atraso
-3. Quem deve ser cobrado e por quê
-4. Urgência da cobrança
-5. Próxima ação recomendada
-6. Texto de cobrança pronto (se aplicável)`,
+    PENDENCIAS: `Analise o histórico completo desta tarefa como Gestor de Pendências:
+1. **Nível de risco** (🔴 Crítico / 🟡 Atenção / 🟢 Monitorar) com justificativa
+2. **Motivo dos atrasos** — analise cada mudança de status registrada
+3. **Quem deve ser cobrado** e por quê (baseado nos dados de waitingFor do histórico)
+4. **Urgência da cobrança**
+5. **Próxima ação recomendada**
+6. **Texto de cobrança pronto** para uso imediato`,
 
-    COORDENADOR: `Como Coordenador Administrativo, analise esta tarefa no contexto geral:
-1. Prioridade real (considerando todas as outras tarefas)
-2. Impacto se não for resolvida
-3. Recomendação de prioridade (manter, elevar ou reduzir)
-4. Orientação estratégica para resolução`,
+    COORDENADOR: `Como Coordenador Administrativo, analise esta tarefa com visão completa do histórico:
+1. **Resumo da situação**
+2. **Prioridade real** no contexto de todas as outras tarefas
+3. **Motivo dos atrasos ou bloqueios** identificados no histórico
+4. **Sugestão para finalizar** — próximas ações em ordem de execução
+5. **Riscos** se a tarefa não for resolvida
+6. **Tempo estimado para conclusão**
+7. **Orientação estratégica final**`,
   }
 
   return `${instructions[agent] ?? 'Analise esta tarefa e forneça orientações relevantes.'}\n\nDados da tarefa:\n${taskBlock}`

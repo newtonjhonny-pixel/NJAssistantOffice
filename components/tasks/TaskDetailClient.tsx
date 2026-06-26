@@ -1,17 +1,33 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import {
-  ArrowLeft, Edit, Bot, Clock, User, Calendar,
-  Tag, AlertCircle, Loader2, Sparkles, Info
+  ArrowLeft, Edit, Bot, Clock, User, Calendar, Tag,
+  AlertCircle, Loader2, Sparkles, Info, ArrowRight,
+  CheckCircle2, XCircle, Timer, RefreshCw, Circle,
+  ChevronRight, FileText
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import {
   cn, PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS,
-  AGENT_COLORS, AGENT_ICONS, AGENT_NAMES, formatDate, formatDateTime, isOverdue
+  AGENT_COLORS, AGENT_ICONS, AGENT_NAMES, formatDate, formatDateTime,
+  formatRelativeTime, isOverdue
 } from "@/lib/utils"
+
+// ─── TIPOS ───────────────────────────────────────────────────────────────────
+
+interface StatusHistoryEntry {
+  id: string
+  statusAnterior: string
+  statusNovo: string
+  observacao: string
+  responsavel: string
+  waitingFor: string | null
+  waitingReason: string | null
+  createdAt: string
+}
 
 interface Task {
   id: string
@@ -21,10 +37,13 @@ interface Task {
   priority: string
   status: string
   person: string | null
+  responsible: string | null
   observations: string | null
   dueDate: string | null
+  receivedAt: string | null
   createdAt: string
   updatedAt: string
+  statusHistory: StatusHistoryEntry[]
   history: {
     id: string
     action: string
@@ -43,54 +62,411 @@ interface AgentResponse {
   aiPowered: boolean
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  CRIACAO: 'Criação',
-  STATUS: 'Mudança de status',
-  PRIORIDADE: 'Mudança de prioridade',
-  PRAZO: 'Alteração de prazo',
-  EDICAO: 'Edição',
-  CANCELAMENTO: 'Cancelamento',
-  CONCLUSAO: 'Conclusão',
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+  PENDENTE:           <Circle        className="w-4 h-4" />,
+  EM_ANDAMENTO:       <Timer         className="w-4 h-4" />,
+  AGUARDANDO_RETORNO: <RefreshCw     className="w-4 h-4" />,
+  CONCLUIDA:          <CheckCircle2  className="w-4 h-4" />,
+  CANCELADA:          <XCircle       className="w-4 h-4" />,
+}
+
+const STATUS_TIMELINE_COLORS: Record<string, string> = {
+  PENDENTE:           "bg-yellow-400 text-yellow-800 border-yellow-300",
+  EM_ANDAMENTO:       "bg-blue-500   text-white       border-blue-400",
+  AGUARDANDO_RETORNO: "bg-purple-500 text-white       border-purple-400",
+  CONCLUIDA:          "bg-green-500  text-white       border-green-400",
+  CANCELADA:          "bg-slate-400  text-white       border-slate-300",
+}
+
+const STATUS_LINE_COLORS: Record<string, string> = {
+  PENDENTE:           "border-yellow-300",
+  EM_ANDAMENTO:       "border-blue-400",
+  AGUARDANDO_RETORNO: "border-purple-400",
+  CONCLUIDA:          "border-green-400",
+  CANCELADA:          "border-slate-300",
+}
+
+function durationBetween(from: string, to?: string): string {
+  const start = new Date(from).getTime()
+  const end   = to ? new Date(to).getTime() : Date.now()
+  const diff  = Math.max(0, end - start)
+  const mins  = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days  = Math.floor(diff / 86400000)
+  if (days > 1)  return `${days} dias`
+  if (days === 1) return "1 dia"
+  if (hours > 1) return `${hours} horas`
+  if (hours === 1) return "1 hora"
+  if (mins > 1)  return `${mins} minutos`
+  return "agora mesmo"
 }
 
 function renderContent(text: string) {
   return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br/>')
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br/>")
 }
 
-export function TaskDetailClient({ id }: { id: string }) {
-  const [task, setTask] = useState<Task | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analyses, setAnalyses] = useState<AgentResponse[]>([])
-  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
-  const [updating, setUpdating] = useState(false)
+// ─── MODAL DE ALTERAÇÃO DE STATUS ────────────────────────────────────────────
 
-  useEffect(() => {
-    fetch(`/api/tasks/${id}`)
+interface StatusModalProps {
+  currentStatus: string
+  onClose: () => void
+  onSaved: () => void
+  taskId: string
+}
+
+function StatusChangeModal({ currentStatus, onClose, onSaved, taskId }: StatusModalProps) {
+  const [selectedStatus, setSelectedStatus] = useState("")
+  const [observacao,     setObservacao]     = useState("")
+  const [responsavel,    setResponsavel]    = useState("")
+  const [waitingFor,     setWaitingFor]     = useState("")
+  const [waitingReason,  setWaitingReason]  = useState("")
+  const [saving,         setSaving]         = useState(false)
+  const [error,          setError]          = useState("")
+
+  const statusOptions = Object.entries(STATUS_LABELS).filter(([k]) => k !== currentStatus)
+
+  const observacaoLabel: Record<string, string> = {
+    EM_ANDAMENTO:       "O que está sendo executado?",
+    AGUARDANDO_RETORNO: "Motivo da espera",
+    CONCLUIDA:          "Como a tarefa foi concluída?",
+    CANCELADA:          "Motivo do cancelamento",
+    PENDENTE:           "Observação",
+  }
+
+  const observacaoPlaceholder: Record<string, string> = {
+    EM_ANDAMENTO:       "Ex: Realizando cálculo da rescisão. Conferindo documentação enviada pelo colaborador.",
+    AGUARDANDO_RETORNO: "Ex: Aguardando aprovação do pagamento pelo financeiro.",
+    CONCLUIDA:          "Ex: Pagamento efetuado. Documentação enviada. Rescisão homologada.",
+    CANCELADA:          "Ex: Solicitação duplicada. Cliente desistiu. Lançamento incorreto.",
+    PENDENTE:           "Informe o motivo da alteração...",
+  }
+
+  async function handleSave() {
+    setError("")
+    if (!selectedStatus) { setError("Selecione o novo status."); return }
+    if (!observacao.trim()) { setError("A observação é obrigatória para alteração do status."); return }
+    if (!responsavel.trim()) { setError("Informe o responsável pela alteração."); return }
+    if (selectedStatus === "AGUARDANDO_RETORNO" && !waitingFor.trim()) {
+      setError("Informe de quem está aguardando retorno."); return
+    }
+
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statusNovo:   selectedStatus,
+          observacao:   observacao.trim(),
+          responsavel:  responsavel.trim(),
+          waitingFor:   waitingFor.trim()    || undefined,
+          waitingReason: waitingReason.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || "Erro ao salvar."); return }
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800">Alterar Status</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Status atual */}
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <span>Status atual:</span>
+            <span className={cn("border rounded-full px-2.5 py-0.5 text-xs font-medium", STATUS_COLORS[currentStatus])}>
+              {STATUS_LABELS[currentStatus]}
+            </span>
+          </div>
+
+          {/* Novo status */}
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-2">Novo Status <span className="text-red-500">*</span></p>
+            <div className="grid grid-cols-2 gap-2">
+              {statusOptions.map(([k, v]) => (
+                <label
+                  key={k}
+                  className={cn(
+                    "flex items-center gap-2.5 border rounded-lg px-3 py-2.5 cursor-pointer transition-all text-sm",
+                    selectedStatus === k
+                      ? "border-blue-500 bg-blue-50 text-blue-800 font-medium"
+                      : "border-slate-200 hover:border-slate-300 text-slate-700"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    value={k}
+                    checked={selectedStatus === k}
+                    onChange={() => { setSelectedStatus(k); setError("") }}
+                    className="accent-blue-600"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    {STATUS_ICONS[k]}
+                    {v}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Campos contextuais para AGUARDANDO_RETORNO */}
+          {selectedStatus === "AGUARDANDO_RETORNO" && (
+            <div className="bg-purple-50 border border-purple-100 rounded-lg p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-purple-800 mb-1">
+                  De quem está aguardando retorno? <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={waitingFor}
+                  onChange={e => setWaitingFor(e.target.value)}
+                  placeholder="Ex: Financeiro, RH, Colaborador João..."
+                  className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-purple-800 mb-1">
+                  Motivo da espera
+                </label>
+                <input
+                  type="text"
+                  value={waitingReason}
+                  onChange={e => setWaitingReason(e.target.value)}
+                  placeholder="Ex: Aguardando envio dos documentos..."
+                  className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-300 bg-white"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Observação */}
+          {selectedStatus && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                {observacaoLabel[selectedStatus] || "Observação"} <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={observacao}
+                onChange={e => setObservacao(e.target.value)}
+                placeholder={observacaoPlaceholder[selectedStatus]}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none"
+              />
+            </div>
+          )}
+
+          {/* Responsável */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Responsável pela alteração <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={responsavel}
+              onChange={e => setResponsavel(e.target.value)}
+              placeholder="Seu nome ou departamento..."
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+
+          {/* Erro */}
+          {error && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={handleSave} disabled={saving || !selectedStatus}>
+            {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Salvando...</> : "Salvar"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── TIMELINE ────────────────────────────────────────────────────────────────
+
+function Timeline({ entries, createdAt, receivedAt }: {
+  entries: StatusHistoryEntry[]
+  createdAt: string
+  receivedAt: string | null
+}) {
+  const allEntries: Array<{ type: "received" | "created" | "status"; data?: StatusHistoryEntry; date: string }> = []
+
+  if (receivedAt) allEntries.push({ type: "received", date: receivedAt })
+  allEntries.push({ type: "created", date: createdAt })
+  entries.forEach(e => allEntries.push({ type: "status", data: e, date: e.createdAt }))
+  allEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  if (allEntries.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm flex items-center gap-2">
+          <FileText className="w-4 h-4 text-slate-400" />
+          Timeline da Tarefa
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 pb-4">
+        <div className="relative px-5">
+          {/* Linha vertical */}
+          <div className="absolute left-[1.875rem] top-0 bottom-0 w-px bg-slate-200" />
+
+          <div className="space-y-1">
+            {allEntries.map((entry, idx) => {
+              if (entry.type === "received") {
+                return (
+                  <div key="received" className="flex gap-4 py-3 relative">
+                    <div className="w-4 h-4 rounded-full bg-slate-300 border-2 border-white ring-1 ring-slate-300 flex items-center justify-center mt-0.5 shrink-0 z-10">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recebida</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(entry.date)}</p>
+                    </div>
+                  </div>
+                )
+              }
+
+              if (entry.type === "created") {
+                return (
+                  <div key="created" className="flex gap-4 py-3 relative">
+                    <div className="w-4 h-4 rounded-full bg-slate-400 border-2 border-white flex items-center justify-center mt-0.5 shrink-0 z-10">
+                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Tarefa criada</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(entry.date)}</p>
+                    </div>
+                  </div>
+                )
+              }
+
+              const h = entry.data!
+              const nextEntry = allEntries[idx + 1]
+              const duration = nextEntry
+                ? durationBetween(h.createdAt, nextEntry.date)
+                : durationBetween(h.createdAt)
+
+              return (
+                <div key={h.id} className="flex gap-4 py-3 relative">
+                  <div className={cn(
+                    "w-8 h-8 rounded-full border-2 border-white flex items-center justify-center mt-0.5 shrink-0 z-10 shadow-sm",
+                    STATUS_TIMELINE_COLORS[h.statusNovo]
+                  )}>
+                    {STATUS_ICONS[h.statusNovo]}
+                  </div>
+                  <div className="flex-1 min-w-0 pt-1">
+                    {/* Transição de status */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={cn("text-xs border rounded-full px-2 py-0.5 font-medium", STATUS_COLORS[h.statusAnterior])}>
+                        {STATUS_LABELS[h.statusAnterior]}
+                      </span>
+                      <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className={cn("text-xs border rounded-full px-2 py-0.5 font-medium", STATUS_COLORS[h.statusNovo])}>
+                        {STATUS_LABELS[h.statusNovo]}
+                      </span>
+                    </div>
+
+                    {/* Observação */}
+                    <p className="text-sm text-slate-700 mt-1.5 font-medium">{h.observacao}</p>
+
+                    {/* Aguardando retorno de */}
+                    {h.waitingFor && (
+                      <div className="mt-1.5 bg-purple-50 border border-purple-100 rounded-md px-2.5 py-1.5 text-xs text-purple-800">
+                        <span className="font-medium">Aguardando retorno de:</span> {h.waitingFor}
+                        {h.waitingReason && <> — {h.waitingReason}</>}
+                      </div>
+                    )}
+
+                    {/* Meta */}
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {h.responsavel}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDateTime(h.createdAt)}
+                      </span>
+                    </div>
+
+                    {/* Duração no status */}
+                    {idx < allEntries.length - 1 && (
+                      <p className="text-xs text-slate-300 mt-1">
+                        ↓ permaneceu {duration}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Estado atual (último) */}
+            <div className="flex gap-4 py-3 relative">
+              <div className={cn(
+                "w-8 h-8 rounded-full border-2 border-white flex items-center justify-center shrink-0 z-10 shadow-sm animate-pulse",
+                STATUS_TIMELINE_COLORS[allEntries[0]?.data?.statusNovo ?? "PENDENTE"]
+              )}>
+                <div className="w-2.5 h-2.5 rounded-full bg-white/70" />
+              </div>
+              <div className="pt-2">
+                <p className="text-xs text-slate-400 italic">Aguardando próxima ação…</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+
+export function TaskDetailClient({ id }: { id: string }) {
+  const [task,          setTask]          = useState<Task | null>(null)
+  const [loading,       setLoading]       = useState(true)
+  const [analyzing,     setAnalyzing]     = useState(false)
+  const [analyses,      setAnalyses]      = useState<AgentResponse[]>([])
+  const [aiConfigured,  setAiConfigured]  = useState<boolean | null>(null)
+  const [showModal,     setShowModal]     = useState(false)
+
+  const load = useCallback(() => {
+    return fetch(`/api/tasks/${id}`)
       .then(r => r.json())
       .then(setTask)
       .finally(() => setLoading(false))
   }, [id])
 
-  async function updateStatus(status: string) {
-    setUpdating(true)
-    await fetch(`/api/tasks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    })
-    const updated = await fetch(`/api/tasks/${id}`).then(r => r.json())
-    setTask(updated)
-    setUpdating(false)
-  }
+  useEffect(() => { load() }, [load])
 
   async function analyzeWithAI() {
     setAnalyzing(true)
     setAnalyses([])
     try {
-      const res = await fetch(`/api/tasks/${id}/analyze`, { method: "POST" })
+      const res  = await fetch(`/api/tasks/${id}/analyze`, { method: "POST" })
       const data = await res.json()
       setAnalyses(data.responses ?? [])
       setAiConfigured(data.aiConfigured ?? false)
@@ -117,222 +493,261 @@ export function TaskDetailClient({ id }: { id: string }) {
     )
   }
 
-  const overdue = isOverdue(task.dueDate) && task.status !== 'CONCLUIDA' && task.status !== 'CANCELADA'
+  const overdue = isOverdue(task.dueDate) && task.status !== "CONCLUIDA" && task.status !== "CANCELADA"
+
+  // Indicadores de tempo
+  const baseDate      = task.receivedAt || task.createdAt
+  const receivedAgo   = formatRelativeTime(baseDate)
+  const lastUpdateAgo = formatRelativeTime(task.updatedAt)
+
+  // Tempo no status atual
+  const lastStatusChange = task.statusHistory.length > 0
+    ? task.statusHistory[task.statusHistory.length - 1].createdAt
+    : task.createdAt
+  const currentStatusDuration = durationBetween(lastStatusChange)
+
+  const isFinished = task.status === "CONCLUIDA" || task.status === "CANCELADA"
 
   return (
-    <div className="space-y-5 animate-fade-in max-w-4xl">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
-        <Link href="/tasks" className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para Tarefas
-        </Link>
-        <div className="flex items-center gap-2">
-          <Link href={`/tasks/${id}/edit`}>
-            <Button variant="outline" size="sm">
-              <Edit className="w-3.5 h-3.5" />
-              Editar
-            </Button>
+    <>
+      {showModal && (
+        <StatusChangeModal
+          currentStatus={task.status}
+          taskId={id}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); setLoading(true); load() }}
+        />
+      )}
+
+      <div className="space-y-5 animate-fade-in max-w-4xl">
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between">
+          <Link href="/tasks" className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            Voltar para Tarefas
           </Link>
-          <Button
-            onClick={analyzeWithAI}
-            disabled={analyzing}
-            size="sm"
-            className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
-          >
-            {analyzing
-              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              : <Sparkles className="w-3.5 h-3.5" />
-            }
-            {analyzing ? "Analisando..." : "Analisar com IA"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href={`/tasks/${id}/edit`}>
+              <Button variant="outline" size="sm">
+                <Edit className="w-3.5 h-3.5" />
+                Editar
+              </Button>
+            </Link>
+            <Button
+              onClick={analyzeWithAI}
+              disabled={analyzing}
+              size="sm"
+              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+            >
+              {analyzing
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Sparkles className="w-3.5 h-3.5" />}
+              {analyzing ? "Analisando..." : "Analisar com IA"}
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Card principal */}
-      <Card className={cn(overdue && "border-red-200")}>
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <h1 className="text-xl font-bold text-slate-800 leading-snug">{task.title}</h1>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className={cn("text-sm border rounded-full px-3 py-1 font-medium", PRIORITY_COLORS[task.priority])}>
-                {PRIORITY_LABELS[task.priority]}
-              </span>
-              <span className={cn("text-sm border rounded-full px-3 py-1", STATUS_COLORS[task.status])}>
-                {STATUS_LABELS[task.status]}
-              </span>
-            </div>
+        {/* Alerta de atraso */}
+        {overdue && (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-sm text-red-700 font-medium">Esta tarefa está atrasada. Verifique o prazo imediatamente.</p>
           </div>
+        )}
 
-          {overdue && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
-              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-              <p className="text-sm text-red-700 font-medium">Esta tarefa está atrasada. Verifique o prazo imediatamente.</p>
-            </div>
-          )}
-
-          {task.description && (
-            <div className="mb-5">
-              <p className="text-sm font-medium text-slate-500 mb-1">Descrição</p>
-              <p className="text-slate-700">{task.description}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-            {task.person && (
-              <div className="flex items-start gap-2">
-                <User className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-400">Pessoa</p>
-                  <p className="text-sm text-slate-700">{task.person}</p>
-                </div>
-              </div>
-            )}
-            {task.origin && (
-              <div className="flex items-start gap-2">
-                <Tag className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-xs text-slate-400">Origem</p>
-                  <p className="text-sm text-slate-700">{task.origin}</p>
-                </div>
-              </div>
-            )}
-            {task.dueDate && (
-              <div className="flex items-start gap-2">
-                <Calendar className={cn("w-4 h-4 mt-0.5 shrink-0", overdue ? "text-red-400" : "text-slate-400")} />
-                <div>
-                  <p className="text-xs text-slate-400">Prazo</p>
-                  <p className={cn("text-sm font-medium", overdue ? "text-red-600" : "text-slate-700")}>
-                    {formatDate(task.dueDate)}
-                  </p>
-                </div>
-              </div>
-            )}
-            <div className="flex items-start gap-2">
-              <Clock className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-slate-400">Criada em</p>
-                <p className="text-sm text-slate-700">{formatDate(task.createdAt)}</p>
-              </div>
-            </div>
+        {/* Título + status */}
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-xl font-bold text-slate-800 leading-snug">{task.title}</h1>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={cn("text-sm border rounded-full px-3 py-1 font-medium", PRIORITY_COLORS[task.priority])}>
+              {PRIORITY_LABELS[task.priority]}
+            </span>
+            <span className={cn("text-sm border rounded-full px-3 py-1 font-medium flex items-center gap-1.5", STATUS_COLORS[task.status])}>
+              {STATUS_ICONS[task.status]}
+              {STATUS_LABELS[task.status]}
+            </span>
           </div>
+        </div>
 
-          {task.observations && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p className="text-xs font-medium text-amber-700 mb-1">Observações</p>
-              <p className="text-sm text-amber-800">{task.observations}</p>
-            </div>
-          )}
-
-          {/* Ações rápidas de status */}
-          <div className="flex items-center gap-2 mt-5 pt-4 border-t border-slate-100 flex-wrap">
-            <span className="text-xs text-slate-500 font-medium mr-1">Alterar status:</span>
-            {Object.entries(STATUS_LABELS).filter(([k]) => k !== task.status).map(([k, v]) => (
-              <button
-                key={k}
-                onClick={() => updateStatus(k)}
-                disabled={updating}
-                className={cn(
-                  "text-xs border rounded-full px-3 py-1.5 font-medium transition-all hover:shadow-sm disabled:opacity-50",
-                  STATUS_COLORS[k]
+        {/* Painel Resumo + Indicadores */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Painel Resumo */}
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-slate-600">Painel Resumo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {task.receivedAt && (
+                  <div>
+                    <p className="text-xs text-slate-400">Recebida em</p>
+                    <p className="text-sm font-medium text-slate-700">{formatDateTime(task.receivedAt)}</p>
+                  </div>
                 )}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                <div>
+                  <p className="text-xs text-slate-400">Criada em</p>
+                  <p className="text-sm font-medium text-slate-700">{formatDate(task.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Última atualização</p>
+                  <p className="text-sm font-medium text-slate-700">{formatDate(task.updatedAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Status atual</p>
+                  <span className={cn("text-xs border rounded-full px-2 py-0.5 font-medium", STATUS_COLORS[task.status])}>
+                    {STATUS_LABELS[task.status]}
+                  </span>
+                </div>
+                {task.responsible && (
+                  <div>
+                    <p className="text-xs text-slate-400">Responsável</p>
+                    <p className="text-sm font-medium text-slate-700">{task.responsible}</p>
+                  </div>
+                )}
+                {task.person && (
+                  <div>
+                    <p className="text-xs text-slate-400">Pessoa / Solicitante</p>
+                    <p className="text-sm font-medium text-slate-700">{task.person}</p>
+                  </div>
+                )}
+                {task.origin && (
+                  <div>
+                    <p className="text-xs text-slate-400">Origem</p>
+                    <p className="text-sm font-medium text-slate-700">{task.origin}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-slate-400">Prioridade</p>
+                  <span className={cn("text-xs border rounded-full px-2 py-0.5 font-medium", PRIORITY_COLORS[task.priority])}>
+                    {PRIORITY_LABELS[task.priority]}
+                  </span>
+                </div>
+                {task.dueDate && (
+                  <div>
+                    <p className="text-xs text-slate-400">Prazo</p>
+                    <p className={cn("text-sm font-medium", overdue ? "text-red-600" : "text-slate-700")}>
+                      {formatDate(task.dueDate)} {overdue && "⚠️"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Aviso de IA não configurada */}
-      {aiConfigured === false && analyses.length > 0 && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-amber-800">A integração com IA ainda não foi configurada.</p>
-            <p className="text-xs text-amber-700 mt-0.5">
-              Para ativar análises reais, adicione sua chave no arquivo <code className="bg-amber-100 px-1 rounded">.env</code>:
-              {' '}<code className="bg-amber-100 px-1 rounded">OPENAI_API_KEY=sk-...</code>
+          {/* Indicadores de tempo */}
+          <div className="space-y-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs text-slate-400 mb-0.5">
+                {task.receivedAt ? "Recebida" : "Criada"} há
+              </p>
+              <p className="text-lg font-bold text-slate-700">{receivedAgo}</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="text-xs text-blue-500 mb-0.5">
+                {STATUS_LABELS[task.status]} há
+              </p>
+              <p className="text-lg font-bold text-blue-700">{currentStatusDuration}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-xs text-slate-400 mb-0.5">Última atualização</p>
+              <p className="text-sm font-semibold text-slate-600">{lastUpdateAgo}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Descrição */}
+        {task.description && (
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-xs font-medium text-slate-400 mb-1.5">Descrição</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{task.description}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Observações iniciais */}
+        {task.observations && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-xs font-medium text-amber-700 mb-1">Observações iniciais</p>
+            <p className="text-sm text-amber-800">{task.observations}</p>
+          </div>
+        )}
+
+        {/* Botão Alterar Status */}
+        {!isFinished && (
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setShowModal(true)}
+              className="bg-slate-800 hover:bg-slate-900 text-white"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Alterar Status
+            </Button>
+            <p className="text-xs text-slate-400">
+              Toda alteração de status requer justificativa e responsável.
             </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Análise com IA */}
-      {analyses.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-            {aiConfigured ? <Sparkles className="w-5 h-5 text-violet-500" /> : <Bot className="w-5 h-5 text-slate-400" />}
-            Análise dos Agentes
-            {aiConfigured && (
-              <span className="text-xs font-normal bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 ml-1">
-                ✨ IA Real
-              </span>
-            )}
-          </h3>
-          {analyses.map((a) => (
-            <Card key={a.agent} className="overflow-hidden">
-              <div className={cn("h-1 bg-gradient-to-r", AGENT_COLORS[a.agent])} />
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <span className="text-lg">{a.icon}</span>
-                  {a.agentName}
-                  {a.aiPowered && (
-                    <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
-                      ✨ GPT
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div
-                  className="text-sm text-slate-700 leading-relaxed agent-content"
-                  dangerouslySetInnerHTML={{ __html: renderContent(a.content) }}
-                />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Histórico */}
-      {task.history.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Clock className="w-4 h-4 text-slate-400" />
-              Histórico da Tarefa
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-slate-50">
-              {task.history.map((h) => (
-                <div key={h.id} className="px-5 py-3 flex items-start gap-4">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-2 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-slate-700">
-                        {ACTION_LABELS[h.action] || h.action}
-                      </p>
-                      <p className="text-xs text-slate-400 shrink-0">{formatDateTime(h.createdAt)}</p>
-                    </div>
-                    {h.description && h.description !== 'Tarefa criada' && (
-                      <p className="text-xs text-slate-500 mt-0.5">{h.description}</p>
-                    )}
-                    {h.oldValue && h.newValue && (
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        <span className="line-through">{h.oldValue}</span>
-                        {' → '}
-                        <span className="text-blue-600">{h.newValue}</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
+        {/* Aviso de IA não configurada */}
+        {aiConfigured === false && analyses.length > 0 && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Integração com IA não configurada.</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Adicione <code className="bg-amber-100 px-1 rounded">OPENAI_API_KEY=sk-...</code> no arquivo <code className="bg-amber-100 px-1 rounded">.env</code> para ativar análises reais.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+          </div>
+        )}
+
+        {/* Análise com IA */}
+        {analyses.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              {aiConfigured ? <Sparkles className="w-5 h-5 text-violet-500" /> : <Bot className="w-5 h-5 text-slate-400" />}
+              Análise dos Agentes
+              {aiConfigured && (
+                <span className="text-xs font-normal bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 ml-1">
+                  ✨ IA Real
+                </span>
+              )}
+            </h3>
+            {analyses.map((a) => (
+              <Card key={a.agent} className="overflow-hidden">
+                <div className={cn("h-1 bg-gradient-to-r", AGENT_COLORS[a.agent])} />
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <span className="text-lg">{a.icon}</span>
+                    {a.agentName}
+                    {a.aiPowered && (
+                      <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
+                        ✨ GPT
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div
+                    className="text-sm text-slate-700 leading-relaxed agent-content"
+                    dangerouslySetInnerHTML={{ __html: renderContent(a.content) }}
+                  />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Timeline */}
+        {(task.statusHistory.length > 0 || task.receivedAt) && (
+          <Timeline
+            entries={task.statusHistory}
+            createdAt={task.createdAt}
+            receivedAt={task.receivedAt}
+          />
+        )}
+      </div>
+    </>
   )
 }

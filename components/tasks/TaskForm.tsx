@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
-import { PRIORITY_LABELS, STATUS_LABELS } from "@/lib/utils"
+import { PRIORITY_LABELS } from "@/lib/utils"
 
 interface TaskFormProps {
   task?: {
@@ -15,23 +15,33 @@ interface TaskFormProps {
     priority: string
     status: string
     person: string | null
+    responsible: string | null
     observations: string | null
     dueDate: string | null
+    receivedAt: string | null
   }
+}
+
+function toDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function TaskForm({ task }: TaskFormProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    title: task?.title || "",
-    description: task?.description || "",
-    origin: task?.origin || "",
-    priority: task?.priority || "MEDIA",
-    status: task?.status || "PENDENTE",
-    person: task?.person || "",
+    title:        task?.title        || "",
+    description:  task?.description  || "",
+    origin:       task?.origin       || "",
+    priority:     task?.priority     || "MEDIA",
+    person:       task?.person       || "",
+    responsible:  task?.responsible  || "",
     observations: task?.observations || "",
-    dueDate: task?.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
+    dueDate:      task?.dueDate    ? new Date(task.dueDate).toISOString().split("T")[0] : "",
+    receivedAt:   toDatetimeLocal(task?.receivedAt),
   })
 
   function set(field: string, value: string) {
@@ -42,14 +52,21 @@ export function TaskForm({ task }: TaskFormProps) {
     e.preventDefault()
     setSaving(true)
     try {
-      const url = task ? `/api/tasks/${task.id}` : "/api/tasks"
+      const url    = task ? `/api/tasks/${task.id}` : "/api/tasks"
       const method = task ? "PATCH" : "POST"
       await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          dueDate: form.dueDate || null,
+          title:        form.title,
+          description:  form.description,
+          origin:       form.origin,
+          priority:     form.priority,
+          person:       form.person,
+          responsible:  form.responsible,
+          observations: form.observations,
+          dueDate:      form.dueDate    || null,
+          receivedAt:   form.receivedAt || null,
         }),
       })
       router.push("/tasks")
@@ -65,6 +82,8 @@ export function TaskForm({ task }: TaskFormProps) {
     <Card>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Título */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Título <span className="text-red-500">*</span>
@@ -79,6 +98,7 @@ export function TaskForm({ task }: TaskFormProps) {
             />
           </div>
 
+          {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Descrição</label>
             <textarea
@@ -90,6 +110,23 @@ export function TaskForm({ task }: TaskFormProps) {
             />
           </div>
 
+          {/* Data de recebimento */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+            <label className="block text-sm font-medium text-blue-800 mb-1.5">
+              Data de Recebimento da Demanda
+            </label>
+            <p className="text-xs text-blue-600 mb-2">
+              Quando esta tarefa chegou até você? (diferente da data de criação)
+            </p>
+            <input
+              type="datetime-local"
+              value={form.receivedAt}
+              onChange={e => set("receivedAt", e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          {/* Prioridade + Prazo */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Prioridade</label>
@@ -98,27 +135,6 @@ export function TaskForm({ task }: TaskFormProps) {
                   <option key={k} value={k}>{v}</option>
                 ))}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Status</label>
-              <select value={form.status} onChange={e => set("status", e.target.value)} className={inputClass}>
-                {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Pessoa envolvida</label>
-              <input
-                type="text"
-                value={form.person}
-                onChange={e => set("person", e.target.value)}
-                placeholder="Nome ou departamento..."
-                className={inputClass}
-              />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Prazo</label>
@@ -131,6 +147,31 @@ export function TaskForm({ task }: TaskFormProps) {
             </div>
           </div>
 
+          {/* Pessoa + Responsável */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Pessoa / Solicitante</label>
+              <input
+                type="text"
+                value={form.person}
+                onChange={e => set("person", e.target.value)}
+                placeholder="Nome ou departamento..."
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Responsável pela Tarefa</label>
+              <input
+                type="text"
+                value={form.responsible}
+                onChange={e => set("responsible", e.target.value)}
+                placeholder="Quem vai executar..."
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          {/* Origem */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Origem</label>
             <input
@@ -142,8 +183,9 @@ export function TaskForm({ task }: TaskFormProps) {
             />
           </div>
 
+          {/* Observações */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Observações</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Observações iniciais</label>
             <textarea
               value={form.observations}
               onChange={e => set("observations", e.target.value)}
@@ -152,6 +194,12 @@ export function TaskForm({ task }: TaskFormProps) {
               className={inputClass}
             />
           </div>
+
+          {task && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              ⚠️ Para alterar o status da tarefa use o botão <strong>"Alterar Status"</strong> na tela de detalhes.
+            </p>
+          )}
 
           <div className="flex items-center gap-3 pt-2">
             <Button type="submit" disabled={saving}>
