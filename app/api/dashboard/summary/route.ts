@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getDailySummary } from '@/lib/ai/agents'
 import { isAIConfigured } from '@/lib/ai/openai'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const summary = await getDailySummary()

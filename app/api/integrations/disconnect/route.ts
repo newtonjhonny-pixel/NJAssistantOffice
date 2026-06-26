@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/integrations/disconnect
 // Body: { accountId: string }
 export async function POST(req: NextRequest) {

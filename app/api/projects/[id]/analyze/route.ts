@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { analyzeProject, ProjectAnalysisInput } from '@/lib/ai/agents'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   const project = await prisma.project.findUnique({
     where: { id: params.id },

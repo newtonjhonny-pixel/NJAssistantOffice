@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest, { params }: { params: { id: string; stageId: string } }) {
   const body = await req.json()
   const { title, description, responsible, startDate, dueDate, status, priority, progress, notes } = body

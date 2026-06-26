@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string; correctionId: string } }) {
   const body = await req.json()
   const prev = await prisma.conferenceCorrection.findUnique({ where: { id: params.correctionId } })

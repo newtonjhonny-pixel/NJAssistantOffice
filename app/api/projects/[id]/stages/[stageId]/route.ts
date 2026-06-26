@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string; stageId: string } }) {
   const existing = await prisma.projectStage.findUnique({ where: { id: params.stageId } })
   if (!existing) return NextResponse.json({ error: 'Etapa não encontrada' }, { status: 404 })

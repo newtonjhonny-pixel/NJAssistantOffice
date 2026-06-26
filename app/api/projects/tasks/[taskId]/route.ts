@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function PATCH(req: NextRequest, { params }: { params: { taskId: string } }) {
   const existing = await prisma.projectTask.findUnique({ where: { id: params.taskId } })
   if (!existing) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 })

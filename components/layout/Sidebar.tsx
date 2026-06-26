@@ -14,6 +14,7 @@ import {
   Plug,
   FolderKanban,
   ShieldCheck,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -24,10 +25,11 @@ const navItems = [
   { href: "/tasks", label: "Tarefas", icon: CheckSquare },
   { href: "/pendencias", label: "Central de Pendências", icon: AlertCircle },
   { href: "/assistente", label: "Assistente NJ", icon: MessageSquare },
-  { href: "/projetos",    label: "Projetos",     icon: FolderKanban },
-  { href: "/conferencia", label: "Conferência",  icon: ShieldCheck },
-  { href: "/historico",   label: "Histórico",    icon: History },
-  { href: "/integracoes", label: "Integrações", icon: Plug },
+  { href: "/projetos",      label: "Projetos",        icon: FolderKanban },
+  { href: "/conferencia",   label: "Conferência",     icon: ShieldCheck },
+  { href: "/gestao-equipe", label: "Gestão de Equipe", icon: Users },
+  { href: "/historico",     label: "Histórico",       icon: History },
+  { href: "/integracoes",   label: "Integrações",     icon: Plug },
 ]
 
 export function Sidebar() {

@@ -5,6 +5,8 @@ import { syncGmailEmails } from '@/lib/email/gmail'
 import { analyzeEmail } from '@/lib/email/analyzer'
 import { createNotification } from '@/lib/notifications'
 
+export const dynamic = 'force-dynamic'
+
 // POST /api/integrations/sync
 // Body: { accountId: string }
 export async function POST(req: NextRequest) {

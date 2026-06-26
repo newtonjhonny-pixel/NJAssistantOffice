@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeGmailCode, getGmailProfile, listGmailLabels } from '@/lib/email/gmail'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 const BASE = process.env.GOOGLE_REDIRECT_URI?.replace('/api/auth/gmail/callback', '') ?? 'http://localhost:3000'
 
 export async function GET(req: NextRequest) {

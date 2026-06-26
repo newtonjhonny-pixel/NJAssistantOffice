@@ -4,6 +4,8 @@ import { syncOutlookEmails } from '@/lib/email/outlook'
 import { syncGmailEmails } from '@/lib/email/gmail'
 import { analyzeEmail } from '@/lib/email/analyzer'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   const { accountId } = await req.json()
   if (!accountId) return NextResponse.json({ error: 'accountId obrigatório' }, { status: 400 })

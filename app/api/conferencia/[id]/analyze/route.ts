@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { analyzeConference, ConferenceAnalysisInput } from '@/lib/ai/agents'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { analysisType = 'COMPLETA' } = await req.json().catch(() => ({}))
 

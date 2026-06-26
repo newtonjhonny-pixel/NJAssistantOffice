@@ -1,0 +1,37 @@
+services:
+  njassistantoffice:
+    image: njassistantoffice:prod
+    container_name: njassistantoffice-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXTAUTH_URL: https://assistant.nevion.com.br
+      NEXT_PUBLIC_APP_URL: https://assistant.nevion.com.br
+    expose:
+      - "3000"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - njassistantoffice_network
+      - njsistemas_internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  njassistantoffice_network:
+    external: true
+  njsistemas_internal:
+    external: true

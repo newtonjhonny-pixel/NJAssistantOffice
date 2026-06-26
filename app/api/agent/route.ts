@@ -3,6 +3,8 @@ import { getAgentResponse, getOrchestratedResponse } from '@/lib/ai/agents'
 import { prisma } from '@/lib/prisma'
 import { isAIConfigured } from '@/lib/ai/openai'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { agent, message, history } = body

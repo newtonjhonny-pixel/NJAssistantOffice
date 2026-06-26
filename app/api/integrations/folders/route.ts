@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { listOutlookFolders } from '@/lib/email/outlook'
 import { listGmailLabels } from '@/lib/email/gmail'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/integrations/folders?accountId=xxx
 // Lista e atualiza pastas/labels de uma conta no banco
 export async function GET(req: NextRequest) {

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { isOutlookConfigured } from '@/lib/email/outlook'
 import { isGmailConfigured } from '@/lib/email/gmail'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const accounts = await prisma.emailAccount.findMany({
     where: { isActive: true },

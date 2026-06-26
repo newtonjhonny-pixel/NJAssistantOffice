@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeOutlookCode, getOutlookProfile, listOutlookFolders } from '@/lib/email/outlook'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 const BASE = process.env.MICROSOFT_REDIRECT_URI?.replace('/api/auth/outlook/callback', '') ?? 'http://localhost:3000'
 
 export async function GET(req: NextRequest) {

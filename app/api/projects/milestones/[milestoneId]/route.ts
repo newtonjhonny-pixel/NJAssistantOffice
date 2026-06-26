@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function PATCH(req: NextRequest, { params }: { params: { milestoneId: string } }) {
   const existing = await prisma.projectMilestone.findUnique({ where: { id: params.milestoneId } })
   if (!existing) return NextResponse.json({ error: 'Marco não encontrado' }, { status: 404 })

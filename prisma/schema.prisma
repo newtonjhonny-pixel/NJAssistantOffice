@@ -378,3 +378,148 @@ model ConferenceHistory {
   description  String?
   createdAt    DateTime  @default(now())
 }
+
+// ─── GESTÃO DE EQUIPE ─────────────────────────────────────────────────────────
+
+model TeamMember {
+  id           String    @id @default(cuid())
+  name         String
+  role         String
+  sector       String?
+  unit         String?
+  email        String?
+  phone        String?
+  joinedAt     DateTime?
+  status       String    @default("ATIVO") // ATIVO | AFASTADO | FERIAS | INATIVO
+  observations String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  feedbacks   TeamFeedback[]
+  directions  TeamActivityDirection[]
+  vacations   TeamVacation[]
+  trainings   TeamTraining[]
+  activities  TeamActivity[]
+  history     TeamHistory[]
+}
+
+model TeamFeedback {
+  id                String     @id @default(cuid())
+  memberId          String
+  member            TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  feedbackDate      DateTime   @default(now())
+  type              String     // POSITIVO | MELHORIA | ALINHAMENTO | DESENVOLVIMENTO | RECONHECIMENTO | CORRECAO_CONDUTA | ADVERTENCIA_VERBAL
+  observedSituation String?
+  positivePoints    String?
+  improvementPoints String?
+  orientationGiven  String?
+  agreedAction      String?
+  nextFollowUp      DateTime?
+  observations      String?
+  aiGenerated       Boolean    @default(false)
+  aiContent         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TeamActivityDirection {
+  id             String     @id @default(cuid())
+  memberId       String
+  member         TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  dueDate        DateTime?
+  priority       String     @default("MEDIA")    // BAIXA | MEDIA | ALTA | URGENTE
+  complexity     String     @default("SIMPLES")  // SIMPLES | MEDIA | COMPLEXA
+  expectedResult String?
+  aiOrientation  String?
+  status         String     @default("PLANEJADA") // PLANEJADA | DIRECIONADA | EM_EXECUCAO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model TeamVacation {
+  id                String     @id @default(cuid())
+  memberId          String
+  member            TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  acquisitivePeriod String?
+  availableDays     Int?
+  startDate         DateTime?
+  returnDate        DateTime?
+  status            String     @default("A_PROGRAMAR") // A_PROGRAMAR | PROGRAMADA | EM_FERIAS | RETORNOU | CANCELADA
+  substitute        String?
+  observations      String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TeamTraining {
+  id             String     @id @default(cuid())
+  memberId       String
+  member         TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  topic          String
+  objective      String?
+  plannedDate    DateTime?
+  completedDate  DateTime?
+  status         String     @default("PLANEJADO") // PLANEJADO | EM_ANDAMENTO | CONCLUIDO | CANCELADO
+  responsible    String?
+  expectedResult String?
+  evaluation     String?
+  observations   String?
+  aiPlan         String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model TeamActivity {
+  id                String     @id @default(cuid())
+  memberId          String
+  member            TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  receivedAt        DateTime?
+  dueDate           DateTime?
+  priority          String     @default("MEDIA")
+  status            String     @default("PENDENTE") // PENDENTE | EM_ANDAMENTO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA
+  statusObservation String?
+  expectedResult    String?
+  deliveredResult   String?
+  coordinatorRating String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TeamGuideline {
+  id           String   @id @default(cuid())
+  title        String
+  category     String   // PROCESSO | PRAZO | ATENDIMENTO | COMUNICACAO | CONFERENCIA | FINANCEIRO | DEPARTAMENTO_PESSOAL | CONDUTA | QUALIDADE | OUTROS
+  description  String?
+  reason       String?
+  practicalUse String?
+  responsible  String?
+  status       String   @default("ATIVA") // ATIVA | EM_REVISAO | INATIVA
+  observations String?
+  aiGenerated  Boolean  @default(false)
+  aiContent    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TeamAiSuggestion {
+  id          String   @id @default(cuid())
+  type        String   // FEEDBACK | DIRECTION | TRAINING | GUIDELINE
+  referenceId String
+  content     String
+  aiPowered   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model TeamHistory {
+  id          String      @id @default(cuid())
+  memberId    String?
+  member      TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  type        String
+  title       String
+  description String?
+  createdAt   DateTime    @default(now())
+}
