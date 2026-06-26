@@ -5,16 +5,57 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ─── Helpers de data sem deslocamento de fuso ────────────────────────────────
+
+/**
+ * Interpreta uma string "YYYY-MM-DD" como data local ao meio-dia,
+ * evitando que `new Date("yyyy-MM-dd")` interprete em UTC e desloque o dia.
+ */
+export function parseLocalDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day, 12, 0, 0) // meio-dia local
+}
+
+/**
+ * Extrai a parte YYYY-MM-DD de uma string ISO ou Date sem conversão de fuso.
+ * "2026-06-30T00:00:00.000Z" → "2026-06-30"
+ */
+function toDatePart(date: Date | string): string {
+  if (typeof date === 'string') return date.slice(0, 10)
+  return date.toISOString().slice(0, 10) // UTC date — seguro para datas salvas como meio-dia local
+}
+
+/**
+ * Retorna a data de hoje no formato YYYY-MM-DD no fuso de São Paulo.
+ */
+function todayBR(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+}
+
+// ─── Formatação ───────────────────────────────────────────────────────────────
+
+/**
+ * Formata data como DD/MM/YYYY sem conversão de fuso.
+ * Extrai diretamente os componentes da string ISO para evitar deslocamento.
+ */
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return '-'
-  const d = new Date(date)
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const part = toDatePart(date)  // "YYYY-MM-DD"
+  const [year, month, day] = part.split('-')
+  if (!year || !month || !day) return '-'
+  return `${day}/${month}/${year}`
 }
 
 export function formatDateTime(date: Date | string | null | undefined): string {
   if (!date) return '-'
   const d = new Date(date)
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })
 }
 
 export function formatRelativeTime(date: Date | string | null | undefined): string {
@@ -34,15 +75,26 @@ export function formatRelativeTime(date: Date | string | null | undefined): stri
   return 'agora mesmo'
 }
 
+/**
+ * Compara apenas a parte da data (sem horário/fuso) para determinar atraso.
+ * "2026-06-30T00:00:00Z" salvo como UTC midnight ainda é exibido como 30/06.
+ */
 export function isOverdue(date: Date | string | null | undefined): boolean {
   if (!date) return false
-  return new Date(date) < new Date()
+  const duePart   = toDatePart(date)   // "YYYY-MM-DD" da tarefa
+  const todayPart = todayBR()          // "YYYY-MM-DD" de hoje em SP
+  return duePart < todayPart
 }
 
 export function daysUntilDue(date: Date | string | null | undefined): number | null {
   if (!date) return null
-  const diff = new Date(date).getTime() - new Date().getTime()
-  return Math.ceil(diff / 86400000)
+  const duePart   = toDatePart(date)
+  const todayPart = todayBR()
+  const [dy, dm, dd] = duePart.split('-').map(Number)
+  const [ty, tm, td] = todayPart.split('-').map(Number)
+  const due   = new Date(dy, dm - 1, dd)
+  const today = new Date(ty, tm - 1, td)
+  return Math.ceil((due.getTime() - today.getTime()) / 86400000)
 }
 
 export const PRIORITY_LABELS: Record<string, string> = {

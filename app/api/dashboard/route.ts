@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isOverdue } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,9 +10,8 @@ export async function GET() {
     prisma.inboxItem.findMany({ where: { isIgnored: false, isRead: false } }),
   ])
 
-  const now = new Date()
   const overdue = tasks.filter(
-    t => t.dueDate && new Date(t.dueDate) < now && t.status !== 'CONCLUIDA' && t.status !== 'CANCELADA'
+    t => t.dueDate && isOverdue(t.dueDate) && t.status !== 'CONCLUIDA' && t.status !== 'CANCELADA'
   )
   const urgent = tasks.filter(t => t.priority === 'URGENTE' && t.status !== 'CONCLUIDA' && t.status !== 'CANCELADA')
   const waiting = tasks.filter(t => t.status === 'AGUARDANDO_RETORNO')

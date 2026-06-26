@@ -1,4 +1,5 @@
 import { callOpenAI, isAIConfigured, ChatMessage } from './openai'
+import { isOverdue as isOverdueUtil } from '@/lib/utils'
 import {
   buildAssistenteSystem,
   buildAnalistaSystem,
@@ -34,10 +35,10 @@ export async function buildSystemContext(): Promise<SystemContext> {
     prisma.inboxItem.findMany({ where: { isIgnored: false, taskCreated: false } }),
   ])
 
-  const now = new Date()
-  const isActive = (t: { status: string }) => t.status !== 'CONCLUIDA' && t.status !== 'CANCELADA'
+  const isActive  = (t: { status: string }) => t.status !== 'CONCLUIDA' && t.status !== 'CANCELADA'
+  // isOverdueUtil compara apenas YYYY-MM-DD sem deslocamento de fuso
   const isOverdue = (t: { dueDate: Date | null; status: string }) =>
-    !!t.dueDate && new Date(t.dueDate) < now && isActive(t)
+    !!t.dueDate && isOverdueUtil(t.dueDate) && isActive(t)
 
   const open    = tasks.filter(isActive)
   const urgent  = tasks.filter(t => t.priority === 'URGENTE' && isActive(t))
@@ -561,7 +562,7 @@ function getFallbackTaskAnalysis(agent: string, task: TaskContext): string {
     PENDENTE: 'Pendente', EM_ANDAMENTO: 'Em andamento',
     AGUARDANDO_RETORNO: 'Aguardando retorno', CONCLUIDA: 'Concluída', CANCELADA: 'Cancelada'
   }
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date()
+  const isOverdue = task.dueDate && isOverdueUtil(task.dueDate)
 
   const base = `**Tarefa:** ${task.title}\n**Prioridade:** ${PRIORITY[task.priority]}\n**Status:** ${STATUS[task.status]}${task.person ? `\n**Responsável:** ${task.person}` : ''}${isOverdue ? '\n⚠️ **Prazo vencido**' : ''}\n\n`
 

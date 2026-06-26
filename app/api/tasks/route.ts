@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNotification } from '@/lib/notifications'
+import { parseLocalDate } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,8 +56,8 @@ export async function POST(req: NextRequest) {
         person:       body.person,
         responsible:  body.responsible,
         observations: body.observations,
-        dueDate:      body.dueDate    ? new Date(body.dueDate)    : undefined,
-        receivedAt:   body.receivedAt ? new Date(body.receivedAt) : undefined,
+        dueDate:    body.dueDate    ? parseLocalDate(body.dueDate) ?? undefined    : undefined,
+        receivedAt: body.receivedAt ? new Date(body.receivedAt)                   : undefined,
         userId: 'default-user',
         ...(body.inboxItemId && { inboxItemId: body.inboxItemId }),
       },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNotification } from '@/lib/notifications'
+import { parseLocalDate } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,8 +38,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       ...(safeBody.person      !== undefined && { person:      safeBody.person }),
       ...(safeBody.responsible !== undefined && { responsible: safeBody.responsible }),
       ...(safeBody.observations !== undefined && { observations: safeBody.observations }),
-      ...(safeBody.dueDate     !== undefined && { dueDate:     safeBody.dueDate ? new Date(safeBody.dueDate) : null }),
-      ...(safeBody.receivedAt  !== undefined && { receivedAt:  safeBody.receivedAt ? new Date(safeBody.receivedAt) : null }),
+      ...(safeBody.dueDate    !== undefined && { dueDate:    safeBody.dueDate    ? parseLocalDate(safeBody.dueDate) : null }),
+      ...(safeBody.receivedAt !== undefined && { receivedAt: safeBody.receivedAt ? new Date(safeBody.receivedAt)   : null }),
     },
   })
 

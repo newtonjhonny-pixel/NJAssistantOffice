@@ -53,9 +53,12 @@ function formatTaskContext(task: TaskContext): string {
   txt += `Status: ${STATUS[task.status] ?? task.status}\n`
   if (task.person) txt += `Responsável/Pessoa envolvida: ${task.person}\n`
   if (task.dueDate) {
-    const d = new Date(task.dueDate)
-    const overdue = d < new Date()
-    txt += `Prazo: ${d.toLocaleDateString('pt-BR')}${overdue ? ' ⚠️ PRAZO VENCIDO' : ''}\n`
+    // slice(0,10) extrai YYYY-MM-DD sem conversão de fuso
+    const [py, pm, pd] = task.dueDate.slice(0, 10).split('-')
+    const dueBR  = `${pd}/${pm}/${py}`
+    const todayS = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+    const overdue = task.dueDate.slice(0, 10) < todayS
+    txt += `Prazo: ${dueBR}${overdue ? ' ⚠️ PRAZO VENCIDO' : ''}\n`
   }
   if (task.observations) txt += `Observações: ${task.observations}\n`
   if (task.receivedAt) txt += `Recebida em: ${new Date(task.receivedAt).toLocaleString('pt-BR')}\n`
@@ -99,13 +102,15 @@ function formatSystemContext(ctx: SystemContext): string {
   if (ctx.urgentList.length) {
     txt += `\nTarefas URGENTES:\n`
     ctx.urgentList.forEach(t => {
-      txt += `- ${t.title}${t.person ? ` (${t.person})` : ''}${t.dueDate ? ` | Prazo: ${new Date(t.dueDate).toLocaleDateString('pt-BR')}` : ''}\n`
+      const dateBR = t.dueDate ? t.dueDate.slice(0, 10).split('-').reverse().join('/') : null
+      txt += `- ${t.title}${t.person ? ` (${t.person})` : ''}${dateBR ? ` | Prazo: ${dateBR}` : ''}\n`
     })
   }
   if (ctx.overdueList.length) {
     txt += `\nTarefas ATRASADAS:\n`
     ctx.overdueList.forEach(t => {
-      txt += `- ${t.title}${t.person ? ` (${t.person})` : ''}${t.dueDate ? ` | Prazo venceu em: ${new Date(t.dueDate).toLocaleDateString('pt-BR')}` : ''}\n`
+      const dateBR = t.dueDate ? t.dueDate.slice(0, 10).split('-').reverse().join('/') : null
+      txt += `- ${t.title}${t.person ? ` (${t.person})` : ''}${dateBR ? ` | Prazo venceu em: ${dateBR}` : ''}\n`
     })
   }
   if (ctx.waitingList.length) {

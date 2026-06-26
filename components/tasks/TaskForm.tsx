@@ -87,7 +87,7 @@ export function TaskForm({ task }: TaskFormProps) {
     person:       task?.person       || "",
     responsible:  task?.responsible  || "",
     observations: task?.observations || "",
-    dueDate:      task?.dueDate    ? new Date(task.dueDate).toISOString().split("T")[0] : "",
+    dueDate:      task?.dueDate    ? task.dueDate.slice(0, 10) : "",
     receivedAt:   toDatetimeLocal(task?.receivedAt),
   })
 

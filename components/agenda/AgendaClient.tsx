@@ -71,8 +71,14 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function sameDay(d: Date, y: number, m: number, day: number) {
-  return d.getFullYear() === y && d.getMonth() === m && d.getDate() === day
+/**
+ * Compara a parte YYYY-MM-DD do ISO string diretamente, sem conversão de fuso.
+ * Evita que "2026-06-30T00:00:00.000Z" seja lido como dia 29 em UTC-3.
+ */
+function taskOnDay(dueDate: string, y: number, m: number, day: number): boolean {
+  const part = dueDate.slice(0, 10) // "YYYY-MM-DD"
+  const [py, pm, pd] = part.split('-').map(Number)
+  return py === y && pm - 1 === m && pd === day
 }
 
 // ─── Task chip (dentro da célula) ────────────────────────────────────────────
@@ -354,11 +360,13 @@ export function AgendaClient() {
   function getTasksForDay(day: number): Task[] {
     return filteredTasks.filter(t => {
       if (!t.dueDate) return false
-      return sameDay(new Date(t.dueDate), year, month, day)
+      return taskOnDay(t.dueDate, year, month, day)
     })
   }
 
-  const isToday    = (day: number) => sameDay(today, year, month, day)
+  // `today` é um Date local, getDate/Month/FullYear são valores locais — seguro
+  const isToday    = (day: number) =>
+    today.getFullYear() === year && today.getMonth() === month && today.getDate() === day
   const isSelected = (day: number) => selectedDay === day
 
   const selectedDayTasks = selectedDay ? getTasksForDay(selectedDay) : []
@@ -370,8 +378,9 @@ export function AgendaClient() {
 
   const monthTasks = tasks.filter(t => {
     if (!t.dueDate) return false
-    const d = new Date(t.dueDate)
-    return d.getFullYear() === year && d.getMonth() === month
+    // Comparar direto na string ISO sem conversão de fuso
+    const [py, pm] = t.dueDate.slice(0, 7).split('-').map(Number)
+    return py === year && pm - 1 === month
   })
 
   return (
@@ -649,7 +658,8 @@ export function AgendaClient() {
                       <p className="text-xs font-medium text-slate-700 truncate">{t.title}</p>
                       {t.dueDate && (
                         <p className="text-[11px] text-red-500 mt-0.5">
-                          {new Date(t.dueDate).toLocaleDateString("pt-BR")}
+                          {/* slice(0,10) evita conversão de fuso: "YYYY-MM-DD" → "DD/MM/YYYY" */}
+                          {t.dueDate.slice(0, 10).split('-').reverse().join('/')}
                         </p>
                       )}
                     </div>
