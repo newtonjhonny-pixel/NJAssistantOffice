@@ -35,40 +35,52 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  try {
+    const body = await req.json()
 
-  const task = await prisma.task.create({
-    data: {
-      title:       body.title,
-      description: body.description,
-      origin:      body.origin,
-      priority:    body.priority    || 'MEDIA',
-      status:      body.status      || 'PENDENTE',
-      person:      body.person,
-      responsible: body.responsible,
-      observations: body.observations,
-      dueDate:     body.dueDate    ? new Date(body.dueDate)    : undefined,
-      receivedAt:  body.receivedAt ? new Date(body.receivedAt) : undefined,
-      userId: 'default-user',
-      ...(body.inboxItemId && { inboxItemId: body.inboxItemId }),
-    },
-  })
+    // Garante que o usuário padrão existe (sistema single-user)
+    await prisma.user.upsert({
+      where:  { id: 'default-user' },
+      update: {},
+      create: { id: 'default-user', name: 'Newton', email: 'admin@sistema.local', role: 'admin' },
+    })
 
-  await prisma.taskHistory.create({
-    data: {
-      taskId: task.id,
-      action: 'CRIACAO',
-      description: 'Tarefa criada',
-    },
-  })
+    const task = await prisma.task.create({
+      data: {
+        title:        body.title,
+        description:  body.description,
+        origin:       body.origin,
+        priority:     body.priority    || 'MEDIA',
+        status:       body.status      || 'PENDENTE',
+        person:       body.person,
+        responsible:  body.responsible,
+        observations: body.observations,
+        dueDate:      body.dueDate    ? new Date(body.dueDate)    : undefined,
+        receivedAt:   body.receivedAt ? new Date(body.receivedAt) : undefined,
+        userId: 'default-user',
+        ...(body.inboxItemId && { inboxItemId: body.inboxItemId }),
+      },
+    })
 
-  createNotification({
-    type: task.priority === 'URGENTE' ? 'TASK_URGENT' : 'TASK_CREATED',
-    title: task.priority === 'URGENTE' ? '🔴 Tarefa urgente criada' : 'Nova tarefa criada',
-    message: task.title,
-    relatedType: 'task',
-    relatedId: task.id,
-  })
+    await prisma.taskHistory.create({
+      data: { taskId: task.id, action: 'CRIACAO', description: 'Tarefa criada' },
+    })
 
-  return NextResponse.json(task, { status: 201 })
+    createNotification({
+      type: task.priority === 'URGENTE' ? 'TASK_URGENT' : 'TASK_CREATED',
+      title: task.priority === 'URGENTE' ? '🔴 Tarefa urgente criada' : 'Nova tarefa criada',
+      message: task.title,
+      relatedType: 'task',
+      relatedId: task.id,
+    })
+
+    return NextResponse.json(task, { status: 201 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[POST /api/tasks]', message)
+    return NextResponse.json(
+      { error: 'Não foi possível criar a tarefa.', details: process.env.NODE_ENV === 'development' ? message : undefined },
+      { status: 500 }
+    )
+  }
 }

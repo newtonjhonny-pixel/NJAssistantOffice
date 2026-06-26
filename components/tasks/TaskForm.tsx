@@ -75,6 +75,7 @@ function ImageLightbox({ src, name, onClose }: { src: string; name: string; onCl
 export function TaskForm({ task }: TaskFormProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [pendingImages,   setPendingImages]   = useState<PendingImage[]>([])
   const [existingAttachments, setExistingAttachments] = useState<ExistingAttachment[]>([])
   const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null)
@@ -126,6 +127,7 @@ export function TaskForm({ task }: TaskFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    setSaveError(null)
     try {
       const url    = task ? `/api/tasks/${task.id}` : "/api/tasks"
       const method = task ? "PATCH" : "POST"
@@ -144,6 +146,10 @@ export function TaskForm({ task }: TaskFormProps) {
           receivedAt:   form.receivedAt || null,
         }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Erro ${res.status}`)
+      }
       const saved = await res.json()
       const taskId = task?.id ?? saved.id
       if (taskId && pendingImages.length > 0) {
@@ -151,6 +157,8 @@ export function TaskForm({ task }: TaskFormProps) {
       }
       router.push("/tasks")
       router.refresh()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Não foi possível salvar a tarefa. Tente novamente.")
     } finally {
       setSaving(false)
     }
@@ -325,6 +333,12 @@ export function TaskForm({ task }: TaskFormProps) {
           {task && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               ⚠️ Para alterar o status da tarefa use o botão <strong>"Alterar Status"</strong> na tela de detalhes.
+            </p>
+          )}
+
+          {saveError && (
+            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              ❌ {saveError}
             </p>
           )}
 
