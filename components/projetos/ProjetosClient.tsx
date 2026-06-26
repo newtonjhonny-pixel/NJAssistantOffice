@@ -1,14 +1,16 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   FolderKanban, Plus, Search, X, AlertTriangle, CheckCircle2,
   Clock, PauseCircle, XCircle, ChevronRight, Calendar, Users,
-  Layers, ListChecks, TrendingUp,
+  Layers, ListChecks, TrendingUp, BarChart2,
 } from "lucide-react"
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/utils"
 import { NovoProjetoModal } from "./NovoProjetoModal"
+import { RelatoriosClient } from "./RelatoriosClient"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +109,10 @@ function SummaryCard({ card, isActive, onClick }: { card: DashCard; isActive: bo
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ProjetosClient() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const activeTab    = searchParams.get("tab") === "relatorios" ? "relatorios" : "lista"
+
   const [projects,       setProjects]       = useState<ProjectSummary[]>([])
   const [loading,        setLoading]        = useState(true)
   const [search,         setSearch]         = useState("")
@@ -114,6 +120,13 @@ export function ProjetosClient() {
   const [filterPriority, setFilterPriority] = useState("")
   const [activeCard,     setActiveCard]     = useState<CardKey>("")
   const [showModal,      setShowModal]      = useState(false)
+
+  function setTab(tab: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === "lista") params.delete("tab")
+    else params.set("tab", tab)
+    router.push(`/projetos?${params.toString()}`)
+  }
 
   function load() {
     setLoading(true)
@@ -241,13 +254,42 @@ export function ProjetosClient() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Novo Projeto
-        </button>
+        {activeTab === "lista" && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Novo Projeto
+          </button>
+        )}
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-200">
+        {[
+          { key: "lista",      label: "Lista de Projetos", icon: FolderKanban },
+          { key: "relatorios", label: "Relatórios",        icon: BarChart2    },
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              activeTab === key
+                ? "border-indigo-600 text-indigo-700"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            )}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Relatórios tab */}
+      {activeTab === "relatorios" && <RelatoriosClient />}
+
+      {/* Lista tab — only render when active */}
+      {activeTab === "lista" && <>
 
       {/* Dashboard cards — clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -431,6 +473,8 @@ export function ProjetosClient() {
           onSaved={() => { setShowModal(false); load() }}
         />
       )}
+
+      </> /* end lista tab */}
     </div>
   )
 }
