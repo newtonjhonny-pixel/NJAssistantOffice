@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/utils"
 import { NovoProjetoModal } from "./NovoProjetoModal"
-import { RelatoriosClient } from "./RelatoriosClient"
+import { AcompanhamentoGerencialClient } from "./RelatoriosClient"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ function SummaryCard({ card, isActive, onClick }: { card: DashCard; isActive: bo
 export function ProjetosClient() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const activeTab    = searchParams.get("tab") === "relatorios" ? "relatorios" : "lista"
+  const activeTab    = searchParams.get("tab") === "gerencial" ? "gerencial" : "lista"
 
   const [projects,       setProjects]       = useState<ProjectSummary[]>([])
   const [loading,        setLoading]        = useState(true)
@@ -121,7 +121,7 @@ export function ProjetosClient() {
   const [activeCard,     setActiveCard]     = useState<CardKey>("")
   const [showModal,      setShowModal]      = useState(false)
 
-  function setTab(tab: string) {
+  function setTab(tab: "lista" | "gerencial") {
     const params = new URLSearchParams(searchParams.toString())
     if (tab === "lista") params.delete("tab")
     else params.set("tab", tab)
@@ -266,10 +266,10 @@ export function ProjetosClient() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-200">
-        {[
-          { key: "lista",      label: "Lista de Projetos", icon: FolderKanban },
-          { key: "relatorios", label: "Relatórios",        icon: BarChart2    },
-        ].map(({ key, label, icon: Icon }) => (
+        {([
+          { key: "lista",     label: "Lista de Projetos",        icon: FolderKanban },
+          { key: "gerencial", label: "Acompanhamento Gerencial",  icon: BarChart2    },
+        ] as const).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -285,8 +285,8 @@ export function ProjetosClient() {
         ))}
       </div>
 
-      {/* Relatórios tab */}
-      {activeTab === "relatorios" && <RelatoriosClient />}
+      {/* Acompanhamento Gerencial tab */}
+      {activeTab === "gerencial" && <AcompanhamentoGerencialClient />}
 
       {/* Lista tab — only render when active */}
       {activeTab === "lista" && <>

@@ -11,6 +11,7 @@ import {
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/utils"
 import { NovoProjetoModal } from "./NovoProjetoModal"
 import { ProjetoIAModal } from "./ProjetoIAModal"
+import { RelatorioProjetoClient } from "./RelatorioProjetoClient"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -178,7 +179,7 @@ function TaskRow({ task, onUpdate }: { task: ProjectTask; onUpdate: () => void }
 
 // ─── Main component ─────────────────────────────────────────────────────────────
 
-type Tab = "geral" | "etapas" | "tarefas" | "cronograma" | "entregas" | "historico"
+type Tab = "geral" | "etapas" | "tarefas" | "cronograma" | "entregas" | "historico" | "relatorio"
 
 export function ProjetoDetalheClient({ id }: { id: string }) {
   const [project,       setProject]       = useState<ProjectDetail | null>(null)
@@ -228,6 +229,7 @@ export function ProjetoDetalheClient({ id }: { id: string }) {
     { key: "cronograma", label: "Cronograma",  icon: <Calendar className="w-3.5 h-3.5" /> },
     { key: "entregas",   label: "Entregas",    icon: <Flag className="w-3.5 h-3.5" /> },
     { key: "historico",  label: "Histórico",   icon: <History className="w-3.5 h-3.5" /> },
+    { key: "relatorio",  label: "Relatório",   icon: <BarChart2 className="w-3.5 h-3.5" /> },
   ]
 
   return (
@@ -678,6 +680,11 @@ export function ProjetoDetalheClient({ id }: { id: string }) {
             )
           }
         </div>
+      )}
+
+      {/* ── RELATÓRIO ── */}
+      {tab === "relatorio" && (
+        <RelatorioProjetoClient project={project} onReload={load} />
       )}
 
       {/* Edit modal */}

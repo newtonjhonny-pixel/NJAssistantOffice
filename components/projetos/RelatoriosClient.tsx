@@ -459,7 +459,7 @@ function downloadFile(content: string, filename: string, mime: string) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function RelatoriosClient() {
+export function AcompanhamentoGerencialClient() {
   const [allProjects, setAllProjects] = useState<ProjectData[]>([])
   const [loading,     setLoading]     = useState(true)
   const [filters,     setFilters]     = useState<Filters>(EMPTY_FILTERS)
