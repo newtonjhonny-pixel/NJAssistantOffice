@@ -3,8 +3,7 @@
 import { useState } from "react"
 import {
   Bot, X, Loader2, Printer, FileSpreadsheet, Info,
-  CheckCircle2, AlertTriangle, Calendar, Layers,
-  ListChecks, Flag, Clock, TrendingUp, Zap,
+  Clock, Layers, ListChecks, Flag, AlertTriangle,
 } from "lucide-react"
 import { cn, formatDate } from "@/lib/utils"
 
@@ -45,7 +44,7 @@ interface ProjectDetail {
 
 interface IAResult { content: string; aiPowered: boolean; aiConfigured: boolean }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Labels ───────────────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<string, string> = {
   PLANEJADO: "Planejado", EM_ANDAMENTO: "Em andamento",
@@ -73,6 +72,17 @@ function kpiValue(v: number | null | undefined, suffix = ""): string {
   return `${v}${suffix}`
 }
 
+function esc(s: string | null | undefined): string {
+  return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return "—"
+  const s = d.slice(0, 10)
+  const [y, m, day] = s.split("-")
+  return `${day}/${m}/${y}`
+}
+
 function downloadFile(content: string, filename: string, mime: string) {
   const blob = new Blob(["﻿" + content], { type: mime })
   const a    = document.createElement("a")
@@ -80,6 +90,313 @@ function downloadFile(content: string, filename: string, mime: string) {
   a.download = filename
   a.click()
 }
+
+// ─── PDF HTML builder ─────────────────────────────────────────────────────────
+// Opens a blank popup window, writes a standalone HTML document, then prints it.
+// The blank window URL is "about:blank" — the browser never shows localhost/path.
+// @page { margin: 0 } + body padding eliminates browser-generated header/footer.
+
+function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: string): string {
+  const doneStages     = p.stages.filter(s => s.status === "CONCLUIDA").length
+  const doneMilestones = p.milestones.filter(m => m.status === "CONCLUIDA").length
+  const lateTasks      = p.tasks.filter(t =>
+    t.dueDate && new Date(t.dueDate) < new Date() &&
+    t.status !== "CONCLUIDA" && t.status !== "CANCELADA"
+  ).length
+  const productivity = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0
+
+  const css = `
+    @charset "UTF-8";
+    @page {
+      size: A4 portrait;
+      /* margin: 0 eliminates browser-generated URL / page-number header-footer */
+      margin: 0;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      font-size: 10.5pt;
+      color: #1e293b;
+      background: white;
+      /* all margins live here, not in @page */
+      padding: 14mm 16mm 14mm 16mm;
+    }
+    /* ── Typography ─────────────────────────────────────────────────────── */
+    h1 { font-size: 20pt; font-weight: 800; color: #1e293b; margin-bottom: 4pt; }
+    h2 { font-size: 13pt; font-weight: 700; color: #6366f1; margin-bottom: 2pt; }
+    h3 { font-size: 11pt; font-weight: 700; color: #1e293b; margin: 14pt 0 6pt; border-bottom: 1.5pt solid #e2e8f0; padding-bottom: 4pt; }
+    p  { font-size: 10pt; color: #475569; line-height: 1.55; margin-bottom: 4pt; }
+    /* ── Cover ──────────────────────────────────────────────────────────── */
+    .cover { border-bottom: 3pt solid #6366f1; padding-bottom: 14pt; margin-bottom: 16pt; }
+    .cover-meta { font-size: 9.5pt; color: #64748b; margin-top: 6pt; }
+    /* ── KPI grid ───────────────────────────────────────────────────────── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; margin-bottom: 10pt; }
+    .kpi-card { border: 1pt solid #e2e8f0; border-radius: 6pt; padding: 7pt 9pt; background: #f8fafc; }
+    .kpi-card.accent { border-color: #c7d2fe; background: #eef2ff; }
+    .kpi-label { font-size: 8pt; color: #64748b; margin-bottom: 3pt; }
+    .kpi-value { font-size: 15pt; font-weight: 800; color: #1e293b; }
+    .kpi-card.accent .kpi-value { color: #4f46e5; }
+    .kpi-sub { font-size: 7.5pt; color: #94a3b8; margin-top: 2pt; }
+    /* ── Meta table ─────────────────────────────────────────────────────── */
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 10pt; }
+    .meta-table td { font-size: 9.5pt; padding: 4pt 7pt; vertical-align: top; border-bottom: 1pt solid #f1f5f9; }
+    .meta-table td:first-child { color: #64748b; font-weight: 600; width: 28%; }
+    .meta-table tr:nth-child(even) td { background: #f8fafc; }
+    /* ── Data tables ────────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; page-break-inside: auto; margin-bottom: 10pt; }
+    thead { display: table-header-group; }
+    thead tr { background: #6366f1; }
+    thead th { font-size: 8.5pt; font-weight: 700; color: white; padding: 5pt 7pt; text-align: left; }
+    tbody tr { page-break-inside: avoid; page-break-after: auto; }
+    tbody tr:nth-child(even) td { background: #f8fafc; }
+    tbody td { font-size: 9.5pt; padding: 4.5pt 7pt; border-bottom: 1pt solid #f1f5f9; color: #374151; vertical-align: top; }
+    tbody td.bold { font-weight: 600; color: #1e293b; }
+    /* ── Progress bar ───────────────────────────────────────────────────── */
+    .bar-wrap { background: #e2e8f0; border-radius: 99pt; height: 5pt; width: 70pt; display: inline-block; vertical-align: middle; }
+    .bar-fill { background: #6366f1; border-radius: 99pt; height: 5pt; }
+    .bar-fill.done { background: #22c55e; }
+    /* ── Timeline ───────────────────────────────────────────────────────── */
+    .timeline-item { display: flex; gap: 8pt; padding: 5pt 0; border-bottom: 1pt solid #f1f5f9; }
+    .timeline-date { font-size: 8.5pt; color: #94a3b8; min-width: 55pt; flex-shrink: 0; }
+    .timeline-title { font-size: 9.5pt; font-weight: 600; color: #1e293b; }
+    .timeline-desc { font-size: 9pt; color: #64748b; margin-top: 1pt; }
+    /* ── IA analysis ────────────────────────────────────────────────────── */
+    .ia-box { background: #faf5ff; border: 1pt solid #ddd6fe; border-radius: 6pt; padding: 10pt 12pt; }
+    .ia-box h4 { font-size: 9.5pt; color: #6d28d9; font-weight: 700; margin-bottom: 7pt; }
+    .ia-content { font-size: 9.5pt; line-height: 1.6; color: #374151; }
+    /* ── Conclusion ─────────────────────────────────────────────────────── */
+    .conclusion { background: #f0f9ff; border: 1pt solid #bae6fd; border-radius: 6pt; padding: 10pt 12pt; margin-top: 14pt; }
+    .conclusion p { color: #0369a1; }
+    /* ── Section break control ──────────────────────────────────────────── */
+    .section { page-break-inside: avoid; }
+    .section-allow-break { page-break-inside: auto; }
+  `
+
+  // ── Etapas rows ──
+  const stagesRows = p.stages.length === 0 ? `<tr><td colspan="5" style="text-align:center;color:#94a3b8">Nenhuma etapa cadastrada</td></tr>` :
+    p.stages.map(s => {
+      const pct = s.progress
+      return `<tr>
+        <td class="bold">${esc(s.name)}</td>
+        <td>${esc(STAGE_STATUS_LABEL[s.status] ?? s.status)}</td>
+        <td>
+          <span class="bar-wrap"><span class="bar-fill${pct >= 100 ? " done" : ""}" style="width:${pct}%"></span></span>
+          <span style="margin-left:4pt;font-weight:700">${pct}%</span>
+        </td>
+        <td>${fmtDate(s.startDate)}</td>
+        <td>${fmtDate(s.dueDate)}</td>
+      </tr>`
+    }).join("")
+
+  // ── Tarefas rows ──
+  const tasksRows = p.tasks.length === 0 ? `<tr><td colspan="5" style="text-align:center;color:#94a3b8">Nenhuma tarefa cadastrada</td></tr>` :
+    p.tasks.map(t => {
+      const isLate = t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "CONCLUIDA" && t.status !== "CANCELADA"
+      return `<tr>
+        <td class="bold">${esc(t.title)}</td>
+        <td>${esc(t.responsible ?? "—")}</td>
+        <td>${esc(TASK_STATUS_LABEL[t.status] ?? t.status)}</td>
+        <td>${esc(PRIORITY_LABEL[t.priority] ?? t.priority)}</td>
+        <td style="${isLate ? "color:#ea580c;font-weight:600" : ""}">${isLate ? "⚠ " : ""}${fmtDate(t.dueDate)}</td>
+      </tr>`
+    }).join("")
+
+  // ── Entregas rows ──
+  const entregasRows = p.milestones.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:#94a3b8">Nenhuma entrega cadastrada</td></tr>` :
+    p.milestones.map(m => {
+      const statusIcon = m.status === "CONCLUIDA" ? "✅" : m.status === "ATRASADA" ? "⚠" : "◯"
+      return `<tr>
+        <td class="bold">${esc(m.title)}</td>
+        <td>${statusIcon} ${esc(STAGE_STATUS_LABEL[m.status] ?? m.status)}</td>
+        <td>${fmtDate(m.dueDate)}</td>
+        <td style="${m.completedAt ? "color:#16a34a;font-weight:600" : "color:#94a3b8"}">${fmtDate(m.completedAt)}</td>
+      </tr>`
+    }).join("")
+
+  // ── Cronograma rows ──
+  const historyRows = p.history.length === 0 ? `<p style="color:#94a3b8">Nenhum evento registrado.</p>` :
+    p.history.map(h => `
+      <div class="timeline-item">
+        <div class="timeline-date">${fmtDate(h.createdAt)}</div>
+        <div>
+          <div class="timeline-title">${esc(h.title)}</div>
+          ${h.description ? `<div class="timeline-desc">${esc(h.description)}</div>` : ""}
+        </div>
+      </div>
+    `).join("")
+
+  // ── IA content ──
+  const iaHtml = iaContent
+    ? `<h3>Análise de Inteligência Artificial</h3>
+       <div class="ia-box section">
+         <h4>✨ Análise gerada por IA</h4>
+         <div class="ia-content">${iaContent.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>")}</div>
+       </div>`
+    : ""
+
+  // ── Conclusion ──
+  const conclusionText = p.status === "CONCLUIDO"
+    ? `O projeto <strong>${esc(p.name)}</strong> foi concluído com ${p.progress}% de progresso registrado. ${p.doneTasks} de ${p.totalTasks} tarefas foram entregues.`
+    : p.isOverdue
+    ? `O projeto <strong>${esc(p.name)}</strong> está <strong>atrasado</strong> em relação ao prazo de ${fmtDate(p.dueDate)}. Progresso atual: ${p.progress}%. É recomendada ação imediata para regularização.`
+    : `O projeto <strong>${esc(p.name)}</strong> está em andamento com ${p.progress}% de progresso. ${p.remainDays !== null ? `Restam ${p.remainDays} dia(s) para o prazo de ${fmtDate(p.dueDate)}.` : ""} ${p.doneTasks} de ${p.totalTasks} tarefas foram concluídas.`
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relatório — ${esc(p.name)}</title>
+  <style>${css}</style>
+</head>
+<body>
+
+  <!-- CAPA -->
+  <div class="cover section">
+    <h1>Relatório do Projeto</h1>
+    <h2>${esc(p.name)}</h2>
+    <p class="cover-meta">
+      Responsável: <strong>${esc(p.responsible ?? "—")}</strong> &nbsp;·&nbsp;
+      Status: <strong>${esc(STATUS_LABEL[p.status] ?? p.status)}</strong> &nbsp;·&nbsp;
+      Prioridade: <strong>${esc(PRIORITY_LABEL[p.priority] ?? p.priority)}</strong>
+    </p>
+    <p class="cover-meta">Emitido em: <strong>${esc(emitDate)}</strong></p>
+  </div>
+
+  <!-- RESUMO EXECUTIVO -->
+  <h3>Resumo Executivo</h3>
+  <div class="section">
+    <table class="meta-table">
+      <tbody>
+        <tr><td>Projeto</td><td>${esc(p.name)}</td></tr>
+        <tr><td>Responsável</td><td>${esc(p.responsible ?? "—")}</td></tr>
+        <tr><td>Prioridade</td><td>${esc(PRIORITY_LABEL[p.priority] ?? p.priority)}</td></tr>
+        <tr><td>Status</td><td>${esc(STATUS_LABEL[p.status] ?? p.status)}</td></tr>
+        <tr><td>Início</td><td>${fmtDate(p.startDate)}</td></tr>
+        <tr><td>Prazo final</td><td>${fmtDate(p.dueDate)}</td></tr>
+        ${p.objective ? `<tr><td>Objetivo</td><td>${esc(p.objective)}</td></tr>` : ""}
+        ${p.description ? `<tr><td>Descrição</td><td>${esc(p.description)}</td></tr>` : ""}
+        ${p.notes ? `<tr><td>Observações</td><td>${esc(p.notes)}</td></tr>` : ""}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- INDICADORES -->
+  <h3>Indicadores</h3>
+  <div class="section">
+    <div class="kpi-grid">
+      <div class="kpi-card accent">
+        <div class="kpi-label">Progresso geral</div>
+        <div class="kpi-value">${p.progress}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Tarefas concluídas</div>
+        <div class="kpi-value">${p.doneTasks}/${p.totalTasks}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Etapas concluídas</div>
+        <div class="kpi-value">${doneStages}/${p.stages.length}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Entregas concluídas</div>
+        <div class="kpi-value">${doneMilestones}/${p.milestones.length}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Dias decorridos</div>
+        <div class="kpi-value">${kpiValue(p.elapsedDays, "d")}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Dias restantes</div>
+        <div class="kpi-value">${kpiValue(p.remainDays, "d")}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Tarefas atrasadas</div>
+        <div class="kpi-value">${lateTasks}</div>
+        <div class="kpi-sub">${lateTasks > 0 ? "⚠ atenção necessária" : "✅ em dia"}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Produtividade</div>
+        <div class="kpi-value">${productivity}%</div>
+        <div class="kpi-sub">tarefas concluídas</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ETAPAS -->
+  <h3>Etapas (${doneStages}/${p.stages.length} concluídas)</h3>
+  <div class="section-allow-break">
+    <table>
+      <thead><tr><th>Etapa</th><th>Status</th><th>Progresso</th><th>Início</th><th>Prazo</th></tr></thead>
+      <tbody>${stagesRows}</tbody>
+    </table>
+  </div>
+
+  <!-- TAREFAS -->
+  <h3>Tarefas (${p.doneTasks}/${p.totalTasks} concluídas)</h3>
+  <div class="section-allow-break">
+    <table>
+      <thead><tr><th>Tarefa</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th>Prazo</th></tr></thead>
+      <tbody>${tasksRows}</tbody>
+    </table>
+  </div>
+
+  <!-- ENTREGAS -->
+  <h3>Entregas (${doneMilestones}/${p.milestones.length} concluídas)</h3>
+  <div class="section-allow-break">
+    <table>
+      <thead><tr><th>Entrega</th><th>Status</th><th>Prazo</th><th>Data de conclusão</th></tr></thead>
+      <tbody>${entregasRows}</tbody>
+    </table>
+  </div>
+
+  <!-- CRONOGRAMA / LINHA DO TEMPO -->
+  <h3>Cronograma — Linha do Tempo</h3>
+  <div class="section-allow-break">${historyRows}</div>
+
+  <!-- ANÁLISE IA -->
+  ${iaHtml}
+
+  <!-- CONCLUSÃO -->
+  <h3>Conclusão</h3>
+  <div class="conclusion section">
+    <p>${conclusionText}</p>
+    ${p.notes ? `<p style="margin-top:6pt"><em>Obs.: ${esc(p.notes)}</em></p>` : ""}
+  </div>
+
+</body>
+</html>`
+}
+
+// ─── PDF export — blank window approach ───────────────────────────────────────
+
+function openPdfWindow(p: ProjectDetail, iaContent: string | null) {
+  const emitDate = new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit", month: "long", year: "numeric",
+  })
+
+  const html = buildReportHTML(p, iaContent, emitDate)
+
+  // Open a truly blank popup — URL will be "about:blank", no localhost visible
+  const win = window.open("", "_blank", "width=900,height=700,scrollbars=yes")
+  if (!win) {
+    alert("O navegador bloqueou o popup. Permita popups para este site e tente novamente.")
+    return
+  }
+
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+
+  // Wait for images/fonts to load, then print
+  win.onload = () => {
+    win.print()
+    // Keep the window open so the user can save as PDF — closing immediately
+    // would interrupt the save dialog on some browsers.
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function generateCSV(p: ProjectDetail): string {
   const rows: string[][] = [
@@ -91,11 +408,11 @@ function generateCSV(p: ProjectDetail): string {
     ["Início",       p.startDate ? p.startDate.slice(0, 10) : "—"],
     ["Prazo",        p.dueDate   ? p.dueDate.slice(0, 10)   : "—"],
     ["Progresso",    `${p.progress}%`],
-    ["Tarefas concluídas", `${p.doneTasks}/${p.totalTasks}`],
-    ["Etapas concluídas",  `${p.stages.filter(s => s.status === "CONCLUIDA").length}/${p.stages.length}`],
-    ["Entregas concluídas",`${p.milestones.filter(m => m.status === "CONCLUIDA").length}/${p.milestones.length}`],
-    ["Dias decorridos",    kpiValue(p.elapsedDays, "d")],
-    ["Dias restantes",     kpiValue(p.remainDays,  "d")],
+    ["Tarefas concluídas",  `${p.doneTasks}/${p.totalTasks}`],
+    ["Etapas concluídas",   `${p.stages.filter(s => s.status === "CONCLUIDA").length}/${p.stages.length}`],
+    ["Entregas concluídas", `${p.milestones.filter(m => m.status === "CONCLUIDA").length}/${p.milestones.length}`],
+    ["Dias decorridos",     kpiValue(p.elapsedDays, "d")],
+    ["Dias restantes",      kpiValue(p.remainDays,  "d")],
     [],
     ["Etapa", "Status", "Progresso", "Início", "Prazo"],
     ...p.stages.map(s => [s.name, STAGE_STATUS_LABEL[s.status] ?? s.status, `${s.progress}%`, s.startDate?.slice(0,10) ?? "—", s.dueDate?.slice(0,10) ?? "—"]),
@@ -112,8 +429,10 @@ function generateCSV(p: ProjectDetail): string {
 function generateSummaryText(p: ProjectDetail): string {
   const doneStages     = p.stages.filter(s => s.status === "CONCLUIDA").length
   const doneMilestones = p.milestones.filter(m => m.status === "CONCLUIDA").length
-  const lateTasks      = p.tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "CONCLUIDA" && t.status !== "CANCELADA")
-
+  const lateTasks      = p.tasks.filter(t =>
+    t.dueDate && new Date(t.dueDate) < new Date() &&
+    t.status !== "CONCLUIDA" && t.status !== "CANCELADA"
+  )
   return `
 PROJETO: ${p.name}
 Responsável: ${p.responsible ?? "—"}
@@ -122,8 +441,8 @@ Objetivo: ${p.objective ?? "Não informado"}
 Descrição: ${p.description ?? "Não informada"}
 
 CRONOGRAMA:
-- Início: ${p.startDate ? p.startDate.slice(0,10) : "—"}
-- Prazo: ${p.dueDate ? p.dueDate.slice(0,10) : "—"}
+- Início: ${p.startDate?.slice(0,10) ?? "—"}
+- Prazo: ${p.dueDate?.slice(0,10) ?? "—"}
 - Dias totais: ${p.totalDays ?? "—"} | Decorridos: ${p.elapsedDays ?? "—"} | Restantes: ${p.remainDays ?? "—"}
 - Atrasado: ${p.isOverdue ? "SIM" : "Não"}
 
@@ -133,7 +452,7 @@ ETAPAS: ${doneStages}/${p.stages.length} concluídas
 ${p.stages.map(s => `  [${STAGE_STATUS_LABEL[s.status]}] ${s.name} — ${s.progress}%`).join("\n")}
 
 TAREFAS: ${p.doneTasks}/${p.totalTasks} concluídas
-- Tarefas atrasadas (${lateTasks.length}): ${lateTasks.map(t => t.title).join(", ") || "Nenhuma"}
+- Atrasadas (${lateTasks.length}): ${lateTasks.map(t => t.title).join(", ") || "Nenhuma"}
 ${p.tasks.map(t => `  [${TASK_STATUS_LABEL[t.status]}] ${t.title} | ${PRIORITY_LABEL[t.priority]} | Resp: ${t.responsible ?? "—"}`).join("\n")}
 
 ENTREGAS: ${doneMilestones}/${p.milestones.length} concluídas
@@ -146,7 +465,9 @@ ${p.history.slice(0, 10).map(h => `  [${h.createdAt.slice(0,10)}] ${h.title}`).j
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, accent = false }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
+function KpiCard({ label, value, sub, accent = false }: {
+  label: string; value: string | number; sub?: string; accent?: boolean
+}) {
   return (
     <div className={cn("rounded-xl border p-4", accent ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-200")}>
       <p className="text-xs text-slate-500 mb-1">{label}</p>
@@ -165,7 +486,7 @@ function IAModal({ result, onClose }: { result: IAResult; onClose: () => void })
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <Bot className="w-4 h-4 text-violet-600" />
-            Análise de IA — {result.aiPowered ? "Análise Real" : "Sem IA configurada"}
+            Análise de IA
             {result.aiPowered && (
               <span className="text-xs font-normal bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5">✨ IA Real</span>
             )}
@@ -193,197 +514,8 @@ function IAModal({ result, onClose }: { result: IAResult; onClose: () => void })
           />
         </div>
         <div className="px-6 py-4 border-t border-slate-100 shrink-0">
-          <button onClick={onClose} className="text-sm border border-slate-200 rounded-lg px-4 py-2 text-slate-600 hover:bg-slate-50 transition-colors">
-            Fechar
-          </button>
+          <button onClick={onClose} className="text-sm border border-slate-200 rounded-lg px-4 py-2 text-slate-600 hover:bg-slate-50 transition-colors">Fechar</button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Print Area ───────────────────────────────────────────────────────────────
-
-function PrintArea({ p, iaContent, emitDate }: { p: ProjectDetail; iaContent: string | null; emitDate: string }) {
-  const doneStages     = p.stages.filter(s => s.status === "CONCLUIDA").length
-  const doneMilestones = p.milestones.filter(m => m.status === "CONCLUIDA").length
-
-  const tdStyle = (bold = false): React.CSSProperties => ({
-    padding: "5px 8px", fontSize: "11px", borderBottom: "1px solid #e2e8f0",
-    fontWeight: bold ? 600 : 400, color: bold ? "#1e293b" : "#475569",
-  })
-
-  const thStyle: React.CSSProperties = {
-    padding: "6px 8px", fontSize: "10px", fontWeight: 700,
-    background: "#6366f1", color: "white", textAlign: "left",
-  }
-
-  return (
-    <div style={{ fontFamily: "system-ui, -apple-system, Arial, sans-serif", color: "#1e293b", background: "white" }}>
-
-      {/* Cover */}
-      <div style={{ textAlign: "center", paddingBottom: "28px", borderBottom: "3px solid #6366f1", marginBottom: "28px" }}>
-        <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#1e293b", margin: "0 0 8px" }}>
-          Relatório do Projeto
-        </h1>
-        <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#6366f1", margin: "0 0 12px" }}>{p.name}</h2>
-        <p style={{ fontSize: "12px", color: "#64748b", margin: 0 }}>
-          Responsável: <strong>{p.responsible ?? "—"}</strong> ·
-          Status: <strong>{STATUS_LABEL[p.status] ?? p.status}</strong> ·
-          Emitido em: <strong>{emitDate}</strong>
-        </p>
-      </div>
-
-      {/* Resumo Executivo */}
-      <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px", marginTop: 0 }}>Resumo Executivo</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-        <tbody>
-          {[
-            ["Projeto",      p.name],
-            ["Responsável",  p.responsible ?? "—"],
-            ["Prioridade",   PRIORITY_LABEL[p.priority] ?? p.priority],
-            ["Status",       STATUS_LABEL[p.status]     ?? p.status],
-            ["Início",       formatDate(p.startDate)],
-            ["Prazo",        formatDate(p.dueDate)],
-            ["Objetivo",     p.objective   ?? "—"],
-            ["Descrição",    p.description ?? "—"],
-          ].map(([k, v], i) => (
-            <tr key={k} style={{ background: i % 2 === 0 ? "#f8fafc" : "white" }}>
-              <td style={{ ...tdStyle(true), width: "22%" }}>{k}</td>
-              <td style={tdStyle()}>{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Indicadores */}
-      <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Indicadores</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-        <tbody>
-          {[
-            ["% Concluído",          `${p.progress}%`,                     "Dias decorridos",    kpiValue(p.elapsedDays, "d")],
-            ["Tarefas concluídas",   `${p.doneTasks}/${p.totalTasks}`,     "Dias restantes",     kpiValue(p.remainDays, "d")],
-            ["Etapas concluídas",    `${doneStages}/${p.stages.length}`,   "Prazo final",        formatDate(p.dueDate)],
-            ["Entregas concluídas",  `${doneMilestones}/${p.milestones.length}`, "Atrasado",     p.isOverdue ? "Sim ⚠" : "Não"],
-          ].map((row, i) => (
-            <tr key={i} style={{ background: i % 2 === 0 ? "#f8fafc" : "white" }}>
-              <td style={{ ...tdStyle(true), width: "22%" }}>{row[0]}</td>
-              <td style={{ ...tdStyle(), width: "28%" }}>{row[1]}</td>
-              <td style={{ ...tdStyle(true), width: "22%" }}>{row[2]}</td>
-              <td style={tdStyle()}>{row[3]}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Etapas */}
-      {p.stages.length > 0 && (
-        <>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Etapas</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-            <thead>
-              <tr>
-                {["Etapa", "Status", "Progresso", "Início", "Prazo"].map(h => <th key={h} style={thStyle}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {p.stages.map((s, i) => (
-                <tr key={s.id} style={{ background: i % 2 === 0 ? "white" : "#f8fafc" }}>
-                  <td style={{ ...tdStyle(true) }}>{s.name}</td>
-                  <td style={tdStyle()}>{STAGE_STATUS_LABEL[s.status] ?? s.status}</td>
-                  <td style={{ ...tdStyle(), fontWeight: 700, color: s.progress >= 100 ? "#22c55e" : "#6366f1" }}>{s.progress}%</td>
-                  <td style={tdStyle()}>{s.startDate ? s.startDate.slice(0,10).split("-").reverse().join("/") : "—"}</td>
-                  <td style={tdStyle()}>{s.dueDate ? s.dueDate.slice(0,10).split("-").reverse().join("/") : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {/* Tarefas */}
-      {p.tasks.length > 0 && (
-        <>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Tarefas</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-            <thead>
-              <tr>
-                {["Tarefa", "Responsável", "Status", "Prioridade", "Prazo"].map(h => <th key={h} style={thStyle}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {p.tasks.map((t, i) => (
-                <tr key={t.id} style={{ background: i % 2 === 0 ? "white" : "#f8fafc" }}>
-                  <td style={{ ...tdStyle(true) }}>{t.title}</td>
-                  <td style={tdStyle()}>{t.responsible ?? "—"}</td>
-                  <td style={tdStyle()}>{TASK_STATUS_LABEL[t.status] ?? t.status}</td>
-                  <td style={tdStyle()}>{PRIORITY_LABEL[t.priority] ?? t.priority}</td>
-                  <td style={tdStyle()}>{t.dueDate ? t.dueDate.slice(0,10).split("-").reverse().join("/") : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {/* Entregas */}
-      {p.milestones.length > 0 && (
-        <>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Entregas</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-            <thead>
-              <tr>
-                {["Entrega", "Status", "Prazo", "Data de conclusão"].map(h => <th key={h} style={thStyle}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {p.milestones.map((m, i) => (
-                <tr key={m.id} style={{ background: i % 2 === 0 ? "white" : "#f8fafc" }}>
-                  <td style={{ ...tdStyle(true) }}>{m.title}</td>
-                  <td style={tdStyle()}>{m.status === "CONCLUIDA" ? "✅ Concluída" : m.status === "ATRASADA" ? "⚠ Atrasada" : "Pendente"}</td>
-                  <td style={tdStyle()}>{m.dueDate ? m.dueDate.slice(0,10).split("-").reverse().join("/") : "—"}</td>
-                  <td style={tdStyle()}>{m.completedAt ? m.completedAt.slice(0,10).split("-").reverse().join("/") : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {/* Análise IA */}
-      {iaContent && (
-        <>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Análise de Inteligência Artificial</h3>
-          <div style={{ background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "16px", marginBottom: "24px", fontSize: "11px", lineHeight: 1.7, color: "#374151" }}>
-            <div dangerouslySetInnerHTML={{ __html: iaContent.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br/>") }} />
-          </div>
-        </>
-      )}
-
-      {/* Linha do tempo */}
-      {p.history.length > 0 && (
-        <>
-          <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b", marginBottom: "8px" }}>Linha do Tempo</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
-            <thead>
-              <tr>{["Data", "Evento", "Descrição"].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {p.history.map((h, i) => (
-                <tr key={h.id} style={{ background: i % 2 === 0 ? "white" : "#f8fafc" }}>
-                  <td style={{ ...tdStyle(), width: "12%", whiteSpace: "nowrap" }}>{h.createdAt.slice(0,10).split("-").reverse().join("/")}</td>
-                  <td style={{ ...tdStyle(true), width: "30%" }}>{h.title}</td>
-                  <td style={tdStyle()}>{h.description ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {/* Footer */}
-      <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "12px", fontSize: "10px", color: "#94a3b8", textAlign: "center" }}>
-        Relatório do Projeto · {p.name} · Emitido em {emitDate} · Confidencial
       </div>
     </div>
   )
@@ -394,7 +526,6 @@ function PrintArea({ p, iaContent, emitDate }: { p: ProjectDetail; iaContent: st
 export function RelatorioProjetoClient({ project: p, onReload }: { project: ProjectDetail; onReload: () => void }) {
   const [iaResult,  setIaResult]  = useState<IAResult | null>(null)
   const [iaLoading, setIaLoading] = useState(false)
-  const [showPrint, setShowPrint] = useState(false)
   const [savedIA,   setSavedIA]   = useState<string | null>(null)
 
   const emitDate = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
@@ -407,9 +538,7 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
     t.dueDate && new Date(t.dueDate) < new Date() &&
     t.status !== "CONCLUIDA" && t.status !== "CANCELADA"
   ).length
-  const productivity   = p.totalTasks > 0
-    ? Math.round((p.doneTasks / p.totalTasks) * 100)
-    : 0
+  const productivity = p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0
 
   async function handleAnalyzeAI() {
     setIaLoading(true)
@@ -422,8 +551,8 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
       })
       const data = await res.json()
       const result: IAResult = {
-        content:     data.content ?? data.error ?? "Erro ao analisar.",
-        aiPowered:   data.aiPowered   ?? false,
+        content:      data.content ?? data.error ?? "Erro ao analisar.",
+        aiPowered:    data.aiPowered    ?? false,
         aiConfigured: data.aiConfigured ?? false,
       }
       setIaResult(result)
@@ -433,60 +562,36 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
     }
   }
 
-  function handleCSV() {
-    downloadFile(generateCSV(p), `relatorio-${p.name.replace(/\s+/g, "-").toLowerCase()}.csv`, "text/csv;charset=utf-8")
+  function handlePDF() {
+    openPdfWindow(p, savedIA)
   }
 
   function handleExcel() {
-    const stages    = p.stages.map(s => `<tr><td>${s.name}</td><td>${STAGE_STATUS_LABEL[s.status]}</td><td>${s.progress}%</td><td>${s.startDate?.slice(0,10) ?? "—"}</td><td>${s.dueDate?.slice(0,10) ?? "—"}</td></tr>`).join("")
-    const tasks     = p.tasks.map(t => `<tr><td>${t.title}</td><td>${t.responsible ?? "—"}</td><td>${TASK_STATUS_LABEL[t.status]}</td><td>${PRIORITY_LABEL[t.priority]}</td><td>${t.dueDate?.slice(0,10) ?? "—"}</td></tr>`).join("")
-    const entregas  = p.milestones.map(m => `<tr><td>${m.title}</td><td>${m.status}</td><td>${m.dueDate?.slice(0,10) ?? "—"}</td><td>${m.completedAt?.slice(0,10) ?? "—"}</td></tr>`).join("")
-    const html = `<html><head><meta charset="UTF-8"><style>th{background:#6366f1;color:white;padding:6px}td{padding:5px;border:1px solid #e2e8f0}table{border-collapse:collapse;margin-bottom:16px}h2{color:#1e293b}</style></head><body>
-      <h2>Projeto: ${p.name}</h2>
-      <p>Responsável: ${p.responsible ?? "—"} | Status: ${STATUS_LABEL[p.status]} | Progresso: ${p.progress}%</p>
-      <h3>Etapas</h3><table><tr><th>Etapa</th><th>Status</th><th>Progresso</th><th>Início</th><th>Prazo</th></tr>${stages}</table>
-      <h3>Tarefas</h3><table><tr><th>Tarefa</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th>Prazo</th></tr>${tasks}</table>
-      <h3>Entregas</h3><table><tr><th>Entrega</th><th>Status</th><th>Prazo</th><th>Conclusão</th></tr>${entregas}</table>
+    const stages   = p.stages.map(s => `<tr><td>${s.name}</td><td>${STAGE_STATUS_LABEL[s.status]}</td><td>${s.progress}%</td><td>${s.startDate?.slice(0,10) ?? "—"}</td><td>${s.dueDate?.slice(0,10) ?? "—"}</td></tr>`).join("")
+    const tasks    = p.tasks.map(t => `<tr><td>${t.title}</td><td>${t.responsible ?? "—"}</td><td>${TASK_STATUS_LABEL[t.status]}</td><td>${PRIORITY_LABEL[t.priority]}</td><td>${t.dueDate?.slice(0,10) ?? "—"}</td></tr>`).join("")
+    const entregas = p.milestones.map(m => `<tr><td>${m.title}</td><td>${m.status}</td><td>${m.dueDate?.slice(0,10) ?? "—"}</td><td>${m.completedAt?.slice(0,10) ?? "—"}</td></tr>`).join("")
+    const html = `<html><head><meta charset="UTF-8"><style>
+      th{background:#6366f1;color:white;padding:6px 8px;text-align:left}
+      td{padding:5px 8px;border:1pt solid #e2e8f0}
+      table{border-collapse:collapse;margin-bottom:16px;width:100%}
+      h2{color:#1e293b;font-size:14pt;margin:12px 0 4px}
+      h3{color:#4f46e5;font-size:11pt;margin:10px 0 4px}
+      body{font-family:Arial,sans-serif;font-size:10pt;padding:12px}
+    </style></head><body>
+      <h2>Relatório do Projeto: ${esc(p.name)}</h2>
+      <p>Responsável: ${esc(p.responsible ?? "—")} | Status: ${STATUS_LABEL[p.status]} | Progresso: ${p.progress}% | Emitido em: ${emitDate}</p>
+      <h3>Etapas</h3>
+      <table><tr><th>Etapa</th><th>Status</th><th>Progresso</th><th>Início</th><th>Prazo</th></tr>${stages}</table>
+      <h3>Tarefas</h3>
+      <table><tr><th>Tarefa</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th>Prazo</th></tr>${tasks}</table>
+      <h3>Entregas</h3>
+      <table><tr><th>Entrega</th><th>Status</th><th>Prazo</th><th>Conclusão</th></tr>${entregas}</table>
     </body></html>`
     downloadFile(html, `relatorio-${p.name.replace(/\s+/g, "-").toLowerCase()}.xls`, "application/vnd.ms-excel;charset=utf-8")
   }
 
-  const printCSS = showPrint ? `
-    @media print {
-      html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      html body { visibility: hidden !important; }
-      #proj-rel-print, #proj-rel-print * { visibility: visible !important; }
-      #proj-rel-print { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; background: white !important; overflow: visible !important; padding: 0 !important; }
-      .print-hide { display: none !important; }
-      @page { size: A4 portrait; margin: 1.5cm; }
-    }
-  ` : ""
-
   return (
     <>
-      {printCSS && <style dangerouslySetInnerHTML={{ __html: printCSS }} />}
-
-      {/* Print overlay */}
-      {showPrint && (
-        <div id="proj-rel-print" style={{ position: "fixed", inset: 0, zIndex: 9999, background: "white", overflowY: "auto", padding: "40px 48px" }}>
-          <div className="print-hide flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
-            <div>
-              <h2 className="text-base font-bold text-slate-800">Pré-visualização do PDF</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Verifique o conteúdo e clique em "Imprimir / Salvar PDF"</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
-                <Printer className="w-4 h-4" /> Imprimir / Salvar PDF
-              </button>
-              <button onClick={() => setShowPrint(false)} className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-sm text-slate-600 rounded-xl hover:bg-slate-100 transition-colors">
-                <X className="w-4 h-4" /> Fechar
-              </button>
-            </div>
-          </div>
-          <PrintArea p={p} iaContent={savedIA} emitDate={emitDate} />
-        </div>
-      )}
-
       {/* IA Modal */}
       {iaResult && <IAModal result={iaResult} onClose={() => setIaResult(null)} />}
 
@@ -505,12 +610,18 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
               className="flex items-center gap-1.5 px-3 py-2 text-sm text-violet-600 border border-violet-200 bg-violet-50 rounded-xl hover:bg-violet-100 transition-colors font-medium disabled:opacity-50"
             >
               {iaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
-              {iaLoading ? "Analisando…" : "Analisar Projeto com IA"}
+              {iaLoading ? "Analisando…" : "Analisar com IA"}
             </button>
-            <button onClick={() => setShowPrint(true)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+            <button
+              onClick={handlePDF}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            >
               <Printer className="w-4 h-4 text-slate-400" /> Exportar PDF
             </button>
-            <button onClick={handleExcel} className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+            <button
+              onClick={handleExcel}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            >
               <FileSpreadsheet className="w-4 h-4 text-green-500" /> Exportar Excel
             </button>
           </div>
@@ -556,17 +667,17 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
             <span className="w-2 h-2 rounded-full bg-indigo-500" /> Indicadores
           </h4>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard label="Progresso"          value={`${p.progress}%`}              accent />
-            <KpiCard label="Tarefas concluídas" value={`${p.doneTasks}/${p.totalTasks}`} />
-            <KpiCard label="Etapas concluídas"  value={`${doneStages}/${p.stages.length}`} />
+            <KpiCard label="Progresso"           value={`${p.progress}%`}                     accent />
+            <KpiCard label="Tarefas concluídas"  value={`${p.doneTasks}/${p.totalTasks}`}        />
+            <KpiCard label="Etapas concluídas"   value={`${doneStages}/${p.stages.length}`}      />
             <KpiCard label="Entregas concluídas" value={`${doneMilestones}/${p.milestones.length}`} />
-            <KpiCard label="Tarefas atrasadas"  value={lateTasks} sub={lateTasks > 0 ? "⚠ atenção" : "✅ em dia"} />
-            <KpiCard label="Produtividade"       value={`${productivity}%`} sub="tarefas concluídas" />
+            <KpiCard label="Tarefas atrasadas"   value={lateTasks} sub={lateTasks > 0 ? "⚠ atenção" : "✅ em dia"} />
+            <KpiCard label="Produtividade"        value={`${productivity}%`} sub="tarefas concluídas" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-            <KpiCard label="Dias decorridos"   value={kpiValue(p.elapsedDays, "d")} />
-            <KpiCard label="Dias restantes"    value={kpiValue(p.remainDays,  "d")} />
-            <KpiCard label="Etapas pendentes"  value={pendingStages} />
+            <KpiCard label="Dias decorridos"    value={kpiValue(p.elapsedDays, "d")} />
+            <KpiCard label="Dias restantes"     value={kpiValue(p.remainDays,  "d")} />
+            <KpiCard label="Etapas pendentes"   value={pendingStages} />
             <KpiCard label="Entregas pendentes" value={pendingMilest} />
           </div>
         </div>
@@ -580,12 +691,10 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
             ? <p className="text-xs text-slate-400 py-4 text-center">Nenhum evento registrado.</p>
             : (
               <div className="relative pl-6">
-                {/* vertical line */}
                 <div className="absolute left-2.5 top-0 bottom-0 w-px bg-slate-200" />
                 <div className="space-y-4">
-                  {p.history.map((h, i) => (
+                  {p.history.map(h => (
                     <div key={h.id} className="relative flex items-start gap-3">
-                      {/* dot */}
                       <div className="absolute -left-4 w-3 h-3 rounded-full bg-indigo-500 border-2 border-white mt-1" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
@@ -720,7 +829,8 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
             <Bot className="w-8 h-8 text-violet-400 mx-auto mb-2" />
             <p className="text-sm font-medium text-slate-700 mb-1">Análise de IA disponível</p>
             <p className="text-xs text-slate-400 mb-4">
-              Clique em "Analisar Projeto com IA" para obter riscos, gargalos, previsão de conclusão e recomendações personalizadas.
+              Clique em "Analisar com IA" para obter riscos, gargalos, previsão de conclusão e recomendações personalizadas.
+              O resultado também será incluído no PDF ao exportar após a análise.
             </p>
             <button
               onClick={handleAnalyzeAI}
