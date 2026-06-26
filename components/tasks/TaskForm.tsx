@@ -110,24 +110,8 @@ export function TaskForm({ task }: TaskFormProps) {
             />
           </div>
 
-          {/* Data de recebimento */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-            <label className="block text-sm font-medium text-blue-800 mb-1.5">
-              Data de Recebimento da Demanda
-            </label>
-            <p className="text-xs text-blue-600 mb-2">
-              Quando esta tarefa chegou até você? (diferente da data de criação)
-            </p>
-            <input
-              type="datetime-local"
-              value={form.receivedAt}
-              onChange={e => set("receivedAt", e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          {/* Prioridade + Prazo */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Prioridade | Recebida em | Prazo */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Prioridade</label>
               <select value={form.priority} onChange={e => set("priority", e.target.value)} className={inputClass}>
@@ -137,6 +121,19 @@ export function TaskForm({ task }: TaskFormProps) {
               </select>
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Recebida em
+              </label>
+              <input
+                type="datetime-local"
+                value={form.receivedAt}
+                onChange={e => set("receivedAt", e.target.value)}
+                className={inputClass}
+                title="Quando esta demanda chegou até você"
+              />
+              <p className="text-xs text-slate-400 mt-1">Data e hora do recebimento</p>
+            </div>
+            <div className="sm:col-span-2 md:col-span-1">
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Prazo</label>
               <input
                 type="date"
