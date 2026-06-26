@@ -1,7 +1,5 @@
-import { HistoricoClient } from "@/components/historico/HistoricoClient"
-
-export const dynamic = "force-dynamic"
+import { redirect } from "next/navigation"
 
 export default function HistoricoPage() {
-  return <HistoricoClient />
+  redirect("/tasks?tab=historico")
 }

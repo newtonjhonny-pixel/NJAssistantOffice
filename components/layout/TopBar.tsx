@@ -47,14 +47,15 @@ interface Notification {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PAGE_LABELS: Record<string, string> = {
-  "/":           "Dashboard",
-  "/inbox":      "Caixa de Entrada",
-  "/agenda":     "Agenda",
-  "/tasks":      "Tarefas",
-  "/pendencias": "Central de Pendências",
-  "/assistente": "Assistente NJ",
-  "/historico":  "Histórico",
-  "/integracoes":"Integrações",
+  "/":              "Dashboard",
+  "/inbox":         "Caixa de Entrada",
+  "/agenda":        "Calendário",
+  "/tasks":         "Tarefas",
+  "/assistente":    "Assistente NJ",
+  "/projetos":      "Projetos",
+  "/conferencia":   "Conferência",
+  "/gestao-equipe": "Gestão de Equipe",
+  "/integracoes":   "Integrações",
 }
 
 const NOTIF_ICONS: Record<string, React.ReactNode> = {

@@ -1,7 +1,5 @@
-import { PendenciasClient } from "@/components/pendencias/PendenciasClient"
-
-export const dynamic = "force-dynamic"
+import { redirect } from "next/navigation"
 
 export default function PendenciasPage() {
-  return <PendenciasClient />
+  redirect("/tasks?tab=pendencias")
 }

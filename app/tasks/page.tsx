@@ -1,7 +1,12 @@
-import { TasksClient } from "@/components/tasks/TasksClient"
+import { Suspense } from "react"
+import { TasksModuleClient } from "@/components/tasks/TasksModuleClient"
 
 export const dynamic = "force-dynamic"
 
 export default function TasksPage() {
-  return <TasksClient />
+  return (
+    <Suspense>
+      <TasksModuleClient />
+    </Suspense>
+  )
 }

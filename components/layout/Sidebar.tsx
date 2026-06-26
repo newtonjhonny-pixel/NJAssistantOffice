@@ -7,9 +7,7 @@ import {
   Inbox,
   CalendarDays,
   CheckSquare,
-  AlertCircle,
   MessageSquare,
-  History,
   Bot,
   Plug,
   FolderKanban,
@@ -19,17 +17,15 @@ import {
 import { cn } from "@/lib/utils"
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/inbox", label: "Caixa de Entrada", icon: Inbox },
-  { href: "/agenda", label: "Calendário", icon: CalendarDays },
-  { href: "/tasks", label: "Tarefas", icon: CheckSquare },
-  { href: "/pendencias", label: "Central de Pendências", icon: AlertCircle },
-  { href: "/assistente", label: "Assistente NJ", icon: MessageSquare },
-  { href: "/projetos",      label: "Projetos",        icon: FolderKanban },
-  { href: "/conferencia",   label: "Conferência",     icon: ShieldCheck },
-  { href: "/gestao-equipe", label: "Gestão de Equipe", icon: Users },
-  { href: "/historico",     label: "Histórico",       icon: History },
-  { href: "/integracoes",   label: "Integrações",     icon: Plug },
+  { href: "/",             label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/inbox",        label: "Caixa de Entrada", icon: Inbox },
+  { href: "/agenda",       label: "Calendário",       icon: CalendarDays },
+  { href: "/tasks",        label: "Tarefas",          icon: CheckSquare },
+  { href: "/assistente",   label: "Assistente NJ",    icon: MessageSquare },
+  { href: "/projetos",     label: "Projetos",         icon: FolderKanban },
+  { href: "/conferencia",  label: "Conferência",      icon: ShieldCheck },
+  { href: "/gestao-equipe",label: "Gestão de Equipe", icon: Users },
+  { href: "/integracoes",  label: "Integrações",      icon: Plug },
 ]
 
 export function Sidebar() {
@@ -53,7 +49,10 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
+          // "Tarefas" fica ativo em /tasks e qualquer sub-rota
+          const active = href === "/tasks"
+            ? pathname.startsWith("/tasks") || pathname === "/pendencias" || pathname === "/historico"
+            : pathname === href
           return (
             <Link
               key={href}
