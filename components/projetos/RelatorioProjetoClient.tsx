@@ -109,7 +109,7 @@ function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: s
     @charset "UTF-8";
     @page {
       size: A4 portrait;
-      /* margin: 0 eliminates browser-generated URL / page-number header-footer */
+      /* margin: 0 suppresses browser-generated URL / page-number in header-footer */
       margin: 0;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,58 +118,121 @@ function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: s
       font-size: 10.5pt;
       color: #1e293b;
       background: white;
-      /* all margins live here, not in @page */
+      /* all page margins live here, not in @page */
       padding: 14mm 16mm 14mm 16mm;
     }
+
     /* ── Typography ─────────────────────────────────────────────────────── */
     h1 { font-size: 20pt; font-weight: 800; color: #1e293b; margin-bottom: 4pt; }
     h2 { font-size: 13pt; font-weight: 700; color: #6366f1; margin-bottom: 2pt; }
-    h3 { font-size: 11pt; font-weight: 700; color: #1e293b; margin: 14pt 0 6pt; border-bottom: 1.5pt solid #e2e8f0; padding-bottom: 4pt; }
-    p  { font-size: 10pt; color: #475569; line-height: 1.55; margin-bottom: 4pt; }
+    /*
+     * break-after: avoid keeps h3 glued to whatever follows it.
+     * If there is not enough room for h3 + first table row on the current
+     * page, the entire h3 moves to the next page — preventing orphaned titles.
+     */
+    h3 {
+      font-size: 11pt; font-weight: 700; color: #1e293b;
+      margin: 14pt 0 6pt; border-bottom: 1.5pt solid #e2e8f0; padding-bottom: 4pt;
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+    p { font-size: 10pt; color: #475569; line-height: 1.55; margin-bottom: 4pt; }
+
     /* ── Cover ──────────────────────────────────────────────────────────── */
     .cover { border-bottom: 3pt solid #6366f1; padding-bottom: 14pt; margin-bottom: 16pt; }
     .cover-meta { font-size: 9.5pt; color: #64748b; margin-top: 6pt; }
+
     /* ── KPI grid ───────────────────────────────────────────────────────── */
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; margin-bottom: 10pt; }
-    .kpi-card { border: 1pt solid #e2e8f0; border-radius: 6pt; padding: 7pt 9pt; background: #f8fafc; }
+    /*
+     * Use a table-based layout instead of CSS grid — CSS grid columns can
+     * collapse in some print engines; table cells are guaranteed equal width.
+     */
+    .kpi-table { width: 100%; border-collapse: separate; border-spacing: 5pt; margin-bottom: 10pt; }
+    .kpi-card {
+      border: 1pt solid #e2e8f0; border-radius: 6pt; padding: 7pt 9pt;
+      background: #f8fafc; vertical-align: top; width: 25%;
+      break-inside: avoid; page-break-inside: avoid;
+    }
     .kpi-card.accent { border-color: #c7d2fe; background: #eef2ff; }
     .kpi-label { font-size: 8pt; color: #64748b; margin-bottom: 3pt; }
-    .kpi-value { font-size: 15pt; font-weight: 800; color: #1e293b; }
+    .kpi-value { font-size: 15pt; font-weight: 800; color: #1e293b; display: block; }
     .kpi-card.accent .kpi-value { color: #4f46e5; }
-    .kpi-sub { font-size: 7.5pt; color: #94a3b8; margin-top: 2pt; }
+    .kpi-sub { font-size: 7.5pt; color: #94a3b8; margin-top: 2pt; display: block; }
+
     /* ── Meta table ─────────────────────────────────────────────────────── */
-    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 10pt; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
     .meta-table td { font-size: 9.5pt; padding: 4pt 7pt; vertical-align: top; border-bottom: 1pt solid #f1f5f9; }
     .meta-table td:first-child { color: #64748b; font-weight: 600; width: 28%; }
     .meta-table tr:nth-child(even) td { background: #f8fafc; }
+    .meta-table tr { break-inside: avoid; page-break-inside: avoid; }
+
     /* ── Data tables ────────────────────────────────────────────────────── */
-    table { width: 100%; border-collapse: collapse; page-break-inside: auto; margin-bottom: 10pt; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      /* auto allows the table to break across pages */
+      break-inside: auto;
+      page-break-inside: auto;
+      margin-bottom: 6pt;
+    }
+    /* thead repeats on every printed page when table spans multiple pages */
     thead { display: table-header-group; }
+    tbody { display: table-row-group; }
     thead tr { background: #6366f1; }
-    thead th { font-size: 8.5pt; font-weight: 700; color: white; padding: 5pt 7pt; text-align: left; }
-    tbody tr { page-break-inside: avoid; page-break-after: auto; }
+    thead th {
+      font-size: 8.5pt; font-weight: 700; color: white;
+      padding: 5pt 7pt; text-align: left;
+      word-break: break-word;
+    }
+    /* each data row stays on one page — never split mid-row */
+    tbody tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     tbody tr:nth-child(even) td { background: #f8fafc; }
-    tbody td { font-size: 9.5pt; padding: 4.5pt 7pt; border-bottom: 1pt solid #f1f5f9; color: #374151; vertical-align: top; }
+    tbody td {
+      font-size: 9.5pt; padding: 4.5pt 7pt; border-bottom: 1pt solid #f1f5f9;
+      color: #374151; vertical-align: top;
+      word-break: break-word;
+    }
     tbody td.bold { font-weight: 600; color: #1e293b; }
+
     /* ── Progress bar ───────────────────────────────────────────────────── */
     .bar-wrap { background: #e2e8f0; border-radius: 99pt; height: 5pt; width: 70pt; display: inline-block; vertical-align: middle; }
     .bar-fill { background: #6366f1; border-radius: 99pt; height: 5pt; }
     .bar-fill.done { background: #22c55e; }
+
     /* ── Timeline ───────────────────────────────────────────────────────── */
-    .timeline-item { display: flex; gap: 8pt; padding: 5pt 0; border-bottom: 1pt solid #f1f5f9; }
+    .timeline-item {
+      display: flex; gap: 8pt; padding: 5pt 0; border-bottom: 1pt solid #f1f5f9;
+      break-inside: avoid; page-break-inside: avoid;
+    }
     .timeline-date { font-size: 8.5pt; color: #94a3b8; min-width: 55pt; flex-shrink: 0; }
     .timeline-title { font-size: 9.5pt; font-weight: 600; color: #1e293b; }
     .timeline-desc { font-size: 9pt; color: #64748b; margin-top: 1pt; }
+
     /* ── IA analysis ────────────────────────────────────────────────────── */
     .ia-box { background: #faf5ff; border: 1pt solid #ddd6fe; border-radius: 6pt; padding: 10pt 12pt; }
     .ia-box h4 { font-size: 9.5pt; color: #6d28d9; font-weight: 700; margin-bottom: 7pt; }
     .ia-content { font-size: 9.5pt; line-height: 1.6; color: #374151; }
+
     /* ── Conclusion ─────────────────────────────────────────────────────── */
-    .conclusion { background: #f0f9ff; border: 1pt solid #bae6fd; border-radius: 6pt; padding: 10pt 12pt; margin-top: 14pt; }
+    .conclusion { background: #f0f9ff; border: 1pt solid #bae6fd; border-radius: 6pt; padding: 10pt 12pt; margin-top: 10pt; }
     .conclusion p { color: #0369a1; }
+
     /* ── Section break control ──────────────────────────────────────────── */
-    .section { page-break-inside: avoid; }
-    .section-allow-break { page-break-inside: auto; }
+    /*
+     * .section: entire block must fit on one page (cover, indicators, conclusion).
+     * .section-flow: block can span pages but h3 inside stays with first content row
+     *   thanks to h3 { break-after: avoid }.
+     * .section-newpage: always starts on a fresh page (major sections).
+     */
+    .section { break-inside: avoid; page-break-inside: avoid; }
+    .section-flow { break-inside: auto; page-break-inside: auto; }
+    .section-newpage {
+      break-before: page;
+      page-break-before: always;
+    }
   `
 
   // ── Etapas rows ──
@@ -227,10 +290,12 @@ function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: s
 
   // ── IA content ──
   const iaHtml = iaContent
-    ? `<h3>Análise de Inteligência Artificial</h3>
-       <div class="ia-box section">
-         <h4>✨ Análise gerada por IA</h4>
-         <div class="ia-content">${iaContent.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>")}</div>
+    ? `<div class="section-newpage section-flow">
+         <h3>Análise de Inteligência Artificial</h3>
+         <div class="ia-box">
+           <h4>✨ Análise gerada por IA</h4>
+           <div class="ia-content">${iaContent.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>")}</div>
+         </div>
        </div>`
     : ""
 
@@ -263,9 +328,11 @@ function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: s
     <p class="cover-meta">Emitido em: <strong>${esc(emitDate)}</strong></p>
   </div>
 
-  <!-- RESUMO EXECUTIVO -->
-  <h3>Resumo Executivo</h3>
+  <!-- RESUMO EXECUTIVO
+       .section = break-inside:avoid → entire block stays on one page if it fits;
+       h3 is INSIDE the div so title + content are always co-located. -->
   <div class="section">
+    <h3>Resumo Executivo</h3>
     <table class="meta-table">
       <tbody>
         <tr><td>Projeto</td><td>${esc(p.name)}</td></tr>
@@ -274,93 +341,109 @@ function buildReportHTML(p: ProjectDetail, iaContent: string | null, emitDate: s
         <tr><td>Status</td><td>${esc(STATUS_LABEL[p.status] ?? p.status)}</td></tr>
         <tr><td>Início</td><td>${fmtDate(p.startDate)}</td></tr>
         <tr><td>Prazo final</td><td>${fmtDate(p.dueDate)}</td></tr>
-        ${p.objective ? `<tr><td>Objetivo</td><td>${esc(p.objective)}</td></tr>` : ""}
+        ${p.objective   ? `<tr><td>Objetivo</td><td>${esc(p.objective)}</td></tr>`   : ""}
         ${p.description ? `<tr><td>Descrição</td><td>${esc(p.description)}</td></tr>` : ""}
-        ${p.notes ? `<tr><td>Observações</td><td>${esc(p.notes)}</td></tr>` : ""}
+        ${p.notes       ? `<tr><td>Observações</td><td>${esc(p.notes)}</td></tr>`     : ""}
       </tbody>
     </table>
   </div>
 
-  <!-- INDICADORES -->
-  <h3>Indicadores</h3>
+  <!-- INDICADORES
+       Table-based 4-column grid: more reliable than CSS grid in print engines.
+       Each td is a .kpi-card with break-inside:avoid so cards never split. -->
   <div class="section">
-    <div class="kpi-grid">
-      <div class="kpi-card accent">
-        <div class="kpi-label">Progresso geral</div>
-        <div class="kpi-value">${p.progress}%</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Tarefas concluídas</div>
-        <div class="kpi-value">${p.doneTasks}/${p.totalTasks}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Etapas concluídas</div>
-        <div class="kpi-value">${doneStages}/${p.stages.length}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Entregas concluídas</div>
-        <div class="kpi-value">${doneMilestones}/${p.milestones.length}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Dias decorridos</div>
-        <div class="kpi-value">${kpiValue(p.elapsedDays, "d")}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Dias restantes</div>
-        <div class="kpi-value">${kpiValue(p.remainDays, "d")}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Tarefas atrasadas</div>
-        <div class="kpi-value">${lateTasks}</div>
-        <div class="kpi-sub">${lateTasks > 0 ? "⚠ atenção necessária" : "✅ em dia"}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Produtividade</div>
-        <div class="kpi-value">${productivity}%</div>
-        <div class="kpi-sub">tarefas concluídas</div>
-      </div>
-    </div>
+    <h3>Indicadores</h3>
+    <table class="kpi-table">
+      <tbody>
+        <tr>
+          <td class="kpi-card accent">
+            <span class="kpi-label">Progresso geral</span>
+            <span class="kpi-value">${p.progress}%</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Tarefas concluídas</span>
+            <span class="kpi-value">${p.doneTasks}/${p.totalTasks}</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Etapas concluídas</span>
+            <span class="kpi-value">${doneStages}/${p.stages.length}</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Entregas concluídas</span>
+            <span class="kpi-value">${doneMilestones}/${p.milestones.length}</span>
+          </td>
+        </tr>
+        <tr>
+          <td class="kpi-card">
+            <span class="kpi-label">Dias decorridos</span>
+            <span class="kpi-value">${kpiValue(p.elapsedDays, "d")}</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Dias restantes</span>
+            <span class="kpi-value">${kpiValue(p.remainDays, "d")}</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Tarefas atrasadas</span>
+            <span class="kpi-value">${lateTasks}</span>
+            <span class="kpi-sub">${lateTasks > 0 ? "⚠ atenção" : "✅ em dia"}</span>
+          </td>
+          <td class="kpi-card">
+            <span class="kpi-label">Produtividade</span>
+            <span class="kpi-value">${productivity}%</span>
+            <span class="kpi-sub">tarefas concluídas</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
-  <!-- ETAPAS -->
-  <h3>Etapas (${doneStages}/${p.stages.length} concluídas)</h3>
-  <div class="section-allow-break">
+  <!-- ETAPAS
+       .section-newpage → always starts on a fresh page.
+       .section-flow → table can span multiple pages; tr stays intact (break-inside:avoid on tr).
+       h3 INSIDE the div + h3{break-after:avoid} = title glued to first table row. -->
+  <div class="section-newpage section-flow">
+    <h3>Etapas (${doneStages}/${p.stages.length} concluídas)</h3>
     <table>
       <thead><tr><th>Etapa</th><th>Status</th><th>Progresso</th><th>Início</th><th>Prazo</th></tr></thead>
       <tbody>${stagesRows}</tbody>
     </table>
   </div>
 
-  <!-- TAREFAS -->
-  <h3>Tarefas (${p.doneTasks}/${p.totalTasks} concluídas)</h3>
-  <div class="section-allow-break">
+  <!-- TAREFAS — new page, long tables allowed to paginate row by row -->
+  <div class="section-newpage section-flow">
+    <h3>Tarefas (${p.doneTasks}/${p.totalTasks} concluídas)</h3>
     <table>
       <thead><tr><th>Tarefa</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th>Prazo</th></tr></thead>
       <tbody>${tasksRows}</tbody>
     </table>
   </div>
 
-  <!-- ENTREGAS -->
-  <h3>Entregas (${doneMilestones}/${p.milestones.length} concluídas)</h3>
-  <div class="section-allow-break">
+  <!-- ENTREGAS — new page -->
+  <div class="section-newpage section-flow">
+    <h3>Entregas (${doneMilestones}/${p.milestones.length} concluídas)</h3>
     <table>
       <thead><tr><th>Entrega</th><th>Status</th><th>Prazo</th><th>Data de conclusão</th></tr></thead>
       <tbody>${entregasRows}</tbody>
     </table>
   </div>
 
-  <!-- CRONOGRAMA / LINHA DO TEMPO -->
-  <h3>Cronograma — Linha do Tempo</h3>
-  <div class="section-allow-break">${historyRows}</div>
+  <!-- CRONOGRAMA / LINHA DO TEMPO
+       Each .timeline-item has break-inside:avoid so events stay intact. -->
+  <div class="section-flow" style="margin-top:14pt">
+    <h3>Cronograma — Linha do Tempo</h3>
+    ${historyRows}
+  </div>
 
-  <!-- ANÁLISE IA -->
+  <!-- ANÁLISE IA (conditionally rendered, always on new page if present) -->
   ${iaHtml}
 
-  <!-- CONCLUSÃO -->
-  <h3>Conclusão</h3>
-  <div class="conclusion section">
-    <p>${conclusionText}</p>
-    ${p.notes ? `<p style="margin-top:6pt"><em>Obs.: ${esc(p.notes)}</em></p>` : ""}
+  <!-- CONCLUSÃO — small block, keep together -->
+  <div class="section" style="margin-top:14pt">
+    <h3>Conclusão</h3>
+    <div class="conclusion">
+      <p>${conclusionText}</p>
+      ${p.notes ? `<p style="margin-top:6pt"><em>Obs.: ${esc(p.notes)}</em></p>` : ""}
+    </div>
   </div>
 
 </body>
