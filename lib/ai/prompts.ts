@@ -19,6 +19,7 @@ export interface TaskContext {
   dueDate?: string | null
   receivedAt?: string | null
   observations?: string | null
+  attachmentCount?: number
   history?: { action: string; description: string; createdAt: string }[]
   statusHistory?: TaskStatusHistoryEntry[]
 }
@@ -59,6 +60,9 @@ function formatTaskContext(task: TaskContext): string {
   if (task.observations) txt += `Observações: ${task.observations}\n`
   if (task.receivedAt) txt += `Recebida em: ${new Date(task.receivedAt).toLocaleString('pt-BR')}\n`
   if (task.responsible) txt += `Responsável: ${task.responsible}\n`
+  if (task.attachmentCount && task.attachmentCount > 0) {
+    txt += `Evidências: Esta tarefa possui ${task.attachmentCount} imagem(ns) anexada(s) como evidência.\n`
+  }
 
   if (task.statusHistory?.length) {
     const STATUS: Record<string, string> = {

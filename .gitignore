@@ -47,3 +47,7 @@ Thumbs.db
 # ── TypeScript ────────────────────────────────────────────────────────────────
 *.tsbuildinfo
 next-env.d.ts
+
+# ── Uploads gerados pelo usuário (manter apenas o .gitkeep) ───────────────────
+/public/uploads/tasks/*
+!/public/uploads/tasks/.gitkeep

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit, Bot, Clock, User, Calendar, Tag,
   AlertCircle, Loader2, Sparkles, Info, ArrowRight,
   CheckCircle2, XCircle, Timer, RefreshCw, Circle,
-  ChevronRight, FileText
+  ChevronRight, FileText, ImageIcon, ZoomIn, X, Trash2
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
@@ -29,6 +29,15 @@ interface StatusHistoryEntry {
   createdAt: string
 }
 
+interface TaskAttachment {
+  id: string
+  fileName: string
+  fileType: string
+  fileSize: number
+  filePath: string
+  createdAt: string
+}
+
 interface Task {
   id: string
   title: string
@@ -44,6 +53,7 @@ interface Task {
   createdAt: string
   updatedAt: string
   statusHistory: StatusHistoryEntry[]
+  attachments: TaskAttachment[]
   history: {
     id: string
     action: string
@@ -107,6 +117,113 @@ function renderContent(text: string) {
   return text
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>")
+}
+
+// ─── LIGHTBOX ────────────────────────────────────────────────────────────────
+
+function Lightbox({ src, name, onClose }: { src: string; name: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={onClose}
+          className="absolute -top-9 right-0 flex items-center gap-1.5 text-white/70 hover:text-white text-sm"
+        >
+          <X className="w-4 h-4" /> Fechar (Esc)
+        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={name}
+          className="w-full h-auto max-h-[85vh] object-contain rounded-xl shadow-2xl"
+        />
+        <p className="text-center text-white/50 text-xs mt-2">{name}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── SEÇÃO DE EVIDÊNCIAS ──────────────────────────────────────────────────────
+
+function EvidenciasSection({ taskId, attachments: initial }: { taskId: string; attachments: TaskAttachment[] }) {
+  const [attachments, setAttachments] = useState<TaskAttachment[]>(initial)
+  const [lightbox,    setLightbox]    = useState<{ src: string; name: string } | null>(null)
+
+  function fmtSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Remover esta imagem da tarefa?")) return
+    await fetch(`/api/tasks/${taskId}/attachments/${id}`, { method: "DELETE" })
+    setAttachments(prev => prev.filter(a => a.id !== id))
+  }
+
+  if (attachments.length === 0) return null
+
+  return (
+    <>
+      {lightbox && <Lightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-slate-400" />
+            Evidências
+            <span className="text-xs font-normal text-slate-400">({attachments.length} imagem{attachments.length !== 1 ? "ns" : ""})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {attachments.map(att => (
+              <div key={att.id} className="group relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                <div className="aspect-square overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={att.filePath}
+                    alt={att.fileName}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  />
+                </div>
+                {/* Overlay */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => setLightbox({ src: att.filePath, name: att.fileName })}
+                    className="w-8 h-8 bg-white/95 rounded-full flex items-center justify-center text-slate-700 hover:bg-white shadow-sm"
+                    title="Ampliar"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(att.id)}
+                    className="w-8 h-8 bg-white/95 rounded-full flex items-center justify-center text-red-500 hover:bg-white shadow-sm"
+                    title="Remover"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Info */}
+                <div className="p-2 bg-white border-t border-slate-100">
+                  <p className="text-xs text-slate-600 truncate font-medium" title={att.fileName}>{att.fileName}</p>
+                  <p className="text-xs text-slate-400">{fmtSize(att.fileSize)} · {new Date(att.createdAt).toLocaleDateString("pt-BR")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  )
 }
 
 // ─── MODAL DE ALTERAÇÃO DE STATUS ────────────────────────────────────────────
@@ -671,6 +788,11 @@ export function TaskDetailClient({ id }: { id: string }) {
             <p className="text-xs font-medium text-amber-700 mb-1">Observações iniciais</p>
             <p className="text-sm text-amber-800">{task.observations}</p>
           </div>
+        )}
+
+        {/* Evidências */}
+        {task.attachments?.length > 0 && (
+          <EvidenciasSection taskId={id} attachments={task.attachments} />
         )}
 
         {/* Botão Alterar Status */}

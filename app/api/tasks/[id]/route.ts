@@ -11,6 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       history:       { orderBy: { createdAt: 'desc' } },
       statusHistory: { orderBy: { createdAt: 'asc'  } },
       suggestions:   { orderBy: { createdAt: 'desc' } },
+      attachments:   { orderBy: { createdAt: 'asc'  } },
     },
   })
 

@@ -40,7 +40,20 @@ model Task {
   history       TaskHistory[]
   statusHistory TaskStatusHistory[]
   suggestions   AiSuggestion[]
+  attachments   TaskAttachment[]
   inboxItem     InboxItem?          @relation(fields: [inboxItemId], references: [id])
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileType  String
+  fileSize  Int
+  filePath  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TaskHistory {

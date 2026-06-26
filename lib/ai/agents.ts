@@ -162,21 +162,23 @@ export async function analyzeTask(taskId: string): Promise<AgentResponse[]> {
     include: {
       history:       { orderBy: { createdAt: 'desc' }, take: 10 },
       statusHistory: { orderBy: { createdAt: 'asc' } },
+      _count:        { select: { attachments: true } },
     },
   })
   if (!task) return []
 
   const taskCtx: TaskContext = {
-    title:       task.title,
-    description: task.description,
-    origin:      task.origin,
-    priority:    task.priority,
-    status:      task.status,
-    person:      task.person,
-    responsible: task.responsible,
-    dueDate:     task.dueDate?.toISOString()    ?? null,
-    receivedAt:  task.receivedAt?.toISOString() ?? null,
-    observations: task.observations,
+    title:           task.title,
+    description:     task.description,
+    origin:          task.origin,
+    priority:        task.priority,
+    status:          task.status,
+    person:          task.person,
+    responsible:     task.responsible,
+    dueDate:         task.dueDate?.toISOString()    ?? null,
+    receivedAt:      task.receivedAt?.toISOString() ?? null,
+    observations:    task.observations,
+    attachmentCount: task._count.attachments,
     history: task.history.map(h => ({
       action:      h.action,
       description: h.description,
