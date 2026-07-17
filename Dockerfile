@@ -60,7 +60,7 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # Entrypoint: executa migrations e inicia servidor
 COPY scripts/docker-entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 
 USER nextjs
 
