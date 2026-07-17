@@ -19,11 +19,27 @@ model User {
   agentInteractions AgentInteraction[]
 }
 
+model TaskOrigin {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String   @default("#6B7280")
+  icon        String   @default("ðŸ“Œ")
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+}
+
 model Task {
   id           String    @id @default(cuid())
   title        String
   description  String?
   origin       String?
+  originId     String?
   priority     String    @default("MEDIA")
   status       String    @default("PENDENTE")
   person       String?
@@ -37,10 +53,35 @@ model Task {
 
   userId        String
   user          User                @relation(fields: [userId], references: [id])
+  taskOrigin    TaskOrigin?         @relation(fields: [originId], references: [id])
   history       TaskHistory[]
   statusHistory TaskStatusHistory[]
   suggestions   AiSuggestion[]
+  attachments   TaskAttachment[]
+  chats         TaskChat[]
   inboxItem     InboxItem?          @relation(fields: [inboxItemId], references: [id])
+}
+
+model TaskChat {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  mode      String?
+  createdAt DateTime @default(now())
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileType  String
+  fileSize  Int
+  filePath  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TaskHistory {
@@ -67,41 +108,50 @@ model TaskStatusHistory {
   createdAt      DateTime @default(now())
 }
 
-// ─── INBOX ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ INBOX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model InboxItem {
   id         String   @id @default(cuid())
   createdAt  DateTime @default(now())
 
+  // Origem: SIMULATED | OUTLOOK | GMAIL
   provider   String   @default("SIMULATED")
 
+  // VÃ­nculo com conta de e-mail real (nullable â†’ dados simulados nÃ£o tÃªm)
   accountId  String?
   account    EmailAccount? @relation(fields: [accountId], references: [id])
 
+  // ID externo Ãºnico do provedor (para deduplicaÃ§Ã£o)
   externalId String?
 
+  // Pasta/label de origem
   folderId   String?
   folder     EmailFolder? @relation(fields: [folderId], references: [id])
 
+  // Remetente
   sender      String
   senderEmail String?
 
+  // ConteÃºdo
   subject     String
   bodyPreview String?
   body        String
   receivedAt  DateTime @default(now())
 
+  // Flags
   isRead      Boolean  @default(false)
   isIgnored   Boolean  @default(false)
   taskCreated Boolean  @default(false)
   hasAttachments Boolean @default(false)
 
+  // AnÃ¡lise IA
   summary              String?
   aiSuggestedTaskTitle String?
   aiSuggestedPriority  String?
   aiSuggestedDueDate   String?
   aiSuggestedResponse  String?
 
+  // Campos legados â€” mantidos para dados simulados existentes
   suggestedTask  String?
   suggestedReply String?
 
@@ -110,14 +160,14 @@ model InboxItem {
   @@unique([provider, externalId])
 }
 
-// ─── EMAIL ACCOUNTS ──────────────────────────────────────────────────────────
+// â”€â”€â”€ EMAIL ACCOUNTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model EmailAccount {
   id           String   @id @default(cuid())
-  provider     String
+  provider     String   // OUTLOOK | GMAIL
   email        String
   displayName  String?
-  accessToken  String
+  accessToken  String   // criptografado em produÃ§Ã£o
   refreshToken String?
   expiresAt    DateTime?
   connectedAt  DateTime @default(now())
@@ -149,7 +199,7 @@ model EmailFolder {
   @@unique([accountId, providerFolderId])
 }
 
-// ─── IA / AGENTES ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ IA / AGENTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model AiSuggestion {
   id        String   @id @default(cuid())
@@ -179,34 +229,162 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
+// â”€â”€â”€ ESPECIALISTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model EspecialistaConversation {
+  id           String   @id @default(cuid())
+  title        String
+  specialist   String
+  isFavorite   Boolean  @default(false)
+  isArchived   Boolean  @default(false)
+  messageCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  messages EspecialistaMessage[]
+}
+
+model EspecialistaMessage {
+  id             String                   @id @default(cuid())
+  conversationId String
+  conversation   EspecialistaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  sources        String?
+  specialist     String?
+  docsUsed       String?  // JSON array of doc titles used in this response
+  autoUpdated    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model EspecialistaUpdateLog {
+  id          String   @id @default(cuid())
+  specialist  String
+  version     String
+  newDocs     Int      @default(0)
+  updatedDocs Int      @default(0)
+  removedDocs Int      @default(0)
+  duration    Int      @default(0)   // milliseconds
+  triggeredBy String   @default("manual") // manual | auto | scheduled
+  status      String   @default("completed")
+  createdAt   DateTime @default(now())
+
+  @@index([specialist])
+}
+
+model EspecialistaBase {
+  id              String    @id @default(cuid())
+  specialist      String    @unique
+  status          String    @default("DESATUALIZADO")
+  lastUpdated     DateTime?
+  version         String?
+  docCount        Int       @default(0)
+  lastChecked     DateTime?
+  sources         String?
+  docsByCategory  String?
+  nextUpdate      DateTime?
+  initialLoadDone Boolean   @default(false)
+  initialLoadAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model EspecialistaDocument {
+  id         String   @id @default(cuid())
+  specialist String
+  title      String
+  category   String   @default("geral")
+  type       String   @default("documento")
+  content    String?
+  source     String?
+  version    String?
+  tags       String?
+  embedding  String?  // JSON float[] â€” text-embedding-3-small (1536d)
+  checksum   String?  // SHA-256 do conteÃºdo para detectar alteraÃ§Ãµes
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([specialist])
+  @@index([specialist, isRevoked])
+}
+
+// MemÃ³ria contextual por especialista + usuÃ¡rio (curto, mÃ©dio e longo prazo)
+model EspecialistaMemory {
+  id             String   @id @default(cuid())
+  specialist     String
+  conversationId String?  // null = memÃ³ria global do especialista
+  type           String   @default("topic") // topic | entity | preference | summary
+  key            String
+  value          String
+  relevance      Float    @default(1.0)
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([specialist, conversationId])
+  @@index([specialist, type])
+}
+
+// Fontes monitoradas por especialista (para atualizador inteligente)
+model EspecialistaSource {
+  id          String    @id @default(cuid())
+  specialist  String
+  label       String
+  url         String
+  description String?
+  lastFetched DateTime?
+  lastHash    String?   // hash do conteÃºdo para detectar mudanÃ§as
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([specialist, active])
+}
+
+// Log de execuÃ§Ãµes de ferramentas
+model EspecialistaToolExecution {
+  id             String   @id @default(cuid())
+  specialist     String
+  conversationId String?
+  toolName       String
+  input          String   // JSON
+  output         String   // JSON
+  duration       Int      @default(0)
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([specialist, toolName])
+}
+
 model Notification {
   id          String   @id @default(cuid())
-  type        String
+  type        String   // TASK_CREATED | TASK_URGENT | TASK_OVERDUE | TASK_WAITING | EMAIL_RECEIVED | AI_SUGGESTION
   title       String
   message     String
-  relatedType String?
+  relatedType String?  // task | inbox
   relatedId   String?
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-// ─── PROJETOS ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ PROJETOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Project {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   description String?
   objective   String?
   responsible String?
   startDate   DateTime?
   dueDate     DateTime?
-  priority    String    @default("MEDIA")
-  status      String    @default("PLANEJADO")
-  progress    Int       @default(0)
+  priority    String   @default("MEDIA")   // BAIXA | MEDIA | ALTA | URGENTE
+  status      String   @default("PLANEJADO") // PLANEJADO | EM_ANDAMENTO | PAUSADO | ATRASADO | CONCLUIDO | CANCELADO
+  progress    Int      @default(0)          // 0-100 calculado
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   stages     ProjectStage[]
   tasks      ProjectTask[]
@@ -215,27 +393,27 @@ model Project {
 }
 
 model ProjectStage {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name        String
   description String?
-  order       Int       @default(0)
+  order       Int      @default(0)
   startDate   DateTime?
   dueDate     DateTime?
-  status      String    @default("NAO_INICIADA")
-  progress    Int       @default(0)
+  status      String   @default("NAO_INICIADA") // NAO_INICIADA | EM_ANDAMENTO | AGUARDANDO | CONCLUIDA | ATRASADA | CANCELADA
+  progress    Int      @default(0)
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   tasks ProjectTask[]
 }
 
 model ProjectTask {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   stageId     String?
   stage       ProjectStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   title       String
@@ -243,12 +421,12 @@ model ProjectTask {
   responsible String?
   startDate   DateTime?
   dueDate     DateTime?
-  status      String    @default("PENDENTE")
-  priority    String    @default("MEDIA")
-  progress    Int       @default(0)
+  status      String   @default("PENDENTE") // PENDENTE | EM_ANDAMENTO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA | ATRASADA
+  priority    String   @default("MEDIA")
+  progress    Int      @default(0)
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ProjectMilestone {
@@ -259,7 +437,7 @@ model ProjectMilestone {
   description  String?
   dueDate      DateTime?
   completedAt  DateTime?
-  status       String    @default("PENDENTE")
+  status       String    @default("PENDENTE") // PENDENTE | CONCLUIDA | ATRASADA | CANCELADA
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -268,26 +446,26 @@ model ProjectHistory {
   id          String   @id @default(cuid())
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type        String
+  type        String   // CRIACAO | STATUS | PRAZO | ETAPA_CRIADA | ETAPA_CONCLUIDA | TAREFA_CRIADA | TAREFA_CONCLUIDA | MARCO_CRIADO | MARCO_CUMPRIDO | EDICAO | IA_ANALISE
   title       String
   description String?
   createdAt   DateTime @default(now())
 }
 
-// ─── CONFERÊNCIA ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ CONFERÃŠNCIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Conference {
   id                 String    @id @default(cuid())
   title              String
-  processType        String
-  competence         String?
+  processType        String    // FOLHA | RESCISAO | FERIAS | ADMISSAO | BENEFICIOS | ENCARGOS | PAGAMENTO | MOVIMENTACAO | PONTO | ESOCIAL | FGTS | IRRF | DCTFWEB | OUTROS
+  competence         String?   // ex: "06/2026"
   companyUnit        String?
   analystName        String?
   coordinatorName    String?
   conferenceDate     DateTime?
   correctionDueDate  DateTime?
-  status             String    @default("PENDENTE")
-  priority           String    @default("MEDIA")
+  status             String    @default("PENDENTE") // PENDENTE | EM_CONFERENCIA | COM_INCONSISTENCIA | AGUARDANDO_CORRECAO | CORRIGIDO | APROVADO | REPROVADO | CANCELADO
+  priority           String    @default("MEDIA")    // BAIXA | MEDIA | ALTA | URGENTE
   description        String?
   notes              String?
   createdAt          DateTime  @default(now())
@@ -298,20 +476,21 @@ model Conference {
   corrections ConferenceCorrection[]
   analyses    ConferenceAiAnalysis[]
   history     ConferenceHistory[]
+  chats       ConferenceChat[]
 }
 
 model ConferenceChecklistItem {
-  id                    String    @id @default(cuid())
-  conferenceId          String
-  conference            Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
-  description           String
-  result                String    @default("PENDENTE_ANALISE")
-  notes                 String?
+  id                   String    @id @default(cuid())
+  conferenceId         String
+  conference           Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  description          String
+  result               String    @default("PENDENTE_ANALISE") // CONFORME | NAO_CONFORME | NAO_APLICA | PENDENTE_ANALISE
+  notes                String?
   correctionResponsible String?
-  correctionDueDate     DateTime?
-  order                 Int       @default(0)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  correctionDueDate    DateTime?
+  order                Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model ConferenceIssue {
@@ -320,13 +499,13 @@ model ConferenceIssue {
   conference            Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
   title                 String
   description           String?
-  severity              String    @default("MEDIA")
+  severity              String    @default("MEDIA")  // BAIXA | MEDIA | ALTA | CRITICA
   impact                String?
   probableCause         String?
   recommendedSolution   String?
   correctionResponsible String?
   correctionDueDate     DateTime?
-  correctionStatus      String    @default("ABERTA")
+  correctionStatus      String    @default("ABERTA") // ABERTA | EM_CORRECAO | CORRIGIDA | VALIDADA | CANCELADA
   finalNotes            String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -342,7 +521,7 @@ model ConferenceCorrection {
   issue        ConferenceIssue? @relation(fields: [issueId], references: [id], onDelete: SetNull)
   responsible  String?
   dueDate      DateTime?
-  status       String    @default("ABERTA")
+  status       String    @default("ABERTA") // ABERTA | EM_CORRECAO | CORRIGIDA | VALIDADA | CANCELADA
   notes        String?
   correctedAt  DateTime?
   validatedAt  DateTime?
@@ -354,9 +533,19 @@ model ConferenceAiAnalysis {
   id           String    @id @default(cuid())
   conferenceId String
   conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
-  analysisType String
+  analysisType String    // COMPLETA | TEXTO_CORRECAO | ORIENTACAO_ANALISTA | PARECER_FINAL | PLANO_PREVENCAO | CHECKLIST_SUGERIDO
   content      String
   aiPowered    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
+
+model ConferenceChat {
+  id           String    @id @default(cuid())
+  conferenceId String
+  conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
+  role         String    // user | assistant
+  content      String
+  mode         String?
   createdAt    DateTime  @default(now())
 }
 
@@ -364,8 +553,455 @@ model ConferenceHistory {
   id           String    @id @default(cuid())
   conferenceId String
   conference   Conference @relation(fields: [conferenceId], references: [id], onDelete: Cascade)
-  type         String
+  type         String    // CRIACAO | STATUS | ITEM_CONFERIDO | INCONSISTENCIA | IA_ANALISE | CORRECAO_SOLICITADA | CORRECAO_REALIZADA | APROVADA | REPROVADA | EDICAO
   title        String
   description  String?
   createdAt    DateTime  @default(now())
+}
+
+// â”€â”€â”€ GESTÃƒO DE EQUIPE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model TeamMember {
+  id           String    @id @default(cuid())
+  name         String
+  role         String
+  sector       String?
+  unit         String?
+  email        String?
+  phone        String?
+  joinedAt     DateTime?
+  status       String    @default("ATIVO") // ATIVO | AFASTADO | FERIAS | INATIVO
+  observations String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  feedbacks   TeamFeedback[]
+  directions  TeamActivityDirection[]
+  vacations   TeamVacation[]
+  trainings   TeamTraining[]
+  activities  TeamActivity[]
+  history     TeamHistory[]
+}
+
+model TeamFeedback {
+  id                String     @id @default(cuid())
+  memberId          String
+  member            TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  feedbackDate      DateTime   @default(now())
+  type              String     // POSITIVO | MELHORIA | ALINHAMENTO | DESENVOLVIMENTO | RECONHECIMENTO | CORRECAO_CONDUTA | ADVERTENCIA_VERBAL
+  observedSituation String?
+  positivePoints    String?
+  improvementPoints String?
+  orientationGiven  String?
+  agreedAction      String?
+  nextFollowUp      DateTime?
+  observations      String?
+  aiGenerated       Boolean    @default(false)
+  aiContent         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TeamActivityDirection {
+  id             String     @id @default(cuid())
+  memberId       String
+  member         TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  dueDate        DateTime?
+  priority       String     @default("MEDIA")    // BAIXA | MEDIA | ALTA | URGENTE
+  complexity     String     @default("SIMPLES")  // SIMPLES | MEDIA | COMPLEXA
+  expectedResult String?
+  aiOrientation  String?
+  status         String     @default("PLANEJADA") // PLANEJADA | DIRECIONADA | EM_EXECUCAO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model TeamVacation {
+  id                   String     @id @default(cuid())
+  memberId             String
+  member               TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  // legacy fields (kept for data compatibility)
+  branch               String?
+  acquisitivePeriod    String?
+  // new fields
+  companyName          String?    // empresa (texto livre)
+  acquisitionStartDate DateTime?  // inÃ­cio do perÃ­odo aquisitivo
+  acquisitionEndDate   DateTime?  // fim do perÃ­odo aquisitivo
+  concessionStartDate  DateTime?  // inÃ­cio do perÃ­odo concessivo
+  concessionEndDate    DateTime?  // fim do perÃ­odo concessivo
+  availableDays        Int?       // dias de direito
+  vacationDays         Int?       // dias de fÃ©rias gozadas
+  hasBonus             Boolean    @default(false)
+  bonusDays            Int?       // dias de abono (padrÃ£o 10)
+  startDate            DateTime?  // inÃ­cio das fÃ©rias
+  endDate              DateTime?  // fim das fÃ©rias
+  returnDate           DateTime?  // retorno ao trabalho
+  status               String     @default("A_PROGRAMAR") // A_PROGRAMAR | PROGRAMADA | EM_FERIAS | RETORNOU | CANCELADA
+  substitute           String?
+  observations         String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+}
+
+model TeamTraining {
+  id             String     @id @default(cuid())
+  memberId       String
+  member         TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  topic          String
+  objective      String?
+  plannedDate    DateTime?
+  completedDate  DateTime?
+  status         String     @default("PLANEJADO") // PLANEJADO | EM_ANDAMENTO | CONCLUIDO | CANCELADO
+  responsible    String?
+  expectedResult String?
+  evaluation     String?
+  observations   String?
+  aiPlan         String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model TeamActivity {
+  id                String     @id @default(cuid())
+  memberId          String
+  member            TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  receivedAt        DateTime?
+  dueDate           DateTime?
+  priority          String     @default("MEDIA")
+  status            String     @default("PENDENTE") // PENDENTE | EM_ANDAMENTO | AGUARDANDO_RETORNO | CONCLUIDA | CANCELADA
+  statusObservation String?
+  expectedResult    String?
+  deliveredResult   String?
+  coordinatorRating String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TeamGuideline {
+  id           String   @id @default(cuid())
+  title        String
+  category     String   // PROCESSO | PRAZO | ATENDIMENTO | COMUNICACAO | CONFERENCIA | FINANCEIRO | DEPARTAMENTO_PESSOAL | CONDUTA | QUALIDADE | OUTROS
+  description  String?
+  reason       String?
+  practicalUse String?
+  responsible  String?
+  status       String   @default("ATIVA") // ATIVA | EM_REVISAO | INATIVA
+  observations String?
+  aiGenerated  Boolean  @default(false)
+  aiContent    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TeamAiSuggestion {
+  id          String   @id @default(cuid())
+  type        String   // FEEDBACK | DIRECTION | TRAINING | GUIDELINE
+  referenceId String
+  content     String
+  aiPowered   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model TeamHistory {
+  id          String      @id @default(cuid())
+  memberId    String?
+  member      TeamMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  type        String
+  title       String
+  description String?
+  createdAt   DateTime    @default(now())
+}
+
+// â”€â”€â”€ DescriÃ§Ã£o de Cargos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model JobRole {
+  id                 String   @id @default(cuid())
+  name               String
+  department         String?
+  manager            String?
+  cbo                String?
+  workSchedule       String?
+  contractType       String?
+  workLocation       String?
+  version            String   @default("1.0")
+  status             String   @default("ATIVO")
+
+  objective          String?
+  mission            String?
+  responsibilities   String?
+  dailyActivities    String?
+  weeklyActivities   String?
+  monthlyActivities  String?
+  eventualActivities String?
+  technicalSkills    String?
+  behavioralSkills   String?
+  requiredKnowledge  String?
+  toolsUsed          String?
+  kpis               String?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  processes  JobProcess[]
+  documents  JobDocument[]
+  versions   JobVersion[]
+}
+
+model JobProcess {
+  id            String   @id @default(cuid())
+  jobRoleId     String
+  jobRole       JobRole  @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  steps         String?
+  responsible   String?
+  deadline      String?
+  flowchart     String?
+  aiGenerated   Boolean  @default(false)
+  order         Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  checklistItems JobChecklistItem[]
+}
+
+model JobChecklistItem {
+  id         String     @id @default(cuid())
+  processId  String
+  process    JobProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  text       String
+  order      Int        @default(0)
+  checked    Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+}
+
+model JobDocument {
+  id         String   @id @default(cuid())
+  jobRoleId  String
+  jobRole    JobRole  @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  fileName   String
+  fileType   String
+  fileSize   Int
+  filePath   String
+  createdAt  DateTime @default(now())
+}
+
+model JobVersion {
+  id         String   @id @default(cuid())
+  jobRoleId  String
+  jobRole    JobRole  @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  version    String
+  snapshot   String
+  changedBy  String?
+  changeNote String?
+  createdAt  DateTime @default(now())
+}
+
+model ProcedureDocument {
+  id               String   @id @default(cuid())
+  type             String   // POP | IT | CHECKLIST
+  title            String
+  process          String?
+  department       String?
+  responsible      String?
+  objective        String?
+  application      String?
+  systemsUsed      String?
+  description      String?
+  responsibilities String?
+  attentionPoints  String?
+  risks            String?
+  expectedResult   String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  steps          ProcedureStep[]
+  checklistItems ProcedureChecklistItem[]
+  attachments    ProcedureAttachment[]
+}
+
+model ProcedureStep {
+  id             String            @id @default(cuid())
+  documentId     String
+  document       ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order          Int               @default(0)
+  title          String
+  description    String?
+  imagePath      String?
+  notes          String?
+  attentionPoint String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model ProcedureChecklistItem {
+  id          String            @id @default(cuid())
+  documentId  String
+  document    ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  order       Int               @default(0)
+  description String
+  required    Boolean           @default(true)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model ProcedureAttachment {
+  id         String            @id @default(cuid())
+  documentId String
+  document   ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  stepId     String?
+  fileName   String
+  fileType   String
+  fileSize   Int
+  filePath   String
+  createdAt  DateTime          @default(now())
+}
+
+model CentralItem {
+  id            String   @id @default(cuid())
+  source        String   @default("UPLOAD") // UPLOAD | PASTE | FOLDER | EMAIL
+  status        String   @default("PENDING") // PENDING | ANALYZING | ANALYZED | ACTIONED | ARCHIVED | ERROR
+  title         String   @default("Nova entrada")
+  senderName    String?
+  senderEmail   String?
+  company       String?
+  collaborator  String?
+  subject       String?
+  pastedContent String?
+  priority      String   @default("MEDIA")
+  dueDate       String?
+  department    String?
+  responsible   String?
+  category      String?
+  keywords      String?
+  summary       String?
+  risks         String?
+  aiRaw         String?
+  aiPowered     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attachments CentralAttachment[]
+  history     CentralHistory[]
+  suggestions CentralSuggestion[]
+  chats       CentralChat[]
+}
+
+model CentralAttachment {
+  id        String      @id @default(cuid())
+  itemId    String
+  item      CentralItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileType  String
+  fileSize  Int
+  filePath  String
+  createdAt DateTime    @default(now())
+}
+
+model CentralHistory {
+  id        String      @id @default(cuid())
+  itemId    String
+  item      CentralItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  action    String
+  detail    String?
+  createdAt DateTime    @default(now())
+}
+
+model CentralSuggestion {
+  id          String      @id @default(cuid())
+  itemId      String
+  item        CentralItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  description String?
+  applied     Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+}
+
+model CentralChat {
+  id        String      @id @default(cuid())
+  itemId    String
+  item      CentralItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  role      String      // 'user' | 'assistant'
+  content   String
+  mode      String?
+  createdAt DateTime    @default(now())
+}
+
+model CentralConfig {
+  id                  String   @id @default(cuid())
+  folderPath          String?
+  folderEnabled       Boolean  @default(false)
+  folderIntervalMin   Int      @default(5)
+  folderMoveProcessed Boolean  @default(true)
+  folderProcessedPath String?
+  emailAddress        String?
+  emailEnabled        Boolean  @default(false)
+  updatedAt           DateTime @default(now()) @updatedAt
+}
+
+// â”€â”€â”€ ANOTAÃ‡Ã•ES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Note {
+  id           String    @id @default(cuid())
+  title        String    @default("Nova anotaÃ§Ã£o")
+  content      String    @default("")
+  category     String    @default("Outros")
+  priority     String    @default("MEDIA")
+  status       String    @default("ATIVA")
+  isFavorite   Boolean   @default(false)
+  observations String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  archivedAt   DateTime?
+
+  tags        NoteTag[]
+  attachments NoteAttachment[]
+  aiMessages  NoteAiMessage[]
+  history     NoteHistory[]
+}
+
+model NoteTag {
+  id     String @id @default(cuid())
+  noteId String
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  name   String
+}
+
+model NoteAttachment {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileType  String
+  fileSize  Int
+  filePath  String
+  createdAt DateTime @default(now())
+}
+
+model NoteAiMessage {
+  id        String   @id @default(cuid())
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  mode      String?
+  createdAt DateTime @default(now())
+}
+
+model NoteHistory {
+  id          String   @id @default(cuid())
+  noteId      String
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
 }

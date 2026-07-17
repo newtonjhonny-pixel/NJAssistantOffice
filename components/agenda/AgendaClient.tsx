@@ -338,8 +338,8 @@ function PrintModal({
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="max-h-[94vh] w-full overflow-hidden rounded-2xl bg-white shadow-xl sm:max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
@@ -395,7 +395,7 @@ function PrintModal({
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/60">
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-4 sm:flex-row sm:px-6">
           <button
             onClick={onConfirm}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
@@ -739,14 +739,14 @@ export function AgendaClient() {
       <div className="space-y-4 animate-fade-in">
 
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-800">Calendário</h2>
             <p className="text-sm text-slate-400 mt-0.5">Visão mensal das tarefas por prazo</p>
           </div>
           <button
             onClick={() => setShowPrintModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 bg-white text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-xs"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 shadow-xs sm:w-auto"
           >
             <FileText className="w-4 h-4 text-slate-400" />
             Exportar PDF
@@ -754,7 +754,7 @@ export function AgendaClient() {
         </div>
 
         {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-xs">
+        <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-xs sm:flex-row sm:flex-wrap sm:items-center">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mr-1">Filtros</span>
 
           <select

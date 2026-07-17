@@ -242,7 +242,7 @@ export function ProjetosClient() {
     <div className="space-y-6 animate-fade-in">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm">
             <FolderKanban className="w-5 h-5 text-white" />
@@ -257,7 +257,7 @@ export function ProjetosClient() {
         {activeTab === "lista" && (
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-sm transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 sm:w-auto"
           >
             <Plus className="w-4 h-4" /> Novo Projeto
           </button>
@@ -265,7 +265,7 @@ export function ProjetosClient() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200">
         {([
           { key: "lista",     label: "Lista de Projetos",        icon: FolderKanban },
           { key: "gerencial", label: "Acompanhamento Gerencial",  icon: BarChart2    },
@@ -274,7 +274,7 @@ export function ProjetosClient() {
             key={key}
             onClick={() => setTab(key)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              "flex shrink-0 items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
               activeTab === key
                 ? "border-indigo-600 text-indigo-700"
                 : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
@@ -292,7 +292,7 @@ export function ProjetosClient() {
       {activeTab === "lista" && <>
 
       {/* Dashboard cards — clickable filters */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {cards.map(card => (
           <SummaryCard
             key={card.key}
@@ -304,7 +304,7 @@ export function ProjetosClient() {
       </div>
 
       {/* Search + select filters */}
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1 min-w-52">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
@@ -324,7 +324,7 @@ export function ProjetosClient() {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 sm:w-auto"
         >
           <option value="">Todos os status</option>
           {Object.entries(STATUS_CONFIG).map(([k, v]) => (
@@ -335,7 +335,7 @@ export function ProjetosClient() {
         <select
           value={filterPriority}
           onChange={e => setFilterPriority(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 sm:w-auto"
         >
           <option value="">Todas as prioridades</option>
           {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
@@ -346,7 +346,7 @@ export function ProjetosClient() {
         {hasFilters && (
           <button
             onClick={clearFilters}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 transition-colors"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-500 transition-colors hover:border-red-300 hover:text-red-600 sm:w-auto"
           >
             <X className="w-3 h-3" /> Limpar filtros
           </button>
@@ -400,9 +400,9 @@ export function ProjetosClient() {
             <Link
               key={project.id}
               href={`/projetos/${project.id}`}
-              className="block bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md hover:border-indigo-200 transition-all group"
+              className="block rounded-xl border border-slate-200 bg-white p-4 transition-all hover:border-indigo-200 hover:shadow-md group sm:p-5"
             >
-              <div className="flex items-start gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                 {/* Progress indicator */}
                 <div className="shrink-0 w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex flex-col items-center justify-center">
                   <span className="text-sm font-bold text-indigo-700 leading-none">{project.progress}%</span>
@@ -411,7 +411,7 @@ export function ProjetosClient() {
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-slate-800 group-hover:text-indigo-700 transition-colors">
                         {project.name}
@@ -422,7 +422,7 @@ export function ProjetosClient() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <span className={cn("text-xs border rounded-full px-2.5 py-0.5 font-medium", PRIORITY_COLORS[project.priority])}>
                         {PRIORITY_LABELS[project.priority]}
                       </span>

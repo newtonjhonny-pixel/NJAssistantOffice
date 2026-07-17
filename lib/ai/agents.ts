@@ -1,4 +1,5 @@
-import { callOpenAI, isAIConfigured, ChatMessage } from './openai'
+import { aiService } from '@/lib/ai/gateway'
+import type { AIMessage as ChatMessage } from '@/lib/ai/gateway'
 import { isOverdue as isOverdueUtil } from '@/lib/utils'
 import {
   buildAssistenteSystem,
@@ -28,6 +29,48 @@ const AGENT_META: Record<string, { name: string; icon: string }> = {
   COORDENADOR:{ name: 'Coordenador Administrativo', icon: '🎯' },
 }
 
+async function askAgentAI(input: {
+  module: string
+  specialist: string
+  systemPrompt: string
+  userPrompt: string
+  history?: ChatMessage[]
+  temperature?: number
+  maxTokens?: number
+}): Promise<string> {
+  const result = await aiService.ask({
+    module: input.module,
+    specialist: input.specialist,
+    systemPrompt: input.systemPrompt,
+    message: input.userPrompt,
+    history: input.history,
+    temperature: input.temperature,
+    maxTokens: input.maxTokens,
+  })
+
+  return result.content
+}
+
+async function askAgentMessages(
+  messages: ChatMessage[],
+  options?: { temperature?: number; maxTokens?: number }
+): Promise<string> {
+  const systemMessage = messages.find(message => message.role === 'system')
+  const nonSystemMessages = messages.filter(message => message.role !== 'system')
+  const lastMessage = nonSystemMessages[nonSystemMessages.length - 1]
+  const history = nonSystemMessages.slice(0, -1)
+
+  return askAgentAI({
+    module: 'agents.internal',
+    specialist: 'Agentes Internos',
+    systemPrompt: typeof systemMessage?.content === 'string' ? systemMessage.content : '',
+    userPrompt: typeof lastMessage?.content === 'string' ? lastMessage.content : '',
+    history,
+    temperature: options?.temperature,
+    maxTokens: options?.maxTokens,
+  })
+}
+
 // Monta o contexto do sistema a partir do banco
 export async function buildSystemContext(): Promise<SystemContext> {
   const [tasks, inbox] = await Promise.all([
@@ -45,6 +88,7 @@ export async function buildSystemContext(): Promise<SystemContext> {
   const overdue = tasks.filter(isOverdue)
   const waiting = tasks.filter(t => t.status === 'AGUARDANDO_RETORNO')
   const completed = tasks.filter(t => t.status === 'CONCLUIDA')
+  const now = new Date()
 
   return {
     today: now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
@@ -88,9 +132,9 @@ export async function getOrchestratedResponse(
 ): Promise<AgentResponse> {
   let agent: string
 
-  if (isAIConfigured()) {
+  if (aiService.isConfigured()) {
     try {
-      const routing = await callOpenAI([
+      const routing = await askAgentMessages([
         {
           role: 'system',
           content:
@@ -121,7 +165,7 @@ export async function getAgentResponse(
 ): Promise<AgentResponse> {
   const meta = AGENT_META[agent] ?? { name: agent, icon: '🤖' }
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       agent,
       agentName: meta.name,
@@ -141,7 +185,7 @@ export async function getAgentResponse(
       { role: 'user', content: userMessage },
     ]
 
-    const content = await callOpenAI(messages, { temperature: 0.7, maxTokens: 1500 })
+    const content = await askAgentMessages(messages, { temperature: 0.7, maxTokens: 1500 })
 
     return { agent, agentName: meta.name, icon: meta.icon, aiPowered: true, content }
   } catch (err: unknown) {
@@ -198,7 +242,7 @@ export async function analyzeTask(taskId: string): Promise<AgentResponse[]> {
 
   const agents = ['ASSISTENTE', 'ANALISTA', 'PENDENCIAS', 'REDATOR', 'COORDENADOR']
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return agents.map(agent => {
       const meta = AGENT_META[agent]
       return {
@@ -219,7 +263,7 @@ export async function analyzeTask(taskId: string): Promise<AgentResponse[]> {
       try {
         const systemPrompt = getSystemPrompt(agent, ctx)
         const userPrompt = buildTaskAnalysisPrompt(agent, taskCtx, ctx)
-        const content = await callOpenAI([
+        const content = await askAgentMessages([
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ], { temperature: 0.6, maxTokens: 1200 })
@@ -241,7 +285,7 @@ export async function analyzeTask(taskId: string): Promise<AgentResponse[]> {
 export async function getDailySummary(): Promise<AgentResponse> {
   const meta = AGENT_META['COORDENADOR']
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     const ctx = await buildSystemContext()
     return {
       agent: 'COORDENADOR',
@@ -263,7 +307,7 @@ Seja direto e prático. Estruture assim:
 4. **Alertas críticos** — pendências que representam risco real
 5. **Recomendação do dia** — frase final de orientação estratégica`
 
-    const content = await callOpenAI([
+    const content = await askAgentMessages([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], { temperature: 0.6, maxTokens: 1000 })
@@ -300,7 +344,7 @@ export async function analyzePending(taskId: string): Promise<AgentResponse> {
     history: task.history.map(h => ({ action: h.action, description: h.description, createdAt: h.createdAt.toISOString() })),
   }
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       agent: 'PENDENCIAS', agentName: meta.name, icon: meta.icon, aiPowered: false,
       content: getFallbackTaskAnalysis('PENDENCIAS', taskCtx),
@@ -311,7 +355,7 @@ export async function analyzePending(taskId: string): Promise<AgentResponse> {
     const ctx = await buildSystemContext()
     const systemPrompt = buildPendenciasSystem(ctx)
     const userPrompt = buildTaskAnalysisPrompt('PENDENCIAS', taskCtx, ctx)
-    const content = await callOpenAI([
+    const content = await askAgentMessages([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], { temperature: 0.5, maxTokens: 1000 })
@@ -518,13 +562,13 @@ ${lateStages.slice(0, 2).map(s => `- Avançar na etapa: ${s.name}`).join('\n') |
 }
 
 export async function analyzeProject(input: ProjectAnalysisInput): Promise<{ content: string; aiPowered: boolean }> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return { content: buildProjectFallback(input), aiPowered: false }
   }
 
   try {
     const userPrompt = buildProjectPrompt(input)
-    const content = await callOpenAI([
+    const content = await askAgentMessages([
       { role: 'system', content: PROJECT_MANAGER_SYSTEM },
       { role: 'user',   content: userPrompt },
     ], { temperature: 0.5, maxTokens: 3000 })
@@ -719,12 +763,12 @@ export async function analyzeConference(
   input: ConferenceAnalysisInput,
   analysisType: string = 'COMPLETA'
 ): Promise<{ content: string; aiPowered: boolean }> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return { content: buildConferenceFallback(input, analysisType), aiPowered: false }
   }
   try {
     const userPrompt = buildConferencePrompt(input, analysisType)
-    const content = await callOpenAI([
+    const content = await askAgentMessages([
       { role: 'system', content: CONFERENCE_COORDINATOR_SYSTEM },
       { role: 'user',   content: userPrompt },
     ], { temperature: 0.5, maxTokens: 3000 })

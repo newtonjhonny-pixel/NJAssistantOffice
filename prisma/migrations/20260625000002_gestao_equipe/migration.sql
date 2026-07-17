@@ -1,6 +1,6 @@
 -- Migration: Gestão de Equipe
 -- Criado em: 2026-06-25
--- Seguro: apenas CREATE TABLE e ALTER TABLE ADD COLUMN (sem DROP, TRUNCATE ou DELETE)
+-- Seguro: apenas CREATE TABLE e ALTER TABLE ADD COLUMN.
 
 CREATE TABLE IF NOT EXISTS "TeamMember" (
     "id"           TEXT NOT NULL,

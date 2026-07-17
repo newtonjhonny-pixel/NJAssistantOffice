@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzePending } from '@/lib/ai/agents'
-import { isAIConfigured } from '@/lib/ai/openai'
+import { aiService } from '@/lib/ai/gateway'
 
 export async function POST(req: NextRequest) {
   const { taskId } = await req.json()
@@ -8,11 +8,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const response = await analyzePending(taskId)
-    return NextResponse.json({ ...response, aiConfigured: isAIConfigured() })
+    return NextResponse.json({ ...response, aiConfigured: aiService.isConfigured() })
   } catch (err: unknown) {
     console.error('[pendencias/analyze] erro:', err)
     return NextResponse.json(
-      { error: 'Erro ao analisar pendência', aiConfigured: isAIConfigured() },
+      { error: 'Erro ao analisar pendência', aiConfigured: aiService.isConfigured() },
       { status: 500 }
     )
   }

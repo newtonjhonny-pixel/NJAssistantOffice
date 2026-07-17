@@ -564,8 +564,8 @@ function KpiCard({ label, value, sub, accent = false }: {
 
 function IAModal({ result, onClose }: { result: IAResult; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="flex max-h-[94vh] w-full flex-col rounded-2xl bg-white shadow-2xl sm:max-w-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <Bot className="w-4 h-4 text-violet-600" />
@@ -749,7 +749,7 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
           <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-indigo-500" /> Indicadores
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <KpiCard label="Progresso"           value={`${p.progress}%`}                     accent />
             <KpiCard label="Tarefas concluídas"  value={`${p.doneTasks}/${p.totalTasks}`}        />
             <KpiCard label="Etapas concluídas"   value={`${doneStages}/${p.stages.length}`}      />
@@ -757,7 +757,7 @@ export function RelatorioProjetoClient({ project: p, onReload }: { project: Proj
             <KpiCard label="Tarefas atrasadas"   value={lateTasks} sub={lateTasks > 0 ? "⚠ atenção" : "✅ em dia"} />
             <KpiCard label="Produtividade"        value={`${productivity}%`} sub="tarefas concluídas" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
             <KpiCard label="Dias decorridos"    value={kpiValue(p.elapsedDays, "d")} />
             <KpiCard label="Dias restantes"     value={kpiValue(p.remainDays,  "d")} />
             <KpiCard label="Etapas pendentes"   value={pendingStages} />

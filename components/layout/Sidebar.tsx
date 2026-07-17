@@ -7,32 +7,45 @@ import {
   Inbox,
   CalendarDays,
   CheckSquare,
-  MessageSquare,
+  Sparkles,
   Bot,
-  Plug,
   FolderKanban,
   ShieldCheck,
   Users,
+  PenLine,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
-  { href: "/",             label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/inbox",        label: "Caixa de Entrada", icon: Inbox },
-  { href: "/agenda",       label: "Calendário",       icon: CalendarDays },
-  { href: "/tasks",        label: "Tarefas",          icon: CheckSquare },
-  { href: "/assistente",   label: "Assistente NJ",    icon: MessageSquare },
-  { href: "/projetos",     label: "Projetos",         icon: FolderKanban },
-  { href: "/conferencia",  label: "Conferência",      icon: ShieldCheck },
-  { href: "/gestao-equipe",label: "Gestão de Equipe", icon: Users },
-  { href: "/integracoes",  label: "Integrações",      icon: Plug },
+  { href: "/",             label: "Dashboard",          icon: LayoutDashboard },
+  { href: "/inbox",        label: "Central de Entrada", icon: Inbox },
+  { href: "/agenda",       label: "Calendário",         icon: CalendarDays },
+  { href: "/tasks",        label: "Tarefas",            icon: CheckSquare },
+  { href: "/anotacoes",    label: "Anotações",          icon: PenLine },
+  { href: "/especialistas", label: "Especialistas",        icon: Sparkles },
+  { href: "/projetos",     label: "Projetos",           icon: FolderKanban },
+  { href: "/conferencia",  label: "Conferência",        icon: ShieldCheck },
+  { href: "/gestao-equipe",label: "Gestão de Equipe",   icon: Users },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  open?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
 
-  return (
-    <aside className="w-64 bg-slate-900 text-white flex flex-col h-full shrink-0">
+  const sidebar = (
+    <aside
+      className={cn(
+        "flex h-full w-72 max-w-[85vw] shrink-0 flex-col bg-slate-900 text-white shadow-2xl transition-transform duration-200 lg:w-64 lg:shadow-none",
+        "fixed inset-y-0 left-0 z-50 lg:sticky lg:top-0 lg:z-auto",
+        open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+      )}
+      aria-label="Navegação principal"
+    >
       {/* Logo */}
       <div className="p-5 border-b border-slate-700/50">
         <div className="flex items-center gap-3">
@@ -43,6 +56,14 @@ export function Sidebar() {
             <h1 className="font-bold text-sm leading-tight">NJ Assistant</h1>
             <p className="text-xs text-slate-400 leading-tight">Office</p>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+            aria-label="Fechar menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -52,11 +73,16 @@ export function Sidebar() {
           // "Tarefas" fica ativo em /tasks e qualquer sub-rota
           const active = href === "/tasks"
             ? pathname.startsWith("/tasks") || pathname === "/pendencias" || pathname === "/historico"
+            : href === "/anotacoes"
+            ? pathname.startsWith("/anotacoes")
+            : href === "/especialistas"
+            ? pathname.startsWith("/especialistas")
             : pathname === href
           return (
             <Link
               key={href}
               href={href}
+              onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                 active
@@ -84,5 +110,19 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  )
+
+  return (
+    <>
+      {open && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[1px] lg:hidden"
+          onClick={onClose}
+          aria-label="Fechar menu"
+        />
+      )}
+      {sidebar}
+    </>
   )
 }

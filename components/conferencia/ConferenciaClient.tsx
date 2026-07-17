@@ -153,9 +153,9 @@ export function ConferenciaClient() {
   const hasFilters = filterStatus || filterPriority || filterProcessType || filterAnalyst || filterUnit
 
   return (
-    <div className="p-6 space-y-5 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-5 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center shadow-sm">
             <ShieldCheck className="w-5 h-5 text-white" />
@@ -167,14 +167,14 @@ export function ConferenciaClient() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-sm"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-700 sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Nova Conferência
         </button>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <SummaryCard
           label="Total" value={total} total={total}
           icon={<ShieldCheck className="w-4 h-4 text-slate-600" />}
@@ -215,7 +215,7 @@ export function ConferenciaClient() {
 
       {/* Search & filters */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -227,7 +227,7 @@ export function ConferenciaClient() {
           <button
             onClick={() => setShowFilters(v => !v)}
             className={cn(
-              "flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors",
+              "flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors sm:w-auto",
               showFilters || hasFilters
                 ? "border-teal-400 bg-teal-50 text-teal-700"
                 : "border-slate-200 text-slate-600 hover:border-slate-300"
@@ -240,7 +240,7 @@ export function ConferenciaClient() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-2 border-t border-slate-100">
+          <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-2 sm:grid-cols-2 lg:grid-cols-5">
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
               className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20">
               <option value="">Todos os status</option>
@@ -305,7 +305,7 @@ export function ConferenciaClient() {
               href={`/conferencia/${conf.id}`}
               className="block bg-white border border-slate-200 rounded-xl p-4 hover:border-teal-300 hover:shadow-sm transition-all"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className={cn("inline-flex items-center text-xs border rounded-full px-2.5 py-0.5 font-medium", STATUS_COLORS[conf.status])}>
@@ -334,7 +334,7 @@ export function ConferenciaClient() {
                     {conf.correctionDueDate && <span>Prazo: {formatDate(conf.correctionDueDate)}</span>}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-end shrink-0">
                   {conf.issueCount > 0 && (
                     <span className={cn("text-xs rounded-full px-2 py-0.5 font-medium",
                       conf.issues.some(i => i.severity === 'CRITICA') ? "bg-red-100 text-red-700" :

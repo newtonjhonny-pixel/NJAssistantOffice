@@ -174,7 +174,7 @@ function MessageBubble({
           {isUser ? "N" : msg.icon}
         </div>
 
-        <div className={cn("max-w-[78%]", isUser && "items-end flex flex-col")}>
+        <div className={cn("max-w-[88%] sm:max-w-[78%]", isUser && "items-end flex flex-col")}>
           <div className="flex items-center gap-2 mb-1.5">
             <p className="text-xs text-slate-400">{isUser ? "Você" : msg.agentName}</p>
             {!isUser && msg.aiPowered && (
@@ -405,15 +405,15 @@ export function AssistenteClient() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex flex-col h-[calc(100vh-140px)] animate-fade-in">
+    <div className="relative flex min-h-[calc(100svh-8rem)] flex-col animate-fade-in lg:h-[calc(100vh-140px)]">
       <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
 
         {/* ── Header ── */}
         <div className={cn("px-5 py-4 text-white shrink-0 transition-all duration-300", headerBg)}>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
             {/* Left: identity */}
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               {view === "specialist" && (
                 <button
                   onClick={backToMain}
@@ -426,8 +426,8 @@ export function AssistenteClient() {
               <span className="text-2xl">
                 {view === "main" ? "🤖" : specialist?.icon}
               </span>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">
                     {view === "main" ? "NJ Assistant" : specialist?.name}
                   </p>
@@ -449,7 +449,7 @@ export function AssistenteClient() {
             </div>
 
             {/* Right: actions */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {view === "main" && (
                 <button
                   onClick={() => setShowAnalysis(v => !v)}
@@ -493,7 +493,7 @@ export function AssistenteClient() {
         </div>
 
         {/* ── Messages ── */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 sm:p-5">
           {currentMessages.length === 0 && (
             <div className="text-center py-12">
               <div className="text-5xl mb-4">
@@ -508,7 +508,7 @@ export function AssistenteClient() {
                   : `Você está conversando diretamente com o ${specialist?.name}. O histórico desta conversa é separado do NJ Assistant.`}
               </p>
               {view === "main" && (
-                <div className="grid grid-cols-2 gap-2 mt-6 max-w-lg mx-auto">
+                <div className="mx-auto mt-6 grid max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
                   {MAIN_SUGGESTIONS.map(s => (
                     <button
                       key={s}

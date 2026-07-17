@@ -755,7 +755,7 @@ function AddStageForm({ projectId, stageCount, onSaved, onCancel }: {
         placeholder="Nome da etapa"
         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
       />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none" />
         <input type="date" value={form.dueDate}   onChange={e => setForm(f => ({ ...f, dueDate:   e.target.value }))} className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none" />
       </div>
@@ -864,7 +864,7 @@ function AddEntregaForm({ projectId, onSaved, onCancel }: {
         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
       />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <label className="block text-[10px] text-slate-500 mb-1">Data prevista</label>
           <input

@@ -55,6 +55,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  @screen sm {
+    input,
+    select,
+    textarea {
+      font-size: 0.875rem;
+    }
+  }
+}
+
+@layer utilities {
+  .mobile-scroll {
+    @apply -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0;
   }
 }
 

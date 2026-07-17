@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import {
   CheckSquare, AlertCircle, Clock, TrendingUp, Inbox,
-  ArrowRight, Flame, Sparkles, Loader2, Info, RefreshCw
+  ArrowRight, Flame, Sparkles, Loader2, Info, RefreshCw, Tag
 } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
@@ -36,6 +36,14 @@ interface Task {
   dueDate: string | null
 }
 
+interface OrigemStat {
+  id: string
+  name: string
+  color: string
+  icon: string
+  count: number
+}
+
 interface SummaryData {
   content: string
   aiPowered: boolean
@@ -52,16 +60,21 @@ const statCards = [
 ]
 
 export function DashboardClient() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [summary, setSummary] = useState<SummaryData | null>(null)
+  const [data, setData]           = useState<DashboardData | null>(null)
+  const [summary, setSummary]     = useState<SummaryData | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]     = useState(true)
+  const [origens, setOrigens]     = useState<{ byOrigin: OrigemStat[]; noOriginCount: number } | null>(null)
 
   useEffect(() => {
     fetch("/api/dashboard")
       .then(r => r.json())
       .then(setData)
       .finally(() => setLoading(false))
+    fetch("/api/dashboard/origens")
+      .then(r => r.json())
+      .then(setOrigens)
+      .catch(() => {})
   }, [])
 
   async function loadSummary() {
@@ -83,7 +96,7 @@ export function DashboardClient() {
     return (
       <div className="space-y-6 animate-pulse">
         <div className="h-28 bg-slate-200 rounded-2xl" />
-        <div className="grid grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-slate-200 rounded-xl" />)}
         </div>
       </div>
@@ -93,18 +106,18 @@ export function DashboardClient() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Saudação */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-2xl p-6 text-white">
-        <div className="flex items-start justify-between">
-          <div>
+      <div className="rounded-2xl bg-gradient-to-r from-slate-800 to-slate-700 p-4 text-white sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <p className="text-slate-300 text-sm mb-1">Coordenador Administrativo 🎯</p>
-            <h1 className="text-2xl font-bold mb-2">{greeting}, Newton.</h1>
+            <h1 className="mb-2 text-xl font-bold sm:text-2xl">{greeting}, Newton.</h1>
             <p className="text-slate-300 max-w-xl">
               {data?.counts.overdue
                 ? `Você tem ${data.counts.overdue} atividade(s) atrasada(s) e ${data.counts.urgent ?? 0} urgente(s) para hoje. Vamos resolver?`
                 : `Nenhuma atividade atrasada. Hoje você tem ${data?.counts.open ?? 0} tarefas abertas para acompanhar.`}
             </p>
           </div>
-          <div className="text-right text-sm text-slate-400">
+          <div className="text-left text-sm text-slate-400 sm:text-right">
             <p>{now.toLocaleDateString("pt-BR", { weekday: "long" })}</p>
             <p className="text-2xl font-bold text-white">{now.getDate()}</p>
             <p>{now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</p>
@@ -113,7 +126,7 @@ export function DashboardClient() {
       </div>
 
       {/* Cards de resumo */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
         {statCards.map(({ key, label, icon: Icon, color, bg }) => (
           <Card key={key} className="hover:shadow-md transition-shadow">
             <CardContent className="p-4">
@@ -134,8 +147,8 @@ export function DashboardClient() {
         "border-2 transition-colors",
         summary?.aiPowered ? "border-violet-200 bg-violet-50/20" : "border-slate-200"
       )}>
-        <CardHeader className="flex flex-row items-center justify-between py-4">
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="flex flex-wrap items-center gap-2">
             <Sparkles className={cn("w-5 h-5", summary?.aiPowered ? "text-violet-500" : "text-slate-400")} />
             Resumo Inteligente do Dia
             {summary?.aiPowered && (
@@ -147,7 +160,7 @@ export function DashboardClient() {
           <button
             onClick={loadSummary}
             disabled={summaryLoading}
-            className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors font-medium"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-blue-100 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 disabled:opacity-50 sm:w-auto sm:border-0 sm:p-0"
           >
             {summaryLoading
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -230,7 +243,7 @@ export function DashboardClient() {
                     <Link
                       key={task.id}
                       href={`/tasks/${task.id}`}
-                      className="flex items-start gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors group"
+                      className="flex flex-col gap-3 px-5 py-3.5 transition-colors hover:bg-slate-50 group sm:flex-row sm:items-start sm:gap-4"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 truncate">
@@ -249,7 +262,7 @@ export function DashboardClient() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <span className={cn("text-xs border rounded-full px-2 py-0.5", PRIORITY_COLORS[task.priority])}>
                           {PRIORITY_LABELS[task.priority]}
                         </span>
@@ -321,6 +334,68 @@ export function DashboardClient() {
           </Card>
         </div>
       </div>
+
+      {/* Origem das Demandas */}
+      {origens && origens.byOrigin.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Tag className="w-4 h-4 text-blue-500" />
+              Origem das Demandas
+            </CardTitle>
+            <Link href="/origens" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+              Gerenciar origens <ArrowRight className="w-3 h-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const total = origens.byOrigin.reduce((s, o) => s + o.count, 0)
+              const top = [...origens.byOrigin].sort((a, b) => b.count - a.count).slice(0, 8)
+              const maxCount = top[0]?.count ?? 1
+              return (
+                <div className="space-y-2">
+                  {top.map(o => (
+                    <div key={o.id} className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5 w-40 shrink-0">
+                        <span className="text-sm leading-none">{o.icon}</span>
+                        <span className="text-xs text-slate-600 truncate">{o.name}</span>
+                      </div>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-2 rounded-full transition-all"
+                          style={{ width: `${(o.count / maxCount) * 100}%`, backgroundColor: o.color }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-600 w-8 text-right shrink-0">{o.count}</span>
+                      <span className="text-xs text-slate-400 w-10 text-right shrink-0">
+                        {total > 0 ? `${Math.round((o.count / total) * 100)}%` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {origens.noOriginCount > 0 && (
+                    <div className="flex items-center gap-3 opacity-50">
+                      <div className="flex items-center gap-1.5 w-40 shrink-0">
+                        <span className="text-sm leading-none">❓</span>
+                        <span className="text-xs text-slate-500 truncate">Sem origem</span>
+                      </div>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2">
+                        <div
+                          className="h-2 rounded-full bg-slate-300"
+                          style={{ width: `${(origens.noOriginCount / maxCount) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-400 w-8 text-right shrink-0">{origens.noOriginCount}</span>
+                      <span className="text-xs text-slate-300 w-10 text-right shrink-0">
+                        {total > 0 ? `${Math.round((origens.noOriginCount / (total + origens.noOriginCount)) * 100)}%` : ""}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sugestões do Assistente */}
       <Card className="border-blue-200 bg-blue-50/30">

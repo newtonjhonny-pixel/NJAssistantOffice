@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { TabCargos } from "./TabCargos"
+import { TabProcedimentos } from "./TabProcedimentos"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
 import {
   Users, MessageSquare, Navigation, Umbrella, BookOpen,
-  Activity, BookMarked, LayoutDashboard, Plus, Edit2, Trash2,
+  Activity, BookMarked, Briefcase, ClipboardList, LayoutDashboard, Plus, Edit2, Trash2,
   Sparkles, X, ChevronDown, AlertTriangle, CheckCircle,
   Clock, Calendar, RefreshCw, Search, Filter,
 } from "lucide-react"
@@ -34,8 +36,23 @@ interface Direction {
   member: { id: string; name: string; role: string }
 }
 interface Vacation {
-  id: string; memberId: string; acquisitivePeriod?: string | null
-  availableDays?: number | null; startDate?: string | null; returnDate?: string | null
+  id: string; memberId: string
+  // legacy
+  branch?: string | null
+  acquisitivePeriod?: string | null
+  // new fields
+  companyName?: string | null
+  acquisitionStartDate?: string | null
+  acquisitionEndDate?: string | null
+  concessionStartDate?: string | null
+  concessionEndDate?: string | null
+  availableDays?: number | null
+  vacationDays?: number | null
+  hasBonus: boolean
+  bonusDays?: number | null
+  startDate?: string | null
+  endDate?: string | null
+  returnDate?: string | null
   status: string; substitute?: string | null; observations?: string | null
   member: { id: string; name: string; role: string; sector?: string | null }
 }
@@ -64,6 +81,7 @@ interface Summary {
     totalMembers: number; activeMembers: number; totalFeedbacks: number
     totalDirections: number; totalVacations: number; totalTrainings: number
     totalActivities: number; totalGuidelines: number; pendingActivities: number
+    totalCargos?: number; totalProcedimentos?: number
   }
   alerts: {
     upcomingVacations: Array<{ id: string; startDate?: string; member: { name: string } }>
@@ -138,13 +156,13 @@ function Badge({ label, colorClass }: { label: string; colorClass: string }) {
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="flex max-h-[94vh] w-full flex-col rounded-xl bg-white shadow-xl sm:max-w-2xl">
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
           <h3 className="text-base font-semibold text-slate-800">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 sm:px-6">{children}</div>
       </div>
     </div>
   )
@@ -166,12 +184,19 @@ const selectClass = inputClass
 
 function fmtDate(s?: string | null) {
   if (!s) return "—"
-  return new Date(s).toLocaleDateString("pt-BR")
+  // Fatia "YYYY-MM-DD" diretamente para evitar conversão UTC→local (off-by-one no fuso Brasil)
+  const part = typeof s === "string" ? s.slice(0, 10) : new Date(s).toISOString().slice(0, 10)
+  const [y, m, d] = part.split("-")
+  if (y && m && d) return `${d}/${m}/${y}`
+  return "—"
 }
 
 function fmtDateTime(s?: string | null) {
   if (!s) return "—"
-  return new Date(s).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+  const part = typeof s === "string" ? s.slice(0, 10) : new Date(s).toISOString().slice(0, 10)
+  const [y, m, d] = part.split("-")
+  if (y && m && d) return `${d}/${m}/${y}`
+  return "—"
 }
 
 function MemberSelect({ members, value, onChange, required }: { members: Member[]; value: string; onChange: (v: string) => void; required?: boolean }) {
@@ -198,12 +223,14 @@ function TabVisaoGeral({ summary, onTabSwitch }: { summary: Summary | null; onTa
     { label: "Férias Ativas", value: counts.totalVacations, sub: "programadas/em curso", tab: "ferias", color: "from-sky-500 to-sky-600", icon: Umbrella },
     { label: "Treinamentos",  value: counts.totalTrainings, sub: "em andamento", tab: "treinamentos", color: "from-teal-500 to-teal-600", icon: BookOpen },
     { label: "Atividades",    value: counts.totalActivities, sub: `${counts.pendingActivities} pendentes`, tab: "atividades", color: "from-orange-500 to-orange-600", icon: Activity },
-    { label: "Diretrizes",    value: counts.totalGuidelines, sub: "ativas", tab: "diretrizes", color: "from-emerald-500 to-emerald-600", icon: BookMarked },
+    { label: "Diretrizes",         value: counts.totalGuidelines, sub: "ativas",                    tab: "diretrizes",    color: "from-emerald-500 to-emerald-600", icon: BookMarked    },
+    { label: "Descrição de Cargos", value: counts.totalCargos ?? 0, sub: "cargos cadastrados",        tab: "cargos",        color: "from-rose-500 to-rose-600",     icon: Briefcase     },
+    { label: "Procedimentos",       value: counts.totalProcedimentos ?? 0, sub: "POPs, ITs e checklists", tab: "procedimentos", color: "from-violet-500 to-violet-600", icon: ClipboardList },
   ]
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map(c => (
           <button key={c.tab} onClick={() => onTabSwitch(c.tab)}
             className="text-left rounded-xl overflow-hidden shadow-sm border border-white/20 hover:shadow-md transition-all group"
@@ -296,7 +323,7 @@ function TabVisaoGeral({ summary, onTabSwitch }: { summary: Summary | null; onTa
 
         {alerts.onVacation.length === 0 && alerts.upcomingVacations.length === 0 &&
           alerts.overdueActivities.length === 0 && alerts.vacationConflicts.length === 0 && (
-          <div className="col-span-2 text-center py-8 text-slate-400 text-sm">
+          <div className="text-center py-8 text-slate-400 text-sm lg:col-span-2">
             <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
             Nenhum alerta no momento. Equipe operando normalmente.
           </div>
@@ -409,19 +436,19 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
       {showForm && (
         <Modal title={editing ? "Editar Colaborador" : "Novo Colaborador"} onClose={() => setShowForm(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Nome" required><input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="Nome completo" /></Field>
               <Field label="Cargo / Função" required><input required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className={inputClass} placeholder="Ex: Analista de DP" /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Setor"><input value={form.sector} onChange={e => setForm(f => ({ ...f, sector: e.target.value }))} className={inputClass} placeholder="Depto. Pessoal, Financeiro..." /></Field>
               <Field label="Unidade"><input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} className={inputClass} placeholder="Filial, unidade..." /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="E-mail"><input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className={inputClass} /></Field>
               <Field label="Telefone"><input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className={inputClass} /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Data de Admissão"><input type="date" value={form.joinedAt} onChange={e => setForm(f => ({ ...f, joinedAt: e.target.value }))} className={inputClass} /></Field>
               <Field label="Status">
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={selectClass}>
@@ -571,7 +598,7 @@ function TabFeedbacks({ members }: { members: Member[] }) {
       {showForm && (
         <Modal title={editing ? "Editar Feedback" : "Novo Feedback"} onClose={() => setShowForm(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Colaborador" required>
                 <MemberSelect members={members} value={form.memberId} onChange={v => setForm(f => ({ ...f, memberId: v }))} required />
               </Field>
@@ -587,12 +614,12 @@ function TabFeedbacks({ members }: { members: Member[] }) {
             <Field label="Situação Observada">
               <textarea value={form.observedSituation} onChange={e => setForm(f => ({ ...f, observedSituation: e.target.value }))} rows={2} className={inputClass} placeholder="Descreva o que foi observado..." />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Pontos Positivos"><textarea value={form.positivePoints} onChange={e => setForm(f => ({ ...f, positivePoints: e.target.value }))} rows={2} className={inputClass} /></Field>
               <Field label="Pontos de Melhoria"><textarea value={form.improvementPoints} onChange={e => setForm(f => ({ ...f, improvementPoints: e.target.value }))} rows={2} className={inputClass} /></Field>
             </div>
             <Field label="Orientação Dada"><textarea value={form.orientationGiven} onChange={e => setForm(f => ({ ...f, orientationGiven: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Ação Acordada"><input value={form.agreedAction} onChange={e => setForm(f => ({ ...f, agreedAction: e.target.value }))} className={inputClass} /></Field>
               <Field label="Próximo Acompanhamento"><input type="date" value={form.nextFollowUp} onChange={e => setForm(f => ({ ...f, nextFollowUp: e.target.value }))} className={inputClass} /></Field>
             </div>
@@ -741,7 +768,7 @@ function TabDirecionamento({ members }: { members: Member[] }) {
             </Field>
             <Field label="Título" required><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} /></Field>
             <Field label="Descrição"><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Prioridade">
                 <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className={selectClass}>
                   {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -787,54 +814,313 @@ function TabDirecionamento({ members }: { members: Member[] }) {
 
 // ─── Tab: Férias ──────────────────────────────────────────────────────────────
 
+const MONTHS = [
+  { v: "01", l: "Janeiro" }, { v: "02", l: "Fevereiro" }, { v: "03", l: "Março" },
+  { v: "04", l: "Abril"   }, { v: "05", l: "Maio"      }, { v: "06", l: "Junho" },
+  { v: "07", l: "Julho"   }, { v: "08", l: "Agosto"    }, { v: "09", l: "Setembro" },
+  { v: "10", l: "Outubro" }, { v: "11", l: "Novembro"  }, { v: "12", l: "Dezembro" },
+]
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T00:00:00")
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split("T")[0]
+}
+
+// helpers
+function fmtPeriod(start?: string | null, end?: string | null): string {
+  if (!start && !end) return "—"
+  return `${fmtDate(start)} a ${fmtDate(end)}`
+}
+
+const STATUS_PT: Record<string, string> = {
+  A_PROGRAMAR: "A Programar", PROGRAMADA: "Programada",
+  EM_FERIAS: "Em Férias", RETORNOU: "Retornou", CANCELADA: "Cancelada",
+}
+
+function buildVacationPdf(items: Vacation[], filters: Record<string, string>): string {
+  const emitDate = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+  const emitTime = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  const filterDesc = [
+    filters.company  && `Empresa: ${filters.company}`,
+    filters.month    && `Mês: ${MONTHS.find(m => m.v === filters.month)?.l ?? filters.month}`,
+    filters.year     && `Ano: ${filters.year}`,
+    filters.status   && `Status: ${STATUS_PT[filters.status] ?? filters.status}`,
+    filters.hasBonus === "SIM" && "Com abono pecuniário",
+    filters.hasBonus === "NAO" && "Sem abono pecuniário",
+  ].filter(Boolean).join(" | ")
+
+  const rows = items.map(v => `
+    <tr>
+      <td>${v.member.name}</td>
+      <td>${v.member.role}</td>
+      <td>${v.companyName ?? "—"}</td>
+      <td>${fmtPeriod(v.acquisitionStartDate, v.acquisitionEndDate)}</td>
+      <td>${fmtPeriod(v.concessionStartDate, v.concessionEndDate)}</td>
+      <td style="text-align:center">${v.availableDays ?? "—"}</td>
+      <td style="text-align:center">${v.vacationDays ?? "—"}</td>
+      <td style="text-align:center">${v.hasBonus ? `Sim — ${v.bonusDays ?? 10}d` : "Não"}</td>
+      <td>${fmtDate(v.startDate)}</td>
+      <td>${fmtDate(v.endDate)}</td>
+      <td>${fmtDate(v.returnDate)}</td>
+      <td>${v.substitute ?? "—"}</td>
+      <td>${STATUS_PT[v.status] ?? v.status}</td>
+    </tr>`).join("")
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Controle de Férias da Equipe</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 8pt; color: #1e293b; background: #fff; }
+  .header { border-bottom: 2.5pt solid #2563eb; padding-bottom: 8pt; margin-bottom: 10pt; }
+  .title { font-size: 15pt; font-weight: 700; color: #1e3a8a; }
+  .subtitle { font-size: 9pt; color: #475569; margin-top: 3pt; }
+  .filter-row { font-size: 8pt; color: #64748b; margin-top: 4pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6pt; }
+  thead tr { background: #1e3a8a; color: #fff; }
+  thead th { padding: 5pt 3pt; font-size: 7pt; text-align: left; font-weight: 600; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody td { padding: 3pt 3pt; font-size: 7.5pt; border-bottom: 0.5pt solid #e2e8f0; }
+  .footer { margin-top: 10pt; border-top: 0.5pt solid #e2e8f0; padding-top: 5pt; font-size: 7.5pt; color: #94a3b8; display: flex; justify-content: space-between; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="title">Controle de Férias da Equipe</div>
+  <div class="subtitle">Total de registros: ${items.length} | Emissão: ${emitDate} às ${emitTime}</div>
+  ${filterDesc ? `<div class="filter-row">Filtros aplicados: ${filterDesc}</div>` : ""}
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Colaborador</th><th>Cargo</th><th>Empresa</th>
+      <th>Período Aquisitivo</th><th>Período Concessivo</th>
+      <th>Direito</th><th>Férias</th><th>Abono</th>
+      <th>Início</th><th>Fim</th><th>Retorno</th><th>Substituto</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody>${rows || '<tr><td colspan="13" style="text-align:center;padding:12pt;color:#94a3b8">Nenhum registro.</td></tr>'}</tbody>
+</table>
+<div class="footer">
+  <span>Emitido em ${emitDate} às ${emitTime}</span>
+  <span>Controle de Férias — Uso Interno</span>
+</div>
+</body></html>`
+}
+
+function exportExcel(items: Vacation[]) {
+  const headers = [
+    "Colaborador","Cargo","Empresa",
+    "P. Aquisitivo Início","P. Aquisitivo Fim",
+    "P. Concessivo Início","P. Concessivo Fim",
+    "Dias de Direito","Dias de Férias","Abono","Dias de Abono",
+    "Início Férias","Fim Férias","Retorno","Substituto","Status","Observações",
+  ]
+  const rows = items.map(v => [
+    v.member.name, v.member.role, v.companyName ?? "",
+    fmtDate(v.acquisitionStartDate), fmtDate(v.acquisitionEndDate),
+    fmtDate(v.concessionStartDate),  fmtDate(v.concessionEndDate),
+    String(v.availableDays ?? ""), String(v.vacationDays ?? ""),
+    v.hasBonus ? "Sim" : "Não", v.hasBonus ? String(v.bonusDays ?? 10) : "",
+    fmtDate(v.startDate), fmtDate(v.endDate), fmtDate(v.returnDate),
+    v.substitute ?? "", STATUS_PT[v.status] ?? v.status, v.observations ?? "",
+  ])
+  const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:x='urn:schemas-microsoft-com:office:excel'>
+<head><meta charset="UTF-8"><style>td{mso-number-format:"@"}</style></head>
+<body><table><thead><tr>${headers.map(h => `<th><b>${h}</b></th>`).join("")}</tr></thead>
+<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+</table></body></html>`
+  const blob = new Blob(["﻿" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement("a")
+  a.href = url; a.download = `ferias_${new Date().toISOString().slice(0,10)}.xls`
+  a.click(); URL.revokeObjectURL(url)
+}
+
+function exportWord(items: Vacation[]) {
+  const headers = [
+    "Colaborador","Cargo","Empresa","Período Aquisitivo","Período Concessivo",
+    "Direito","Férias","Abono","Início","Fim","Retorno","Substituto","Status",
+  ]
+  const rows = items.map(v => [
+    v.member.name, v.member.role, v.companyName ?? "—",
+    fmtPeriod(v.acquisitionStartDate, v.acquisitionEndDate),
+    fmtPeriod(v.concessionStartDate,  v.concessionEndDate),
+    String(v.availableDays ?? "—"), String(v.vacationDays ?? "—"),
+    v.hasBonus ? `Sim — ${v.bonusDays ?? 10}d` : "Não",
+    fmtDate(v.startDate), fmtDate(v.endDate), fmtDate(v.returnDate),
+    v.substitute ?? "—", STATUS_PT[v.status] ?? v.status,
+  ])
+  const emitDate = new Date().toLocaleDateString("pt-BR")
+  const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word'>
+<head><meta charset="UTF-8">
+<style>
+  body{font-family:Arial,sans-serif;font-size:10pt}
+  h1{font-size:16pt;color:#1e3a8a;margin-bottom:4pt}
+  p.sub{font-size:9pt;color:#475569;margin-bottom:10pt}
+  table{border-collapse:collapse;width:100%}
+  th{background:#1e3a8a;color:#fff;padding:5pt 4pt;font-size:8pt;text-align:left;border:0.5pt solid #1e3a8a}
+  td{padding:4pt;font-size:8.5pt;border:0.5pt solid #cbd5e1}
+  tr:nth-child(even) td{background:#f8fafc}
+</style></head>
+<body>
+<h1>Controle de Férias da Equipe</h1>
+<p class="sub">Total: ${items.length} registros | Emissão: ${emitDate}</p>
+<table>
+  <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+  <tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>
+</table>
+</body></html>`
+  const blob = new Blob(["﻿" + html], { type: "application/msword;charset=utf-8" })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement("a")
+  a.href = url; a.download = `ferias_${new Date().toISOString().slice(0,10)}.doc`
+  a.click(); URL.revokeObjectURL(url)
+}
+
 function TabFerias({ members }: { members: Member[] }) {
-  const [items, setItems] = useState<Vacation[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<Vacation | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [filterMember, setFilterMember] = useState("")
-  const [filterStatus, setFilterStatus] = useState("")
-  const [form, setForm] = useState({
-    memberId: "", acquisitivePeriod: "", availableDays: "", startDate: "",
-    returnDate: "", status: "A_PROGRAMAR", substitute: "", observations: "",
-  })
+  const [items,       setItems]       = useState<Vacation[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [editing,     setEditing]     = useState<Vacation | null>(null)
+  const [saving,      setSaving]      = useState(false)
+  const [formError,   setFormError]   = useState("")
+  const [formSuccess, setFormSuccess] = useState("")
+
+  // Filters
+  const [filterMember,  setFilterMember]  = useState("")
+  const [filterCompany, setFilterCompany] = useState("")
+  const [filterStatus,  setFilterStatus]  = useState("")
+  const [filterMonth,   setFilterMonth]   = useState("")
+  const [filterYear,    setFilterYear]    = useState("")
+  const [filterBonus,   setFilterBonus]   = useState("")
+
+  const emptyForm = {
+    memberId: "",
+    companyName: "",
+    acquisitionStartDate: "", acquisitionEndDate: "",
+    concessionStartDate:  "", concessionEndDate:  "",
+    availableDays: "30", vacationDays: "30",
+    hasBonus: false, bonusDays: "10",
+    startDate: "", endDate: "", returnDate: "",
+    status: "A_PROGRAMAR", substitute: "", observations: "",
+  }
+  const [form, setForm] = useState(emptyForm)
+
+  // Auto-calculate endDate and returnDate from startDate + vacationDays
+  useEffect(() => {
+    if (form.startDate && form.vacationDays && Number(form.vacationDays) > 0) {
+      const end = addDays(form.startDate, Number(form.vacationDays) - 1)
+      const ret = addDays(form.startDate, Number(form.vacationDays))
+      setForm(f => ({ ...f, endDate: end, returnDate: f.returnDate || ret }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.startDate, form.vacationDays])
 
   const fetch_ = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (filterMember) params.set("memberId", filterMember)
-    if (filterStatus) params.set("status", filterStatus)
-    const res = await fetch(`/api/gestao-equipe/vacations?${params}`)
+    const p = new URLSearchParams()
+    if (filterMember)  p.set("memberId",  filterMember)
+    if (filterStatus)  p.set("status",    filterStatus)
+    if (filterCompany) p.set("company",   filterCompany)
+    if (filterMonth)   p.set("month",     filterMonth)
+    if (filterYear)    p.set("year",      filterYear)
+    if (filterBonus)   p.set("hasBonus",  filterBonus)
+    const res = await fetch(`/api/gestao-equipe/vacations?${p}`)
     setItems(await res.json())
     setLoading(false)
-  }, [filterMember, filterStatus])
+  }, [filterMember, filterStatus, filterCompany, filterMonth, filterYear, filterBonus])
 
   useEffect(() => { fetch_() }, [fetch_])
 
   function openNew() {
-    setEditing(null)
-    setForm({ memberId: "", acquisitivePeriod: "", availableDays: "", startDate: "", returnDate: "", status: "A_PROGRAMAR", substitute: "", observations: "" })
-    setShowForm(true)
+    setEditing(null); setFormError(""); setFormSuccess(""); setForm(emptyForm); setShowForm(true)
   }
   function openEdit(v: Vacation) {
-    setEditing(v)
+    setEditing(v); setFormError(""); setFormSuccess("")
     setForm({
-      memberId: v.memberId, acquisitivePeriod: v.acquisitivePeriod || "",
-      availableDays: v.availableDays?.toString() || "",
-      startDate: v.startDate ? v.startDate.split("T")[0] : "",
-      returnDate: v.returnDate ? v.returnDate.split("T")[0] : "",
-      status: v.status, substitute: v.substitute || "", observations: v.observations || "",
+      memberId:             v.memberId,
+      companyName:          v.companyName          ?? "",
+      acquisitionStartDate: v.acquisitionStartDate ? v.acquisitionStartDate.split("T")[0] : "",
+      acquisitionEndDate:   v.acquisitionEndDate   ? v.acquisitionEndDate.split("T")[0]   : "",
+      concessionStartDate:  v.concessionStartDate  ? v.concessionStartDate.split("T")[0]  : "",
+      concessionEndDate:    v.concessionEndDate     ? v.concessionEndDate.split("T")[0]    : "",
+      availableDays:        v.availableDays?.toString() ?? "30",
+      vacationDays:         v.vacationDays?.toString()  ?? "30",
+      hasBonus:             v.hasBonus,
+      bonusDays:            v.bonusDays?.toString()     ?? "10",
+      startDate:            v.startDate  ? v.startDate.split("T")[0]  : "",
+      endDate:              v.endDate    ? v.endDate.split("T")[0]    : "",
+      returnDate:           v.returnDate ? v.returnDate.split("T")[0] : "",
+      status:               v.status,
+      substitute:           v.substitute   ?? "",
+      observations:         v.observations ?? "",
     })
     setShowForm(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true)
+    e.preventDefault(); setFormError(""); setFormSuccess("")
+
+    // Client-side validation
+    if (!form.memberId)                  { setFormError("Selecione o colaborador."); return }
+    if (!form.companyName.trim())        { setFormError("Empresa é obrigatória."); return }
+    if (!form.acquisitionStartDate)      { setFormError("Início do período aquisitivo é obrigatório."); return }
+    if (!form.acquisitionEndDate)        { setFormError("Fim do período aquisitivo é obrigatório."); return }
+    if (!form.concessionStartDate)       { setFormError("Início do período concessivo é obrigatório."); return }
+    if (!form.concessionEndDate)         { setFormError("Fim do período concessivo é obrigatório."); return }
+    if (!form.availableDays)             { setFormError("Dias de direito é obrigatório."); return }
+    if (!form.vacationDays)              { setFormError("Dias de férias gozadas é obrigatório."); return }
+    if (!form.startDate)                 { setFormError("Início das férias é obrigatório."); return }
+    if (!form.endDate)                   { setFormError("Fim das férias é obrigatório."); return }
+    if (!form.returnDate)                { setFormError("Retorno ao trabalho é obrigatório."); return }
+
+    const dir = Number(form.availableDays) || 0
+    const vac = Number(form.vacationDays)  || 0
+    const bon = form.hasBonus ? (Number(form.bonusDays) || 10) : 0
+    if (vac + bon > dir) {
+      setFormError(`Dias de férias (${vac}) + abono (${bon}) não podem exceder os dias de direito (${dir}).`); return
+    }
+
+    setSaving(true)
     try {
-      const url = editing ? `/api/gestao-equipe/vacations/${editing.id}` : "/api/gestao-equipe/vacations"
-      await fetch(url, { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, startDate: form.startDate || null, returnDate: form.returnDate || null, availableDays: form.availableDays ? Number(form.availableDays) : null }) })
-      setShowForm(false); fetch_()
+      const url    = editing ? `/api/gestao-equipe/vacations/${editing.id}` : "/api/gestao-equipe/vacations"
+      const method = editing ? "PATCH" : "POST"
+      const res = await fetch(url, {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memberId:             form.memberId,
+          companyName:          form.companyName.trim(),
+          acquisitionStartDate: form.acquisitionStartDate || null,
+          acquisitionEndDate:   form.acquisitionEndDate   || null,
+          concessionStartDate:  form.concessionStartDate  || null,
+          concessionEndDate:    form.concessionEndDate    || null,
+          availableDays:        Number(form.availableDays),
+          vacationDays:         Number(form.vacationDays),
+          hasBonus:             form.hasBonus,
+          bonusDays:            form.hasBonus ? (Number(form.bonusDays) || 10) : null,
+          startDate:            form.startDate  || null,
+          endDate:              form.endDate    || null,
+          returnDate:           form.returnDate || null,
+          status:               form.status,
+          substitute:           form.substitute   || null,
+          observations:         form.observations || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setFormError(data.error || "Não foi possível registrar as férias. Verifique os campos obrigatórios.")
+        return
+      }
+      setFormSuccess(editing ? "Férias atualizada com sucesso." : "Férias registrada com sucesso.")
+      setTimeout(() => { setShowForm(false); fetch_() }, 1200)
+    } catch {
+      setFormError("Não foi possível registrar as férias. Verifique os campos obrigatórios.")
     } finally { setSaving(false) }
   }
 
@@ -844,74 +1130,284 @@ function TabFerias({ members }: { members: Member[] }) {
     fetch_()
   }
 
+  function printPdf() {
+    const html = buildVacationPdf(items, { company: filterCompany, month: filterMonth, year: filterYear, status: filterStatus, hasBonus: filterBonus })
+    const win  = window.open("", "_blank", "width=1100,height=700,scrollbars=yes")
+    if (!win) { alert("Popup bloqueado. Permita pop-ups para exportar o PDF."); return }
+    win.document.write(html); win.document.close()
+    setTimeout(() => { try { win.print() } catch { /* ignore */ } }, 500)
+  }
+
+  const activeFilters = [filterMember, filterCompany, filterStatus, filterMonth, filterYear, filterBonus].filter(Boolean).length
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg">
-          <option value="">Todos os colaboradores</option>
-          {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2.5 text-sm border border-slate-200 rounded-lg">
-          <option value="">Todos os status</option>
-          {Object.entries(VACATION_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo</Button>
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-700">Controle de Férias</span>
+          <span className="text-xs text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">{items.length} registro{items.length !== 1 ? "s" : ""}</span>
+          {activeFilters > 0 && (
+            <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+              {activeFilters} filtro{activeFilters > 1 ? "s" : ""} ativo{activeFilters > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={printPdf} className="flex items-center gap-1.5 text-xs border border-slate-200 hover:border-slate-300 text-slate-600 rounded-lg px-3 py-1.5 transition-colors">
+            🖨️ Imprimir / PDF
+          </button>
+          <button onClick={() => exportExcel(items)} className="flex items-center gap-1.5 text-xs border border-green-200 hover:border-green-400 text-green-700 bg-green-50 rounded-lg px-3 py-1.5 transition-colors">
+            📊 Excel
+          </button>
+          <button onClick={() => exportWord(items)} className="flex items-center gap-1.5 text-xs border border-blue-200 hover:border-blue-400 text-blue-700 bg-blue-50 rounded-lg px-3 py-1.5 transition-colors">
+            📄 Word
+          </button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo</Button>
+        </div>
       </div>
 
-      {loading ? <div className="text-slate-400 text-sm text-center py-8">Carregando...</div> : (
-        <div className="space-y-3">
-          {items.map(v => (
-            <Card key={v.id}>
-              <CardContent>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-medium text-slate-800">{v.member.name}</p>
-                    <p className="text-xs text-slate-500">{v.member.role}{v.member.sector && ` · ${v.member.sector}`}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge label={VACATION_STATUS[v.status]?.label ?? v.status} colorClass={VACATION_STATUS[v.status]?.color ?? "bg-slate-100 text-slate-600"} />
-                    <button onClick={() => openEdit(v)} className="text-slate-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDelete(v.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-xs text-slate-500">
-                  {v.acquisitivePeriod && <span>Período: {v.acquisitivePeriod}</span>}
-                  {v.availableDays && <span>Dias: {v.availableDays}</span>}
-                  {v.startDate && <span>Início: {fmtDate(v.startDate)}</span>}
-                  {v.returnDate && <span>Retorno: {fmtDate(v.returnDate)}</span>}
-                  {v.substitute && <span>Substituto: {v.substitute}</span>}
-                </div>
-                {v.observations && <p className="text-xs text-slate-400 mt-1">{v.observations}</p>}
-              </CardContent>
-            </Card>
-          ))}
-          {items.length === 0 && <div className="text-center py-12 text-slate-400 text-sm">Nenhum registro de férias.</div>}
+      {/* ── Filters ── */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white">
+            <option value="">Todos os colaboradores</option>
+            {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          <input value={filterCompany} onChange={e => setFilterCompany(e.target.value)} placeholder="Empresa..."
+            className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white" />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white">
+            <option value="">Todos os status</option>
+            {Object.entries(VACATION_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white">
+            <option value="">Mês de início</option>
+            {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+          </select>
+          <input value={filterYear} onChange={e => setFilterYear(e.target.value)} placeholder="Ano (ex: 2026)"
+            className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white" type="number" />
+          <select value={filterBonus} onChange={e => setFilterBonus(e.target.value)} className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg bg-white">
+            <option value="">Abono: todos</option>
+            <option value="SIM">Com abono</option>
+            <option value="NAO">Sem abono</option>
+          </select>
+          {activeFilters > 0 && (
+            <button onClick={() => { setFilterMember(""); setFilterCompany(""); setFilterStatus(""); setFilterMonth(""); setFilterYear(""); setFilterBonus("") }}
+              className="px-2.5 py-2 text-xs border border-red-200 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+              ✕ Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Table ── */}
+      {loading ? (
+        <div className="text-slate-400 text-sm text-center py-8">Carregando...</div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-12 text-slate-400 text-sm">
+          <Umbrella className="w-10 h-10 mx-auto mb-2 opacity-20" />
+          <p>Nenhum registro de férias{activeFilters > 0 ? " para os filtros aplicados" : ""}.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-700 text-white">
+                {["Colaborador","Cargo","Empresa","P. Aquisitivo","P. Concessivo","Direito","Férias","Abono","Início","Fim","Retorno","Substituto","Status",""].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((v, idx) => {
+                const st = VACATION_STATUS[v.status]
+                return (
+                  <tr key={v.id} className={cn("border-b border-slate-100 hover:bg-slate-50 transition-colors", idx % 2 === 0 ? "bg-white" : "bg-slate-50/50")}>
+                    <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{v.member.name}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{v.member.role}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{v.companyName ?? <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap text-[10px]">{fmtPeriod(v.acquisitionStartDate, v.acquisitionEndDate)}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap text-[10px]">{fmtPeriod(v.concessionStartDate, v.concessionEndDate)}</td>
+                    <td className="px-3 py-2.5 text-center text-slate-600">{v.availableDays ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-center text-slate-600">{v.vacationDays ?? "—"}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {v.hasBonus
+                        ? <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 text-[10px] font-medium">Sim — {v.bonusDays ?? 10}d</span>
+                        : <span className="text-slate-300">Não</span>}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fmtDate(v.startDate)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fmtDate(v.endDate)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fmtDate(v.returnDate)}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{v.substitute ?? <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium", st?.color ?? "bg-slate-100 text-slate-600")}>
+                        {st?.label ?? v.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openEdit(v)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(v.id)} className="text-slate-400 hover:text-red-600 transition-colors" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
+      {/* ── Form Modal ── */}
       {showForm && (
         <Modal title={editing ? "Editar Férias" : "Registrar Férias"} onClose={() => setShowForm(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Colaborador" required>
-              <MemberSelect members={members} value={form.memberId} onChange={v => setForm(f => ({ ...f, memberId: v }))} required />
-            </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Período Aquisitivo"><input value={form.acquisitivePeriod} onChange={e => setForm(f => ({ ...f, acquisitivePeriod: e.target.value }))} className={inputClass} placeholder="Ex: 2024/2025" /></Field>
-              <Field label="Dias Disponíveis"><input type="number" value={form.availableDays} onChange={e => setForm(f => ({ ...f, availableDays: e.target.value }))} className={inputClass} placeholder="30" /></Field>
+            {/* Row 1: colaborador + empresa */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Colaborador" required>
+                <MemberSelect members={members} value={form.memberId} onChange={v => setForm(f => ({ ...f, memberId: v }))} required />
+              </Field>
+              <Field label="Empresa" required>
+                <input
+                  value={form.companyName}
+                  onChange={e => setForm(f => ({ ...f, companyName: e.target.value }))}
+                  className={inputClass} placeholder="Nome da empresa..."
+                  required
+                />
+              </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Início"><input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} className={inputClass} /></Field>
-              <Field label="Retorno"><input type="date" value={form.returnDate} onChange={e => setForm(f => ({ ...f, returnDate: e.target.value }))} className={inputClass} /></Field>
+
+            {/* Row 2: período aquisitivo */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Período Aquisitivo — Início" required>
+                <input type="date" value={form.acquisitionStartDate}
+                  onChange={e => setForm(f => ({ ...f, acquisitionStartDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
+              <Field label="Período Aquisitivo — Fim" required>
+                <input type="date" value={form.acquisitionEndDate}
+                  onChange={e => setForm(f => ({ ...f, acquisitionEndDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            {/* Row 3: período concessivo */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Período Concessivo — Início" required>
+                <input type="date" value={form.concessionStartDate}
+                  onChange={e => setForm(f => ({ ...f, concessionStartDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
+              <Field label="Período Concessivo — Fim" required>
+                <input type="date" value={form.concessionEndDate}
+                  onChange={e => setForm(f => ({ ...f, concessionEndDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
+            </div>
+
+            {/* Row 4: dias de direito + dias de férias */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Dias de Direito" required>
+                <input type="number" min="1" max="30" value={form.availableDays}
+                  onChange={e => setForm(f => ({ ...f, availableDays: e.target.value }))}
+                  className={inputClass} placeholder="30" required />
+              </Field>
+              <Field label="Dias de Férias Gozadas" required>
+                <input type="number" min="1" max="30" value={form.vacationDays}
+                  onChange={e => setForm(f => ({ ...f, vacationDays: e.target.value }))}
+                  className={inputClass} placeholder="Ex: 20" required />
+              </Field>
+            </div>
+
+            {/* Row 5: abono */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Abono Pecuniário (vendeu 10 dias?)">
+                <select value={form.hasBonus ? "SIM" : "NAO"}
+                  onChange={e => setForm(f => ({ ...f, hasBonus: e.target.value === "SIM", bonusDays: e.target.value === "SIM" ? "10" : "" }))}
+                  className={selectClass}>
+                  <option value="NAO">Não</option>
+                  <option value="SIM">Sim</option>
+                </select>
+              </Field>
+              {form.hasBonus && (
+                <Field label="Dias de Abono">
+                  <input type="number" min="1" max="10" value={form.bonusDays}
+                    onChange={e => setForm(f => ({ ...f, bonusDays: e.target.value }))}
+                    className={inputClass} placeholder="10" />
+                </Field>
+              )}
+            </div>
+
+            {/* Validation info */}
+            {form.availableDays && form.vacationDays && (
+              <div className={cn("text-xs rounded-lg px-3 py-2",
+                (Number(form.vacationDays) + (form.hasBonus ? Number(form.bonusDays || 10) : 0)) > Number(form.availableDays)
+                  ? "bg-red-50 text-red-700 border border-red-200"
+                  : "bg-green-50 text-green-700 border border-green-200"
+              )}>
+                {(() => {
+                  const dir = Number(form.availableDays)
+                  const vac = Number(form.vacationDays)
+                  const bon = form.hasBonus ? Number(form.bonusDays || 10) : 0
+                  const total = vac + bon
+                  return total > dir
+                    ? `⚠️ Férias (${vac}) + abono (${bon}) = ${total} dias excede os ${dir} dias de direito.`
+                    : `✓ Férias: ${vac}d${bon > 0 ? ` + Abono: ${bon}d` : ""} = ${total}/${dir} dias de direito.`
+                })()}
+              </div>
+            )}
+
+            {/* Row 6: datas de início/fim/retorno */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="Início das Férias" required>
+                <input type="date" value={form.startDate}
+                  onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
+              <Field label="Fim das Férias" required>
+                <input type="date" value={form.endDate}
+                  onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+                  className={inputClass} required />
+                <p className="text-[10px] text-slate-400 mt-1">Calculado automaticamente. Edite se necessário.</p>
+              </Field>
+              <Field label="Retorno ao Trabalho" required>
+                <input type="date" value={form.returnDate}
+                  onChange={e => setForm(f => ({ ...f, returnDate: e.target.value }))}
+                  className={inputClass} required />
+              </Field>
+            </div>
+
+            {/* Status + substituto */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Status">
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={selectClass}>
                   {Object.entries(VACATION_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
               </Field>
-              <Field label="Substituto"><input value={form.substitute} onChange={e => setForm(f => ({ ...f, substitute: e.target.value }))} className={inputClass} /></Field>
+              <Field label="Substituto">
+                <input value={form.substitute} onChange={e => setForm(f => ({ ...f, substitute: e.target.value }))}
+                  className={inputClass} placeholder="Nome do substituto..." />
+              </Field>
             </div>
-            <Field label="Observações"><textarea value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} rows={2} className={inputClass} /></Field>
+
+            <Field label="Observações">
+              <textarea value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))}
+                rows={2} className={inputClass} />
+            </Field>
+
+            {formSuccess && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5 text-sm text-green-700">
+                ✓ {formSuccess}
+              </div>
+            )}
+
+            {formError && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-700">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                {formError}
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editing ? "Salvar" : "Registrar"}</Button>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
@@ -1048,7 +1544,7 @@ function TabTreinamentos({ members }: { members: Member[] }) {
             </Field>
             <Field label="Tema do Treinamento" required><input required value={form.topic} onChange={e => setForm(f => ({ ...f, topic: e.target.value }))} className={inputClass} /></Field>
             <Field label="Objetivo"><textarea value={form.objective} onChange={e => setForm(f => ({ ...f, objective: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Status">
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={selectClass}>
                   {Object.entries(TRAINING_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -1057,7 +1553,7 @@ function TabTreinamentos({ members }: { members: Member[] }) {
               <Field label="Previsto p/"><input type="date" value={form.plannedDate} onChange={e => setForm(f => ({ ...f, plannedDate: e.target.value }))} className={inputClass} /></Field>
               <Field label="Concluído em"><input type="date" value={form.completedDate} onChange={e => setForm(f => ({ ...f, completedDate: e.target.value }))} className={inputClass} /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Responsável"><input value={form.responsible} onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))} className={inputClass} /></Field>
               <Field label="Resultado Esperado"><input value={form.expectedResult} onChange={e => setForm(f => ({ ...f, expectedResult: e.target.value }))} className={inputClass} /></Field>
             </div>
@@ -1224,7 +1720,7 @@ function TabAtividades({ members }: { members: Member[] }) {
             </Field>
             <Field label="Título" required><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} /></Field>
             <Field label="Descrição"><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Prioridade">
                 <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className={selectClass}>
                   {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -1402,7 +1898,7 @@ function TabDiretrizes() {
         <Modal title={editing ? "Editar Diretriz" : "Nova Diretriz"} onClose={() => setShowForm(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Título" required><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} /></Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Categoria" required>
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={selectClass}>
                   {Object.entries(GUIDELINE_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -1456,6 +1952,8 @@ const TABS = [
   { id: "treinamentos",   label: "Treinamentos",   icon: BookOpen },
   { id: "atividades",     label: "Atividades",     icon: Activity },
   { id: "diretrizes",     label: "Diretrizes",     icon: BookMarked },
+  { id: "cargos",         label: "Descrição de Cargos", icon: Briefcase },
+  { id: "procedimentos",  label: "Procedimentos",       icon: ClipboardList },
 ]
 
 export function GestaoEquipeClient() {
@@ -1489,7 +1987,7 @@ export function GestaoEquipeClient() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Gestão de Equipe</h1>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -1509,7 +2007,7 @@ export function GestaoEquipeClient() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors",
                 activeTab === tab.id
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
@@ -1532,6 +2030,8 @@ export function GestaoEquipeClient() {
         {activeTab === "treinamentos"   && <TabTreinamentos members={members} />}
         {activeTab === "atividades"     && <TabAtividades members={members} />}
         {activeTab === "diretrizes"     && <TabDiretrizes />}
+        {activeTab === "cargos"         && <TabCargos />}
+        {activeTab === "procedimentos"  && <TabProcedimentos />}
       </div>
     </div>
   )

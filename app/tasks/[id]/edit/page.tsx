@@ -11,7 +11,7 @@ export default async function EditTaskPage({ params }: { params: { id: string } 
   if (!task) notFound()
 
   return (
-    <div className="max-w-2xl">
+    <div className="w-full max-w-2xl">
       <Link href={`/tasks/${params.id}`} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-6">
         <ArrowLeft className="w-4 h-4" />
         Voltar para a tarefa

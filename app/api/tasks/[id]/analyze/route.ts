@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzeTask } from '@/lib/ai/agents'
-import { isAIConfigured } from '@/lib/ai/openai'
+import { aiService } from '@/lib/ai/gateway'
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const responses = await analyzeTask(params.id)
-    return NextResponse.json({ responses, aiConfigured: isAIConfigured() })
+    return NextResponse.json({ responses, aiConfigured: aiService.isConfigured() })
   } catch (err: unknown) {
     console.error('[analyze] erro:', err)
     return NextResponse.json(
-      { error: 'Erro ao analisar tarefa', aiConfigured: isAIConfigured() },
+      { error: 'Erro ao analisar tarefa', aiConfigured: aiService.isConfigured() },
       { status: 500 }
     )
   }

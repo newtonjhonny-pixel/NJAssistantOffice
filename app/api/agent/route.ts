@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAgentResponse, getOrchestratedResponse } from '@/lib/ai/agents'
 import { prisma } from '@/lib/prisma'
-import { isAIConfigured } from '@/lib/ai/openai'
+import { aiService } from '@/lib/ai/gateway'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       ],
     }).catch(() => {/* ignora erro de log */})
 
-    return NextResponse.json({ ...response, aiConfigured: isAIConfigured() })
+    return NextResponse.json({ ...response, aiConfigured: aiService.isConfigured() })
   } catch (err: unknown) {
     console.error('[agent] erro:', err)
     return NextResponse.json({
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       agentName: agent,
       icon: '⚠️',
       aiPowered: false,
-      aiConfigured: isAIConfigured(),
+      aiConfigured: aiService.isConfigured(),
       content: 'Ocorreu um erro ao processar sua solicitação. Tente novamente em instantes.',
     })
   }

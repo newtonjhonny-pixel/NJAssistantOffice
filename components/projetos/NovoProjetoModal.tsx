@@ -60,11 +60,11 @@ export function NovoProjetoModal({ onClose, onSaved, initial, editId }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div className="relative max-h-[94vh] w-full overflow-y-auto rounded-2xl bg-white shadow-2xl sm:max-w-xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl z-10">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-2xl border-b border-slate-100 bg-white p-4 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
               <FolderKanban className="w-4 h-4 text-white" />
@@ -124,7 +124,7 @@ export function NovoProjetoModal({ onClose, onSaved, initial, editId }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Data de início</label>
               <input
@@ -145,7 +145,7 @@ export function NovoProjetoModal({ onClose, onSaved, initial, editId }: Props) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Prioridade</label>
               <select

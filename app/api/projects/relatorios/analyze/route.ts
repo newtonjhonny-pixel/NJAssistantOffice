@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callOpenAI, isAIConfigured } from '@/lib/ai/openai'
+import { aiService } from '@/lib/ai/gateway'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +28,7 @@ Organize em seções claras numeradas.`
 Dados dos projetos:
 ${summary}`
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     const fallback = `**Resumo Executivo**
 A análise dos projetos foi processada com base nos dados fornecidos. Configure a chave OPENAI_API_KEY no arquivo .env para obter análises reais com IA.
 
@@ -45,14 +45,15 @@ Revise os projetos atrasados e estabeleça prioridades claras para a equipe.
   }
 
   try {
-    const content = await callOpenAI(
-      [
-        { role: 'system', content: SYSTEM },
-        { role: 'user',   content: USER   },
-      ],
-      { maxTokens: 2000, temperature: 0.6 },
-    )
-    return NextResponse.json({ content, aiPowered: true, aiConfigured: true })
+    const result = await aiService.ask({
+      module: 'projects.relatorios.analyze',
+      specialist: 'PMO corporativo',
+      systemPrompt: SYSTEM,
+      message: USER,
+      maxTokens: 2000,
+      temperature: 0.6,
+    })
+    return NextResponse.json({ content: result.content, aiPowered: result.aiPowered, aiConfigured: true })
   } catch (err) {
     console.error('[relatorios/analyze]', err)
     return NextResponse.json({ error: 'Erro ao analisar', aiConfigured: true }, { status: 500 })

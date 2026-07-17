@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
       { dueDate: 'asc' },
       { createdAt: 'desc' },
     ],
-    include: { history: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    include: {
+      history:    { orderBy: { createdAt: 'desc' }, take: 1 },
+      taskOrigin: true,
+      _count:     { select: { attachments: true } },
+    },
   })
 
   return NextResponse.json(tasks)
@@ -46,18 +50,26 @@ export async function POST(req: NextRequest) {
       create: { id: 'default-user', name: 'Newton', email: 'admin@sistema.local', role: 'admin' },
     })
 
+    // Resolve origin name from originId for backward compat
+    let resolvedOrigin = body.origin ?? null
+    if (body.originId) {
+      const orig = await prisma.taskOrigin.findUnique({ where: { id: body.originId } })
+      if (orig) resolvedOrigin = orig.name
+    }
+
     const task = await prisma.task.create({
       data: {
         title:        body.title,
         description:  body.description,
-        origin:       body.origin,
-        priority:     body.priority    || 'MEDIA',
-        status:       body.status      || 'PENDENTE',
+        origin:       resolvedOrigin,
+        originId:     body.originId  ?? null,
+        priority:     body.priority  || 'MEDIA',
+        status:       body.status    || 'PENDENTE',
         person:       body.person,
         responsible:  body.responsible,
         observations: body.observations,
-        dueDate:    body.dueDate    ? parseLocalDate(body.dueDate) ?? undefined    : undefined,
-        receivedAt: body.receivedAt ? new Date(body.receivedAt)                   : undefined,
+        dueDate:    body.dueDate    ? parseLocalDate(body.dueDate) ?? undefined : undefined,
+        receivedAt: body.receivedAt ? new Date(body.receivedAt)                : undefined,
         userId: 'default-user',
         ...(body.inboxItemId && { inboxItemId: body.inboxItemId }),
       },

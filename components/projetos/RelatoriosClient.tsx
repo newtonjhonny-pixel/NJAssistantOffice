@@ -228,8 +228,8 @@ function KpiCard({ label, value, sub, color = "text-slate-800", bg = "bg-white" 
 
 function IAModal({ result, onClose }: { result: IAResult; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      <div className="flex max-h-[94vh] w-full flex-col rounded-2xl bg-white shadow-2xl sm:max-w-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <Bot className="w-4 h-4 text-violet-600" />
@@ -479,7 +479,7 @@ export function AcompanhamentoGerencialClient() {
 
   // ── Responsáveis únicos ──
   const responsaveis = useMemo(() =>
-    [...new Set(allProjects.map(p => p.responsible).filter(Boolean))] as string[],
+    Array.from(new Set(allProjects.map(p => p.responsible).filter(Boolean))) as string[],
     [allProjects]
   )
 
@@ -634,7 +634,7 @@ export function AcompanhamentoGerencialClient() {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="h-24 bg-slate-200 rounded-xl" />
-        <div className="grid grid-cols-4 gap-3">{[...Array(4)].map((_,i) => <div key={i} className="h-20 bg-slate-200 rounded-xl" />)}</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{[...Array(4)].map((_,i) => <div key={i} className="h-20 bg-slate-200 rounded-xl" />)}</div>
         <div className="h-48 bg-slate-200 rounded-xl" />
       </div>
     )
@@ -699,7 +699,7 @@ export function AcompanhamentoGerencialClient() {
         {/* ── Filters ── */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Filtros</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <select value={filters.responsible} onChange={e => setFilters(f => ({ ...f, responsible: e.target.value }))} className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30">
               <option value="">Todos responsáveis</option>
               {responsaveis.map(r => <option key={r} value={r}>{r}</option>)}
@@ -742,7 +742,7 @@ export function AcompanhamentoGerencialClient() {
         </div>
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <KpiCard label="Total"          value={kpis.total}          color="text-indigo-700" bg="bg-indigo-50 border-indigo-200" />
           <KpiCard label="Em andamento"   value={kpis.emAndamento}    color="text-blue-700"   bg="bg-blue-50 border-blue-200" />
           <KpiCard label="Concluídos"     value={kpis.concluidos}     color="text-green-700"  bg="bg-green-50 border-green-200" />
@@ -751,7 +751,7 @@ export function AcompanhamentoGerencialClient() {
           <KpiCard label="Cancelados"     value={kpis.cancelados}     color="text-red-700"    bg="bg-red-50 border-red-200" />
           <KpiCard label="Progresso médio" value={`${kpis.avgProgress}%`} color="text-indigo-700" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <KpiCard label="Tarefas total"     value={kpis.totalTasks}    />
           <KpiCard label="Tarefas concluídas" value={kpis.doneTasks}    color="text-green-700"  />
           <KpiCard label="Tarefas pendentes"  value={kpis.pendingTasks} color="text-orange-600" />
@@ -785,7 +785,7 @@ export function AcompanhamentoGerencialClient() {
               <span className="w-2 h-2 rounded-full bg-green-500" /> Evolução das Entregas
             </h4>
             <BarChart data={entregasData} color="#22c55e" />
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="text-center p-3 bg-green-50 rounded-xl border border-green-100">
                 <p className="text-2xl font-bold text-green-700">{kpis.doneEntregas}</p>
                 <p className="text-xs text-slate-500 mt-0.5">Concluídas</p>

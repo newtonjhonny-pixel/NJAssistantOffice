@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/Card"
 import { Button } from "@/components/ui/Button"
 import { PRIORITY_LABELS } from "@/lib/utils"
 import { ImageUploadZone, PendingImage } from "@/components/tasks/ImageUploadZone"
+import { OrigemSelect } from "@/components/tasks/OrigemSelect"
 import { X, ZoomIn } from "lucide-react"
 
 interface TaskFormProps {
@@ -14,6 +15,7 @@ interface TaskFormProps {
     title: string
     description: string | null
     origin: string | null
+    originId: string | null
     priority: string
     status: string
     person: string | null
@@ -79,10 +81,10 @@ export function TaskForm({ task }: TaskFormProps) {
   const [pendingImages,   setPendingImages]   = useState<PendingImage[]>([])
   const [existingAttachments, setExistingAttachments] = useState<ExistingAttachment[]>([])
   const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null)
+  const [originId, setOriginId] = useState<string | null>(task?.originId ?? null)
   const [form, setForm] = useState({
     title:        task?.title        || "",
     description:  task?.description  || "",
-    origin:       task?.origin       || "",
     priority:     task?.priority     || "MEDIA",
     person:       task?.person       || "",
     responsible:  task?.responsible  || "",
@@ -137,7 +139,7 @@ export function TaskForm({ task }: TaskFormProps) {
         body: JSON.stringify({
           title:        form.title,
           description:  form.description,
-          origin:       form.origin,
+          originId:     originId ?? null,
           priority:     form.priority,
           person:       form.person,
           responsible:  form.responsible,
@@ -234,7 +236,7 @@ export function TaskForm({ task }: TaskFormProps) {
           </div>
 
           {/* Pessoa + Responsável */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Pessoa / Solicitante</label>
               <input
@@ -260,13 +262,14 @@ export function TaskForm({ task }: TaskFormProps) {
           {/* Origem */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Origem</label>
-            <input
-              type="text"
-              value={form.origin}
-              onChange={e => set("origin", e.target.value)}
-              placeholder="E-mail, reunião, demanda interna..."
-              className={inputClass}
+            <OrigemSelect
+              value={originId}
+              onChange={(id) => setOriginId(id)}
+              inputClass={inputClass}
             />
+            <p className="text-xs text-slate-400 mt-1">
+              Use ➕ para cadastrar uma nova origem sem sair desta tela.
+            </p>
           </div>
 
           {/* Observações */}
@@ -294,7 +297,7 @@ export function TaskForm({ task }: TaskFormProps) {
             {existingAttachments.length > 0 && (
               <div>
                 <p className="text-xs text-slate-500 mb-2 font-medium">Imagens salvas:</p>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   {existingAttachments.map(att => (
                     <div key={att.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -342,11 +345,11 @@ export function TaskForm({ task }: TaskFormProps) {
             </p>
           )}
 
-          <div className="flex items-center gap-3 pt-2">
-            <Button type="submit" disabled={saving}>
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
+            <Button type="submit" disabled={saving} className="w-full sm:w-auto">
               {saving ? "Salvando..." : task ? "Salvar alterações" : "Criar tarefa"}
             </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
+            <Button type="button" variant="outline" onClick={() => router.back()} className="w-full sm:w-auto">
               Cancelar
             </Button>
           </div>

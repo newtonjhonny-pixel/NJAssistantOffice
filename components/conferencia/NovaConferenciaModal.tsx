@@ -51,11 +51,11 @@ export function NovaConferenciaModal({ onClose, onSaved, editId, initial }: Prop
   const labelClass = "block text-xs font-medium text-slate-600 mb-1"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="relative flex max-h-[94vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-w-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-600 to-teal-700 shrink-0">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-teal-600 to-teal-700 px-4 py-4 shrink-0 sm:px-6">
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-white" />
             <h2 className="text-sm font-bold text-white">{editId ? "Editar Conferência" : "Nova Conferência"}</h2>
@@ -75,7 +75,7 @@ export function NovaConferenciaModal({ onClose, onSaved, editId, initial }: Prop
             </div>
 
             {/* Tipo + Competência */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Tipo de processo *</label>
                 <select value={form.processType} onChange={set("processType")} className={fieldClass}>
@@ -97,7 +97,7 @@ export function NovaConferenciaModal({ onClose, onSaved, editId, initial }: Prop
             </div>
 
             {/* Analista + Coordenador */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Analista responsável</label>
                 <input value={form.analystName} onChange={set("analystName")}
@@ -111,7 +111,7 @@ export function NovaConferenciaModal({ onClose, onSaved, editId, initial }: Prop
             </div>
 
             {/* Datas */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Data da conferência</label>
                 <input type="date" value={form.conferenceDate} onChange={set("conferenceDate")} className={fieldClass} />
@@ -123,7 +123,7 @@ export function NovaConferenciaModal({ onClose, onSaved, editId, initial }: Prop
             </div>
 
             {/* Status + Prioridade */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Status</label>
                 <select value={form.status} onChange={set("status")} className={fieldClass}>

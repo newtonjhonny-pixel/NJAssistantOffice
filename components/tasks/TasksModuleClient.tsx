@@ -65,7 +65,7 @@ export function TasksModuleClient() {
       )}
 
       {/* Tab bar */}
-      <div className="flex items-end gap-0 border-b border-slate-200 mb-5">
+      <div className="-mx-4 mb-5 flex items-end gap-0 overflow-x-auto border-b border-slate-200 px-4 sm:mx-0 sm:px-0">
         {TABS.map(tab => {
           const Icon   = tab.icon
           const active = activeTab.key === tab.key
@@ -74,7 +74,7 @@ export function TasksModuleClient() {
               key={tab.key}
               onClick={() => goTab(tab.param)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-[1px] whitespace-nowrap",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-all -mb-[1px]",
                 active
                   ? "border-blue-600 text-blue-600 bg-blue-50/40"
                   : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50/60",

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Search, Bell, FileText, Mail, Clock, CheckCheck,
-  Loader2, AlertCircle, Sparkles, X,
+  Loader2, AlertCircle, Sparkles, X, Menu,
 } from "lucide-react"
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS, isOverdue } from "@/lib/utils"
 
@@ -51,11 +51,10 @@ const PAGE_LABELS: Record<string, string> = {
   "/inbox":         "Caixa de Entrada",
   "/agenda":        "Calendário",
   "/tasks":         "Tarefas",
-  "/assistente":    "Assistente NJ",
+  "/especialistas": "Especialistas",
   "/projetos":      "Projetos",
   "/conferencia":   "Conferência",
   "/gestao-equipe": "Gestão de Equipe",
-  "/integracoes":   "Integrações",
 }
 
 const NOTIF_ICONS: Record<string, React.ReactNode> = {
@@ -69,7 +68,11 @@ const NOTIF_ICONS: Record<string, React.ReactNode> = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function TopBar() {
+interface TopBarProps {
+  onMenuClick?: () => void
+}
+
+export function TopBar({ onMenuClick }: TopBarProps) {
   const pathname  = usePathname()
   const router    = useRouter()
 
@@ -193,16 +196,25 @@ export function TopBar() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-4 shrink-0 z-40 relative">
+    <header className="sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-5 lg:px-6">
+
+      <button
+        type="button"
+        onClick={onMenuClick}
+        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 lg:hidden"
+        aria-label="Abrir menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
 
       {/* Title */}
-      <div className="flex-1">
-        <h2 className="text-lg font-semibold text-slate-800">{label}</h2>
-        <p className="text-xs text-slate-400 capitalize">{dateStr}</p>
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-base font-semibold text-slate-800 sm:text-lg">{label}</h2>
+        <p className="hidden truncate text-xs capitalize text-slate-400 sm:block">{dateStr}</p>
       </div>
 
       {/* ── Global Search ── */}
-      <div ref={searchContainerRef} className="relative">
+      <div ref={searchContainerRef} className="relative hidden min-w-0 sm:block">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
@@ -212,7 +224,7 @@ export function TopBar() {
             onChange={e => setSearchQuery(e.target.value)}
             onFocus={() => { if (searchResults) setSearchOpen(true) }}
             placeholder="Busca global… (Ctrl+K)"
-            className="pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-64 transition-all"
+            className="w-44 rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-sm transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 md:w-56 xl:w-64"
           />
           {searchLoading && (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 animate-spin" />
@@ -229,7 +241,7 @@ export function TopBar() {
 
         {/* Search dropdown */}
         {searchOpen && (
-          <div className="absolute right-0 top-full mt-2 w-[480px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-[min(480px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {totalResults === 0 && !searchLoading && (
               <div className="px-5 py-8 text-center text-slate-400 text-sm">
                 <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
@@ -324,7 +336,7 @@ export function TopBar() {
 
         {/* Notification dropdown */}
         {notifOpen && (
-          <div className="absolute right-0 top-full mt-2 w-96 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="absolute right-0 top-full z-50 mt-2 max-h-[75vh] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <div className="flex items-center gap-2">

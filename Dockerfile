@@ -38,6 +38,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 RUN apk add --no-cache openssl
 
@@ -52,6 +53,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copia schema e migrations Prisma para deploy em runtime
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma

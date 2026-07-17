@@ -1,4 +1,4 @@
-import { callOpenAI, isAIConfigured } from '@/lib/ai/openai'
+import { aiService } from '@/lib/ai/gateway'
 import { buildSystemContext } from '@/lib/ai/agents'
 import { buildRedatorSystem } from '@/lib/ai/prompts'
 
@@ -41,7 +41,7 @@ export async function analyzeEmail(
   sender: string,
   senderEmail: string
 ): Promise<EmailAnalysis> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return localAnalysis(subject, body, sender)
   }
 
@@ -65,13 +65,15 @@ Assunto: ${subject}
 
 ${body.slice(0, 2000)}`
 
-    const raw = await callOpenAI(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      { temperature: 0.4, maxTokens: 800 }
-    )
+    const result = await aiService.ask({
+      module: 'email.analyzer',
+      specialist: 'Redator Administrativo',
+      systemPrompt,
+      message: userPrompt,
+      temperature: 0.4,
+      maxTokens: 800,
+    })
+    const raw = result.content
 
     // Extrair JSON da resposta (pode vir com ```json ... ```)
     const jsonMatch = raw.match(/\{[\s\S]*\}/)

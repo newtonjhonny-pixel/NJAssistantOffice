@@ -1,4 +1,4 @@
-import { callOpenAI, isAIConfigured } from './openai'
+import { aiService } from '@/lib/ai/gateway'
 
 const TEAM_SYSTEM = `Você é o Coordenador de Equipe do Newton, especialista em gestão de pessoas, Departamento Pessoal e rotinas administrativas.
 Você auxilia na gestão de colaboradores: feedbacks estruturados, direcionamento de atividades, planos de treinamento e diretrizes operacionais.
@@ -25,7 +25,7 @@ export async function generateFeedbackAI(member: TeamMemberContext, type: string
   }
   const typeLabel = TYPE_LABELS[type] ?? type
 
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       aiPowered: false,
       content: `**${typeLabel} — ${member.name}**
@@ -68,13 +68,17 @@ Estruture o feedback com:
 
 Seja profissional, empático e construtivo.`
 
-  const messages = [{ role: 'user' as const, content: prompt }]
-  const result = await callOpenAI(messages, TEAM_SYSTEM)
-  return { content: result, aiPowered: true }
+  const result = await aiService.ask({
+    module: 'team.feedback',
+    specialist: 'Coordenador de Equipe',
+    systemPrompt: TEAM_SYSTEM,
+    message: prompt,
+  })
+  return { content: result.content, aiPowered: result.aiPowered }
 }
 
 export async function generateDirectionAI(member: TeamMemberContext, title: string, description: string, priority: string, complexity: string): Promise<{ content: string; aiPowered: boolean }> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       aiPowered: false,
       content: `**Direcionamento: ${title}**
@@ -119,13 +123,17 @@ Gere:
 
 Seja claro, objetivo e adequado ao nível de complexidade da tarefa.`
 
-  const messages = [{ role: 'user' as const, content: prompt }]
-  const result = await callOpenAI(messages, TEAM_SYSTEM)
-  return { content: result, aiPowered: true }
+  const result = await aiService.ask({
+    module: 'team.direction',
+    specialist: 'Coordenador de Equipe',
+    systemPrompt: TEAM_SYSTEM,
+    message: prompt,
+  })
+  return { content: result.content, aiPowered: result.aiPowered }
 }
 
 export async function generateTrainingPlanAI(member: TeamMemberContext, topic: string, objective: string): Promise<{ content: string; aiPowered: boolean }> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       aiPowered: false,
       content: `**Plano de Treinamento: ${topic}**
@@ -165,13 +173,17 @@ Estruture o plano com:
 
 Seja prático e adequado ao contexto de rotinas administrativas e de DP.`
 
-  const messages = [{ role: 'user' as const, content: prompt }]
-  const result = await callOpenAI(messages, TEAM_SYSTEM)
-  return { content: result, aiPowered: true }
+  const result = await aiService.ask({
+    module: 'team.training',
+    specialist: 'Coordenador de Equipe',
+    systemPrompt: TEAM_SYSTEM,
+    message: prompt,
+  })
+  return { content: result.content, aiPowered: result.aiPowered }
 }
 
 export async function generateGuidelineAI(title: string, category: string, reason: string): Promise<{ content: string; aiPowered: boolean }> {
-  if (!isAIConfigured()) {
+  if (!aiService.isConfigured()) {
     return {
       aiPowered: false,
       content: `**Diretriz: ${title}**
@@ -220,7 +232,11 @@ Estruture a diretriz com:
 
 Seja direto, prático e use linguagem acessível à equipe operacional.`
 
-  const messages = [{ role: 'user' as const, content: prompt }]
-  const result = await callOpenAI(messages, TEAM_SYSTEM)
-  return { content: result, aiPowered: true }
+  const result = await aiService.ask({
+    module: 'team.guideline',
+    specialist: 'Coordenador de Equipe',
+    systemPrompt: TEAM_SYSTEM,
+    message: prompt,
+  })
+  return { content: result.content, aiPowered: result.aiPowered }
 }

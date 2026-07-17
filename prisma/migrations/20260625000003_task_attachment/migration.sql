@@ -13,4 +13,4 @@ CREATE TABLE IF NOT EXISTS "TaskAttachment" (
 );
 
 -- AddForeignKey
-ALTER TABLE "TaskAttachment" ADD CONSTRAINT IF NOT EXISTS "TaskAttachment_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TaskAttachment" ADD CONSTRAINT "TaskAttachment_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;

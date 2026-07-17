@@ -282,7 +282,7 @@ export function HistoricoClient() {
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[...Array(6)].map((_, i) => <div key={i} className="h-20 bg-slate-200 rounded-xl" />)}
         </div>
         {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-slate-200 rounded-xl" />)}
@@ -295,7 +295,7 @@ export function HistoricoClient() {
     <div className="space-y-5 animate-fade-in">
 
       {/* ── Summary cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <SummaryCard
           label="Total" count={counts.total}
           icon={<Clock className="w-3.5 h-3.5" />}
@@ -343,7 +343,7 @@ export function HistoricoClient() {
       {/* ── Filters row ── */}
       <div className="flex flex-col gap-3">
         {/* Search + date */}
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
@@ -359,7 +359,7 @@ export function HistoricoClient() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-500 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500 shrink-0">
             <span className="text-xs">De</span>
             <input
               type="text"

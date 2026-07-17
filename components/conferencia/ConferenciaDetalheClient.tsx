@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft, ShieldCheck, Pencil, Trash2, Plus, CheckCircle2,
   AlertTriangle, Clock, XCircle, FileCheck, Bot, History,
   ClipboardList, Bug, Wrench, ChevronDown, ChevronUp,
-  Calendar, User, Building2, Sparkles,
+  Calendar, User, Building2, Sparkles, MessageSquare, Send,
+  Printer, ChevronRight,
 } from "lucide-react"
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS } from "@/lib/utils"
 import { PROCESS_TYPE_LABELS, STATUS_LABELS, STATUS_COLORS } from "./ConferenciaClient"
@@ -19,6 +20,10 @@ interface ChecklistItem {
   id: string; description: string; result: string; notes: string | null
   correctionResponsible: string | null; correctionDueDate: string | null
   order: number; createdAt: string
+}
+
+interface ConferenceChatMessage {
+  id: string; role: string; content: string; mode: string | null; createdAt: string
 }
 
 interface Issue {
@@ -236,7 +241,7 @@ export function ConferenciaDetalheClient({ id }: { id: string }) {
           <div className="md:col-span-2 space-y-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Dados da conferência</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <InfoRow label="Tipo" value={PROCESS_TYPE_LABELS[conf.processType] ?? conf.processType} />
                 {conf.competence      && <InfoRow label="Competência"  value={conf.competence} />}
                 {conf.companyUnit     && <InfoRow label="Empresa"      value={conf.companyUnit} />}
@@ -296,7 +301,21 @@ export function ConferenciaDetalheClient({ id }: { id: string }) {
 
       {/* ── CHECKLIST ── */}
       {tab === "checklist" && (
-        <ChecklistTab conferenceId={id} items={conf.checklist} onRefresh={load} />
+        <ChecklistTab
+          conferenceId={id}
+          conf={{
+            title:           conf.title,
+            processType:     conf.processType,
+            competence:      conf.competence,
+            companyUnit:     conf.companyUnit,
+            analystName:     conf.analystName,
+            coordinatorName: conf.coordinatorName,
+            status:          conf.status,
+          }}
+          items={conf.checklist}
+          issues={conf.issues}
+          onRefresh={load}
+        />
       )}
 
       {/* ── INCONSISTÊNCIAS ── */}
@@ -452,20 +471,193 @@ function AiAnalysisCard({ analysis }: { analysis: AiAnalysis }) {
   )
 }
 
+// ─── PDF builder ─────────────────────────────────────────────────────────────
+
+function buildChecklistPdf(
+  conf: { title: string; processType: string; competence: string | null; companyUnit: string | null; analystName: string | null; coordinatorName: string | null; status: string },
+  items: ChecklistItem[],
+  opinion?: string
+): string {
+  const RESULT_PT: Record<string, string> = {
+    CONFORME: 'Conforme', NAO_CONFORME: 'Não Conforme',
+    NAO_APLICA: 'Não se aplica', PENDENTE_ANALISE: 'Pendente de análise',
+  }
+  const RESULT_COLOR: Record<string, string> = {
+    CONFORME: '#16a34a', NAO_CONFORME: '#dc2626',
+    NAO_APLICA: '#64748b', PENDENTE_ANALISE: '#d97706',
+  }
+  const STATUS_PT: Record<string, string> = {
+    PENDENTE: 'Pendente', EM_CONFERENCIA: 'Em conferência',
+    COM_INCONSISTENCIA: 'Com inconsistência', AGUARDANDO_CORRECAO: 'Aguardando correção',
+    CORRIGIDO: 'Corrigido', APROVADO: 'Aprovado', REPROVADO: 'Reprovado',
+  }
+  const PROCESS_PT: Record<string, string> = {
+    FOLHA: 'Folha de Pagamento', RESCISAO: 'Rescisão', FERIAS: 'Férias',
+    ADMISSAO: 'Admissão', BENEFICIOS: 'Benefícios', ENCARGOS: 'Encargos',
+    PAGAMENTO: 'Pagamento', MOVIMENTACAO: 'Movimentação', PONTO: 'Controle de Ponto',
+    ESOCIAL: 'eSocial', FGTS: 'FGTS', IRRF: 'IRRF', DCTFWEB: 'DCTFWeb', OUTROS: 'Outros',
+  }
+
+  const conforme    = items.filter(i => i.result === 'CONFORME').length
+  const naoConforme = items.filter(i => i.result === 'NAO_CONFORME').length
+  const pendente    = items.filter(i => i.result === 'PENDENTE_ANALISE').length
+  const emitDate    = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  const emitTime    = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  const itemsHtml = items.map((item, idx) => `
+    <div class="item ${item.result === 'NAO_CONFORME' ? 'item-nc' : item.result === 'CONFORME' ? 'item-ok' : ''}">
+      <div class="item-header">
+        <span class="item-num">${idx + 1}</span>
+        <span class="item-desc">${item.description}</span>
+        <span class="item-status" style="color:${RESULT_COLOR[item.result] ?? '#64748b'}">${RESULT_PT[item.result] ?? item.result}</span>
+      </div>
+      ${item.notes ? `<div class="item-note">📝 ${item.notes}</div>` : ''}
+    </div>
+  `).join('')
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Checklist — ${conf.title}</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1e293b; padding: 14mm 18mm; background: #fff; }
+  .header { border-bottom: 3pt solid #0d9488; padding-bottom: 10pt; margin-bottom: 12pt; }
+  .title { font-size: 17pt; font-weight: 700; color: #134e4a; margin-bottom: 4pt; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8pt; font-size: 8.5pt; color: #475569; margin-top: 6pt; }
+  .meta span { display: flex; gap: 3pt; }
+  .meta strong { color: #1e293b; }
+  .summary { display: flex; gap: 8pt; margin: 10pt 0; }
+  .sumbox { flex: 1; border-radius: 6pt; padding: 6pt 10pt; text-align: center; }
+  .sumbox .num { font-size: 18pt; font-weight: 700; }
+  .sumbox .lbl { font-size: 7.5pt; margin-top: 1pt; }
+  .sumbox-ok  { background: #f0fdf4; border: 1pt solid #86efac; color: #16a34a; }
+  .sumbox-nc  { background: #fef2f2; border: 1pt solid #fca5a5; color: #dc2626; }
+  .sumbox-pd  { background: #fffbeb; border: 1pt solid #fcd34d; color: #d97706; }
+  .sumbox-tot { background: #f8fafc; border: 1pt solid #cbd5e1; color: #334155; }
+  .section-title { font-size: 9pt; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5pt; margin: 12pt 0 6pt; border-bottom: 1pt solid #e2e8f0; padding-bottom: 3pt; }
+  .item { padding: 6pt 0; border-bottom: 0.5pt solid #f1f5f9; }
+  .item-ok  { background: #f8fffe; }
+  .item-nc  { background: #fff8f8; }
+  .item-header { display: flex; align-items: flex-start; gap: 6pt; }
+  .item-num  { font-size: 8pt; color: #94a3b8; width: 14pt; shrink: 0; padding-top: 1pt; }
+  .item-desc { flex: 1; font-size: 9.5pt; color: #1e293b; line-height: 1.4; }
+  .item-status { font-size: 8pt; font-weight: 700; white-space: nowrap; min-width: 80pt; text-align: right; }
+  .item-note { margin: 3pt 0 0 20pt; font-size: 8.5pt; color: #475569; font-style: italic; background: #f8fafc; border-left: 2pt solid #94a3b8; padding: 3pt 7pt; }
+  .opinion { margin-top: 12pt; background: #f0fdfa; border: 1pt solid #99f6e4; border-radius: 6pt; padding: 10pt; }
+  .opinion-title { font-size: 9pt; font-weight: 700; color: #0f766e; margin-bottom: 5pt; }
+  .opinion-text { font-size: 9pt; color: #134e4a; line-height: 1.5; white-space: pre-wrap; }
+  .footer { border-top: 1pt solid #e2e8f0; padding-top: 6pt; margin-top: 14pt; font-size: 7.5pt; color: #94a3b8; display: flex; justify-content: space-between; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">Checklist de Conferência</div>
+  <div style="font-size:13pt;font-weight:600;color:#0f766e;margin:3pt 0">${conf.title}</div>
+  <div class="meta">
+    <span><strong>Tipo:</strong> ${PROCESS_PT[conf.processType] ?? conf.processType}</span>
+    ${conf.competence   ? `<span><strong>Competência:</strong> ${conf.competence}</span>` : ''}
+    ${conf.companyUnit  ? `<span><strong>Empresa:</strong> ${conf.companyUnit}</span>` : ''}
+    ${conf.analystName  ? `<span><strong>Analista:</strong> ${conf.analystName}</span>` : ''}
+    ${conf.coordinatorName ? `<span><strong>Coordenador:</strong> ${conf.coordinatorName}</span>` : ''}
+    <span><strong>Status:</strong> ${STATUS_PT[conf.status] ?? conf.status}</span>
+    <span><strong>Emissão:</strong> ${emitDate} às ${emitTime}</span>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="sumbox sumbox-tot"><div class="num">${items.length}</div><div class="lbl">Total</div></div>
+  <div class="sumbox sumbox-ok"><div class="num">${conforme}</div><div class="lbl">Conformes</div></div>
+  <div class="sumbox sumbox-nc"><div class="num">${naoConforme}</div><div class="lbl">Não conformes</div></div>
+  <div class="sumbox sumbox-pd"><div class="num">${pendente}</div><div class="lbl">Pendentes</div></div>
+</div>
+
+<div class="section-title">Itens do Checklist</div>
+${items.length > 0 ? itemsHtml : '<p style="font-size:9pt;color:#94a3b8">Nenhum item cadastrado.</p>'}
+
+${opinion ? `<div class="opinion"><div class="opinion-title">✦ Parecer Final da Conferência</div><div class="opinion-text">${opinion.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>` : ''}
+
+<div class="footer">
+  <span>Emitido em ${emitDate} às ${emitTime}</span>
+  <span>Checklist de Conferência — Uso Interno</span>
+</div>
+
+</body>
+</html>`
+}
+
 // ─── Checklist tab ────────────────────────────────────────────────────────────
 
-function ChecklistTab({ conferenceId, items, onRefresh }: { conferenceId: string; items: ChecklistItem[]; onRefresh: () => void }) {
-  const [showForm,  setShowForm]  = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [desc, setDesc]  = useState("")
-  const [saving, setSaving] = useState(false)
+const CHECKLIST_AI_ACTIONS = [
+  { mode: "analyze-checklist",  label: "Analisar checklist",          icon: "🔎" },
+  { mode: "suggest-items",      label: "Sugerir itens",               icon: "💡" },
+  { mode: "identify-risks",     label: "Identificar riscos",          icon: "⚠️" },
+  { mode: "suggest-annotation", label: "Sugerir anotação",            icon: "📝" },
+  { mode: "generate-opinion",   label: "Gerar parecer",               icon: "📋" },
+  { mode: "suggest-correction", label: "Sugerir correção",            icon: "🔧" },
+  { mode: "summarize-checklist",label: "Resumo do checklist",         icon: "📊" },
+  { mode: "review-item",        label: "Revisar itens",               icon: "✅" },
+]
 
+const PROCESS_SPECIALIST: Record<string, string> = {
+  FOLHA: 'Folha de Pagamento', RESCISAO: 'Rescisão Contratual', FERIAS: 'Férias',
+  ADMISSAO: 'Admissão', BENEFICIOS: 'Benefícios', ENCARGOS: 'Encargos Sociais',
+  PAGAMENTO: 'Financeiro', MOVIMENTACAO: 'RH e Movimentação', PONTO: 'Controle de Ponto',
+  ESOCIAL: 'eSocial', FGTS: 'FGTS', IRRF: 'IRRF', DCTFWEB: 'DCTFWeb', OUTROS: 'Administrativo',
+}
+
+function ChecklistTab({
+  conferenceId, conf, items, issues, onRefresh,
+}: {
+  conferenceId: string
+  conf: { title: string; processType: string; competence: string | null; companyUnit: string | null; analystName: string | null; coordinatorName: string | null; status: string }
+  items: ChecklistItem[]
+  issues: Issue[]
+  onRefresh: () => void
+}) {
+  // list state
+  const [showForm,   setShowForm]   = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [desc,       setDesc]       = useState("")
+  const [saving,     setSaving]     = useState(false)
+
+  // annotation state: itemId → draft text
+  const [expandedAnnotation, setExpandedAnnotation] = useState<string | null>(null)
+  const [annotationDraft,    setAnnotationDraft]    = useState<Record<string, string>>({})
+  const [savingAnnotation,   setSavingAnnotation]   = useState<string | null>(null)
+
+  // AI chat state
+  const [chatMessages, setChatMessages] = useState<ConferenceChatMessage[]>([])
+  const [chatInput,    setChatInput]    = useState("")
+  const [chatLoading,  setChatLoading]  = useState(false)
+  const [specialist,   setSpecialist]   = useState(PROCESS_SPECIALIST[conf.processType] ?? "Administrativo")
+  const [showChat,     setShowChat]     = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+
+  // opinion captured from AI (for PDF)
+  const [opinion, setOpinion] = useState("")
+
+  // Load chat history
+  useEffect(() => {
+    fetch(`/api/conferencia/${conferenceId}/checklist-chat`)
+      .then(r => r.json())
+      .then(d => Array.isArray(d) && setChatMessages(d))
+  }, [conferenceId])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
+
+  // ── item CRUD ──────────────────────────────────────────────────────────────
   async function addItem() {
     if (!desc.trim()) return
     setSaving(true)
     await fetch(`/api/conferencia/${conferenceId}/checklist`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: desc.trim() }),
     })
     setSaving(false); setDesc(""); setShowForm(false); onRefresh()
@@ -473,8 +665,7 @@ function ChecklistTab({ conferenceId, items, onRefresh }: { conferenceId: string
 
   async function updateResult(itemId: string, result: string) {
     await fetch(`/api/conferencia/${conferenceId}/checklist/${itemId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ result }),
     })
     onRefresh()
@@ -485,49 +676,144 @@ function ChecklistTab({ conferenceId, items, onRefresh }: { conferenceId: string
     onRefresh()
   }
 
+  // ── annotation ────────────────────────────────────────────────────────────
+  function toggleAnnotation(itemId: string, currentNote: string | null) {
+    if (expandedAnnotation === itemId) {
+      setExpandedAnnotation(null)
+    } else {
+      setExpandedAnnotation(itemId)
+      setAnnotationDraft(prev => ({ ...prev, [itemId]: currentNote ?? "" }))
+    }
+  }
+
+  async function saveAnnotation(itemId: string) {
+    setSavingAnnotation(itemId)
+    await fetch(`/api/conferencia/${conferenceId}/checklist/${itemId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: annotationDraft[itemId] ?? "" }),
+    })
+    setSavingAnnotation(null)
+    setExpandedAnnotation(null)
+    onRefresh()
+    // log history
+    await fetch(`/api/conferencia/${conferenceId}/history`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "ITEM_CONFERIDO",
+        title: "Anotação registrada em item do checklist",
+        description: annotationDraft[itemId] ? `Anotação: "${annotationDraft[itemId].slice(0, 80)}${annotationDraft[itemId].length > 80 ? '...' : ''}"` : "Anotação removida",
+      }),
+    }).catch(() => {})
+  }
+
+  async function deleteAnnotation(itemId: string) {
+    await fetch(`/api/conferencia/${conferenceId}/checklist/${itemId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: "" }),
+    })
+    setAnnotationDraft(prev => ({ ...prev, [itemId]: "" }))
+    setExpandedAnnotation(null)
+    onRefresh()
+  }
+
+  // ── generate checklist ────────────────────────────────────────────────────
   async function generateChecklist() {
     setGenerating(true)
     const res = await fetch(`/api/conferencia/${conferenceId}/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ analysisType: "CHECKLIST_SUGERIDO" }),
     })
     setGenerating(false)
     if (!res.ok) return
     const data = await res.json()
-    // Parse numbered list from AI content
     const lines = (data.content as string).split('\n')
-      .map(l => l.replace(/^\d+\.\s*/, '').trim())
-      .filter(l => l.length > 4 && !l.startsWith('#') && !l.startsWith('*') && !l.startsWith('—') && !l.startsWith('-'))
+      .map((l: string) => l.replace(/^\d+\.\s*/, '').trim())
+      .filter((l: string) => l.length > 4 && !l.startsWith('#') && !l.startsWith('*') && !l.startsWith('—') && !l.startsWith('-'))
       .slice(0, 20)
     if (lines.length > 0) {
       await fetch(`/api/conferencia/${conferenceId}/checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lines.map(d => ({ description: d }))),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lines.map((d: string) => ({ description: d }))),
       })
       onRefresh()
     }
   }
 
+  // ── AI chat ───────────────────────────────────────────────────────────────
+  async function sendChat(message: string, mode?: string) {
+    if (!message.trim()) return
+    const userMsg: ConferenceChatMessage = {
+      id: `tmp-${Date.now()}`, role: "user", content: message, mode: mode || null, createdAt: new Date().toISOString(),
+    }
+    setChatMessages(prev => [...prev, userMsg])
+    setChatInput("")
+    setChatLoading(true)
+    try {
+      const res  = await fetch(`/api/conferencia/${conferenceId}/checklist-chat`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, mode }),
+      })
+      const data = await res.json()
+      if (data.specialist) setSpecialist(data.specialist)
+      // capture opinion for PDF
+      if (mode === "generate-opinion") setOpinion(data.response)
+      const asstMsg: ConferenceChatMessage = {
+        id: data.id || `tmp-ai-${Date.now()}`, role: "assistant", content: data.response, mode: mode || null, createdAt: new Date().toISOString(),
+      }
+      setChatMessages(prev => [...prev.filter(m => m.id !== userMsg.id), { ...userMsg, id: `u-${Date.now()}` }, asstMsg])
+    } catch {
+      setChatMessages(prev => [...prev, {
+        id: `err-${Date.now()}`, role: "assistant", content: "Erro ao conectar com o assistente.", mode: null, createdAt: new Date().toISOString(),
+      }])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  async function clearChat() {
+    await fetch(`/api/conferencia/${conferenceId}/checklist-chat`, { method: "DELETE" })
+    setChatMessages([])
+    setOpinion("")
+  }
+
+  // ── PDF ───────────────────────────────────────────────────────────────────
+  function printPdf() {
+    const html = buildChecklistPdf(conf, items, opinion || undefined)
+    const win  = window.open("", "_blank", "width=900,height=700,scrollbars=yes")
+    if (!win) { alert("Popup bloqueado. Permita pop-ups para exportar o PDF."); return }
+    win.document.write(html)
+    win.document.close()
+    setTimeout(() => { try { win.print() } catch { /* ignore */ } }, 500)
+  }
+
   const summary = {
-    conforme: items.filter(i => i.result === "CONFORME").length,
+    conforme:    items.filter(i => i.result === "CONFORME").length,
     naoConforme: items.filter(i => i.result === "NAO_CONFORME").length,
-    pendente: items.filter(i => i.result === "PENDENTE_ANALISE").length,
+    pendente:    items.filter(i => i.result === "PENDENTE_ANALISE").length,
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      {/* ── toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 text-xs text-slate-500">
           <span className="text-green-600 font-medium">✓ {summary.conforme} conformes</span>
           <span className="text-red-600 font-medium">✗ {summary.naoConforme} não conformes</span>
           <span className="text-yellow-600 font-medium">? {summary.pendente} pendentes</span>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={printPdf}
+            className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-lg px-3 py-1.5 transition-colors">
+            <Printer className="w-3.5 h-3.5" /> Exportar PDF
+          </button>
+          <button onClick={() => setShowChat(v => !v)}
+            className={cn("flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors",
+              showChat ? "bg-teal-600 text-white border-teal-600" : "text-teal-600 border-teal-200 hover:bg-teal-50")}>
+            <Bot className="w-3.5 h-3.5" /> Assistente IA
+          </button>
           <button onClick={generateChecklist} disabled={generating}
             className="flex items-center gap-1.5 text-xs text-teal-600 border border-teal-200 hover:bg-teal-50 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
-            <Bot className="w-3.5 h-3.5" /> {generating ? "Gerando..." : "Sugerir com IA"}
+            <Sparkles className="w-3.5 h-3.5" /> {generating ? "Gerando..." : "Sugerir itens"}
           </button>
           <button onClick={() => setShowForm(v => !v)}
             className="flex items-center gap-1.5 text-xs text-slate-700 border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-1.5 transition-colors">
@@ -536,10 +822,12 @@ function ChecklistTab({ conferenceId, items, onRefresh }: { conferenceId: string
         </div>
       </div>
 
+      {/* ── add form ── */}
       {showForm && (
         <div className="flex gap-2 bg-teal-50 border border-teal-200 rounded-xl p-3">
           <input value={desc} onChange={e => setDesc(e.target.value)}
             placeholder="Descrição do item de verificação..."
+            autoFocus
             onKeyDown={e => e.key === "Enter" && addItem()}
             className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400" />
           <button onClick={addItem} disabled={saving || !desc.trim()}
@@ -550,27 +838,197 @@ function ChecklistTab({ conferenceId, items, onRefresh }: { conferenceId: string
         </div>
       )}
 
+      {/* ── item list ── */}
       {items.length === 0 ? (
-        <EmptyState icon={<ClipboardList className="w-10 h-10 text-slate-200" />} message="Nenhum item no checklist" hint='Adicione itens manualmente ou use "Sugerir com IA"' />
+        <EmptyState icon={<ClipboardList className="w-10 h-10 text-slate-200" />}
+          message="Nenhum item no checklist"
+          hint='Adicione itens manualmente ou use "Sugerir itens"' />
       ) : (
-        <div className="space-y-1.5">
-          {items.map(item => (
-            <div key={item.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-700 font-medium">{item.description}</p>
-                {item.notes && <p className="text-xs text-slate-500 mt-0.5">{item.notes}</p>}
+        <div className="space-y-2">
+          {items.map(item => {
+            const isExpanded = expandedAnnotation === item.id
+            const draft      = annotationDraft[item.id] ?? item.notes ?? ""
+
+            return (
+              <div key={item.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                {/* item row */}
+                <div className="px-4 py-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 font-medium">{item.description}</p>
+                    {item.notes && !isExpanded && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mt-1.5 italic">
+                        📝 {item.notes}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* annotation toggle */}
+                    <button
+                      onClick={() => toggleAnnotation(item.id, item.notes)}
+                      title={item.notes ? "Ver/editar anotação" : "Adicionar anotação"}
+                      className={cn(
+                        "flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg border transition-colors",
+                        item.notes
+                          ? "text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                          : "text-slate-400 border-slate-200 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50"
+                      )}
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      {item.notes ? "1 anotação" : "Anotar"}
+                    </button>
+                    {/* status */}
+                    <select value={item.result} onChange={e => updateResult(item.id, e.target.value)}
+                      className={cn("text-xs border rounded-full px-2.5 py-0.5 font-medium focus:outline-none", RESULT_COLORS[item.result])}>
+                      {Object.entries(RESULT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <button onClick={() => deleteItem(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* annotation panel */}
+                {isExpanded && (
+                  <div className="border-t border-amber-100 bg-amber-50 px-4 py-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-amber-700 uppercase">Anotação do item</p>
+                    <textarea
+                      rows={3}
+                      autoFocus
+                      value={draft}
+                      onChange={e => setAnnotationDraft(prev => ({ ...prev, [item.id]: e.target.value }))}
+                      placeholder="Registre observações, irregularidades ou encaminhamentos sobre este item..."
+                      className="w-full text-sm border border-amber-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white resize-none"
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-slate-400">
+                        {new Date().toLocaleDateString('pt-BR')} — {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <div className="flex gap-2">
+                        {item.notes && (
+                          <button onClick={() => deleteAnnotation(item.id)}
+                            className="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-2.5 py-1 transition-colors">
+                            Remover
+                          </button>
+                        )}
+                        <button onClick={() => { setExpandedAnnotation(null) }}
+                          className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1 hover:bg-slate-100 transition-colors">
+                          Cancelar
+                        </button>
+                        <button onClick={() => saveAnnotation(item.id)} disabled={savingAnnotation === item.id}
+                          className="text-xs text-white bg-amber-600 hover:bg-amber-700 rounded-lg px-3 py-1 transition-colors disabled:opacity-50">
+                          {savingAnnotation === item.id ? "Salvando..." : "Salvar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <select value={item.result} onChange={e => updateResult(item.id, e.target.value)}
-                  className={cn("text-xs border rounded-full px-2.5 py-0.5 font-medium focus:outline-none", RESULT_COLORS[item.result])}>
-                  {Object.entries(RESULT_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                <button onClick={() => deleteItem(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── IA chat panel ── */}
+      {showChat && (
+        <div className="border border-teal-200 rounded-2xl overflow-hidden bg-white">
+          {/* specialist header */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs font-semibold text-white">
+                Especialista em {specialist} · Assistente de Checklist
+              </span>
             </div>
-          ))}
+            <button onClick={() => setShowChat(false)} className="text-white/70 hover:text-white text-xs">✕</button>
+          </div>
+
+          {/* quick actions */}
+          <div className="border-b border-teal-100 px-4 py-2 bg-teal-50">
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+              {CHECKLIST_AI_ACTIONS.map(a => (
+                <button key={a.mode} type="button"
+                  onClick={() => sendChat(a.label, a.mode)}
+                  disabled={chatLoading}
+                  className="flex items-center gap-1 text-[11px] font-medium whitespace-nowrap px-2.5 py-1 rounded-full border border-teal-200 bg-white text-teal-700 hover:border-teal-400 hover:bg-teal-50 transition-colors shrink-0 disabled:opacity-40">
+                  <span>{a.icon}</span>{a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* messages */}
+          <div className="h-72 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50">
+            {chatMessages.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full text-center py-4">
+                <Bot className="w-8 h-8 text-teal-300 mb-2" />
+                <p className="text-xs font-medium text-slate-600">Assistente de Checklist</p>
+                <p className="text-[11px] text-slate-400 max-w-xs mt-1">
+                  Use as ações rápidas ou envie uma mensagem para analisar este checklist com IA especialista.
+                </p>
+              </div>
+            )}
+            {chatMessages.map((msg, idx) => {
+              const isUser = msg.role === "user"
+              return (
+                <div key={`${msg.id}-${idx}`} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+                  {!isUser && (
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                      <Bot className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  <div className={cn(
+                    "rounded-2xl px-3 py-2 text-xs max-w-[85%] whitespace-pre-wrap leading-relaxed",
+                    isUser
+                      ? "bg-teal-600 text-white rounded-tr-sm"
+                      : "bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm"
+                  )}>
+                    {msg.content}
+                  </div>
+                </div>
+              )
+            })}
+            {chatLoading && (
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shrink-0">
+                  <Bot className="w-3 h-3 text-white" />
+                </div>
+                <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm">
+                  <div className="flex gap-1">
+                    {[0,1,2].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* input */}
+          <div className="border-t border-slate-200 p-3 bg-white">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] text-slate-400">
+                Especialista em <span className="text-teal-600 font-medium">{specialist}</span>
+              </p>
+              {chatMessages.length > 0 && (
+                <button onClick={clearChat} className="text-[10px] text-slate-400 hover:text-red-500 transition-colors">
+                  Limpar conversa
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(chatInput) } }}
+                placeholder="Pergunte sobre este checklist..."
+                disabled={chatLoading}
+                className="flex-1 text-sm px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 disabled:opacity-50"
+              />
+              <button onClick={() => sendChat(chatInput)} disabled={chatLoading || !chatInput.trim()}
+                className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-colors disabled:opacity-40">
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -632,7 +1090,7 @@ function IssuesTab({ conferenceId, issues, onRefresh }: { conferenceId: string; 
           <h4 className="text-sm font-semibold text-slate-700">Nova inconsistência</h4>
           <input value={form.title} onChange={set("title")} required placeholder="Título do problema *"
             className={fieldClass} />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <select value={form.severity} onChange={set("severity")} className={fieldClass}>
               {Object.entries(SEVERITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
@@ -749,7 +1207,7 @@ function CorrecoesTab({ conferenceId, corrections, issues, onRefresh }: {
               {issues.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
             </select>
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <input value={form.responsible} onChange={set("responsible")} placeholder="Responsável" className={fieldClass} />
             <input type="date" value={form.dueDate} onChange={set("dueDate")} className={fieldClass} />
           </div>

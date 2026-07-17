@@ -13,6 +13,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       statusHistory: { orderBy: { createdAt: 'asc'  } },
       suggestions:   { orderBy: { createdAt: 'desc' } },
       attachments:   { orderBy: { createdAt: 'asc'  } },
+      chats:         { orderBy: { createdAt: 'asc'  } },
+      taskOrigin:    true,
     },
   })
 
@@ -28,15 +30,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // Status changes must go through /api/tasks/[id]/status
   const { status: _ignored, ...safeBody } = body
 
+  // Resolve origin text when originId is provided but origin text is not explicitly set
+  let resolvedOriginText: string | null | undefined = undefined
+  if (safeBody.originId !== undefined && safeBody.origin === undefined) {
+    if (safeBody.originId === null) {
+      resolvedOriginText = null
+    } else {
+      const originRecord = await prisma.taskOrigin.findUnique({
+        where: { id: safeBody.originId },
+        select: { name: true },
+      })
+      resolvedOriginText = originRecord?.name ?? null
+    }
+  }
+
   const task = await prisma.task.update({
     where: { id: params.id },
     data: {
-      ...(safeBody.title       !== undefined && { title:       safeBody.title }),
-      ...(safeBody.description !== undefined && { description: safeBody.description }),
-      ...(safeBody.origin      !== undefined && { origin:      safeBody.origin }),
-      ...(safeBody.priority    !== undefined && { priority:    safeBody.priority }),
-      ...(safeBody.person      !== undefined && { person:      safeBody.person }),
-      ...(safeBody.responsible !== undefined && { responsible: safeBody.responsible }),
+      ...(safeBody.title        !== undefined && { title:        safeBody.title }),
+      ...(safeBody.description  !== undefined && { description:  safeBody.description }),
+      ...(safeBody.origin       !== undefined && { origin:       safeBody.origin }),
+      ...(safeBody.originId     !== undefined && { originId:     safeBody.originId ?? null }),
+      ...(resolvedOriginText    !== undefined && { origin:       resolvedOriginText }),
+      ...(safeBody.priority     !== undefined && { priority:     safeBody.priority }),
+      ...(safeBody.person       !== undefined && { person:       safeBody.person }),
+      ...(safeBody.responsible  !== undefined && { responsible:  safeBody.responsible }),
       ...(safeBody.observations !== undefined && { observations: safeBody.observations }),
       ...(safeBody.dueDate    !== undefined && { dueDate:    safeBody.dueDate    ? parseLocalDate(safeBody.dueDate) : null }),
       ...(safeBody.receivedAt !== undefined && { receivedAt: safeBody.receivedAt ? new Date(safeBody.receivedAt)   : null }),

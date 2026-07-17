@@ -1,7 +1,5 @@
-import { IntegracoesClient } from "@/components/integracoes/IntegracoesClient"
-
-export const dynamic = "force-dynamic"
+import { redirect } from "next/navigation"
 
 export default function IntegracoesPage() {
-  return <IntegracoesClient />
+  redirect("/")
 }
