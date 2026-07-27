@@ -17,6 +17,7 @@ model User {
 
   tasks             Task[]
   agentInteractions AgentInteraction[]
+  presentations     Presentation[]
 }
 
 model TaskOrigin {
@@ -1003,5 +1004,58 @@ model NoteHistory {
   type        String
   title       String
   description String?
+  createdAt   DateTime @default(now())
+}
+
+// ─── APRESENTAÇÕES ────────────────────────────────────────────────────────────
+
+model Presentation {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        String   // slides | organogram | flowchart | mindmap | timeline | process | infographic | report
+  status      String   @default("draft") // draft | editing | done | archived | deleted
+  content     String?  // JSON serializado
+  thumbnail   String?
+  favorite    Boolean  @default(false)
+  tags        String?  // JSON array
+  objective   String?
+  audience    String?
+  linkedTo    String?  // JSON: { type: string, id: string }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String   @default("default-user")
+  user        User     @relation(fields: [userId], references: [id])
+
+  versions PresentationVersion[]
+  history  PresentationHistory[]
+}
+
+model PresentationVersion {
+  id             String       @id @default(cuid())
+  presentationId String
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  label          String?
+  content        String
+  createdAt      DateTime     @default(now())
+}
+
+model PresentationHistory {
+  id             String       @id @default(cuid())
+  presentationId String
+  presentation   Presentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  action         String       // CRIACAO | EDICAO | EXPORTACAO | ARQUIVAMENTO | RESTAURACAO | FAVORITO
+  description    String?
+  createdAt      DateTime     @default(now())
+}
+
+model PresentationTemplate {
+  id          String   @id @default(cuid())
+  title       String
+  type        String
+  category    String
+  content     String
+  thumbnail   String?
+  isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
 }
