@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { TabCargos } from "./TabCargos"
 import { TabProcedimentos } from "./TabProcedimentos"
+import { TabAtividades } from "./TabAtividades"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
 import {
@@ -61,14 +62,6 @@ interface Training {
   plannedDate?: string | null; completedDate?: string | null; status: string
   responsible?: string | null; expectedResult?: string | null
   evaluation?: string | null; observations?: string | null; aiPlan?: string | null
-  member: { id: string; name: string; role: string }
-}
-interface TeamActivity {
-  id: string; memberId: string; title: string; description?: string | null
-  receivedAt?: string | null; dueDate?: string | null; priority: string
-  status: string; statusObservation?: string | null
-  expectedResult?: string | null; deliveredResult?: string | null
-  coordinatorRating?: string | null
   member: { id: string; name: string; role: string }
 }
 interface Guideline {
@@ -1577,191 +1570,6 @@ function TabTreinamentos({ members }: { members: Member[] }) {
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             </div>
           </form>
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-// ─── Tab: Atividades ──────────────────────────────────────────────────────────
-
-function TabAtividades({ members }: { members: Member[] }) {
-  const [items, setItems] = useState<TeamActivity[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [showStatusModal, setShowStatusModal] = useState<TeamActivity | null>(null)
-  const [editing, setEditing] = useState<TeamActivity | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [filterMember, setFilterMember] = useState("")
-  const [filterStatus, setFilterStatus] = useState("")
-  const [statusForm, setStatusForm] = useState({ status: "", statusObservation: "" })
-  const [form, setForm] = useState({
-    memberId: "", title: "", description: "", receivedAt: "", dueDate: "",
-    priority: "MEDIA", status: "PENDENTE", statusObservation: "", expectedResult: "",
-  })
-
-  const fetch_ = useCallback(async () => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (filterMember) params.set("memberId", filterMember)
-    if (filterStatus) params.set("status", filterStatus)
-    const res = await fetch(`/api/gestao-equipe/activities?${params}`)
-    setItems(await res.json())
-    setLoading(false)
-  }, [filterMember, filterStatus])
-
-  useEffect(() => { fetch_() }, [fetch_])
-
-  function openNew() {
-    setEditing(null)
-    setForm({ memberId: "", title: "", description: "", receivedAt: "", dueDate: "", priority: "MEDIA", status: "PENDENTE", statusObservation: "", expectedResult: "" })
-    setShowForm(true)
-  }
-  function openEdit(a: TeamActivity) {
-    setEditing(a)
-    setForm({
-      memberId: a.memberId, title: a.title, description: a.description || "",
-      receivedAt: a.receivedAt ? a.receivedAt.split("T")[0] : "",
-      dueDate: a.dueDate ? a.dueDate.split("T")[0] : "",
-      priority: a.priority, status: a.status, statusObservation: a.statusObservation || "",
-      expectedResult: a.expectedResult || "",
-    })
-    setShowForm(true)
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true)
-    try {
-      const url = editing ? `/api/gestao-equipe/activities/${editing.id}` : "/api/gestao-equipe/activities"
-      await fetch(url, { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, receivedAt: form.receivedAt || null, dueDate: form.dueDate || null }) })
-      setShowForm(false); fetch_()
-    } finally { setSaving(false) }
-  }
-
-  async function handleStatusChange() {
-    if (!showStatusModal) return
-    if (!statusForm.status) { alert("Selecione o novo status."); return }
-    if (!statusForm.statusObservation.trim()) { alert("A observação é obrigatória ao alterar o status."); return }
-    setSaving(true)
-    try {
-      await fetch(`/api/gestao-equipe/activities/${showStatusModal.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: statusForm.status, statusObservation: statusForm.statusObservation }),
-      })
-      setShowStatusModal(null); fetch_()
-    } finally { setSaving(false) }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm("Remover atividade?")) return
-    await fetch(`/api/gestao-equipe/activities/${id}`, { method: "DELETE" })
-    fetch_()
-  }
-
-  function isOverdue(a: TeamActivity) {
-    return a.dueDate && new Date(a.dueDate) < new Date() && !["CONCLUIDA", "CANCELADA"].includes(a.status)
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <select value={filterMember} onChange={e => setFilterMember(e.target.value)} className="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg">
-          <option value="">Todos os colaboradores</option>
-          {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2.5 text-sm border border-slate-200 rounded-lg">
-          <option value="">Todos os status</option>
-          {Object.entries(ACTIVITY_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo</Button>
-      </div>
-
-      {loading ? <div className="text-slate-400 text-sm text-center py-8">Carregando...</div> : (
-        <div className="space-y-3">
-          {items.map(a => (
-            <Card key={a.id} className={cn(isOverdue(a) ? "border-red-200 bg-red-50/30" : "")}>
-              <CardContent>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-800">{a.title}</p>
-                      {isOverdue(a) && <Badge label="ATRASADA" colorClass="bg-red-100 text-red-700" />}
-                    </div>
-                    <p className="text-xs text-slate-500">{a.member.name} · {a.member.role}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Badge label={PRIORITY_LABELS[a.priority] ?? a.priority} colorClass={PRIORITY_COLORS[a.priority]} />
-                    <Badge label={ACTIVITY_STATUS[a.status]?.label ?? a.status} colorClass={ACTIVITY_STATUS[a.status]?.color ?? "bg-slate-100 text-slate-600"} />
-                    <button onClick={() => { setShowStatusModal(a); setStatusForm({ status: "", statusObservation: "" }) }} className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 transition-colors">
-                      <RefreshCw className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => openEdit(a)} className="text-slate-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDelete(a.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </div>
-                {a.description && <p className="text-sm text-slate-600 line-clamp-2">{a.description}</p>}
-                {a.statusObservation && <p className="text-xs text-blue-600 mt-1 italic">💬 {a.statusObservation}</p>}
-                <div className="text-xs text-slate-500 mt-2 flex gap-4">
-                  {a.receivedAt && <span>Recebida: {fmtDate(a.receivedAt)}</span>}
-                  {a.dueDate && <span className={cn(isOverdue(a) ? "text-red-600 font-medium" : "")}>Prazo: {fmtDate(a.dueDate)}</span>}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {items.length === 0 && <div className="text-center py-12 text-slate-400 text-sm">Nenhuma atividade registrada.</div>}
-        </div>
-      )}
-
-      {showForm && (
-        <Modal title={editing ? "Editar Atividade" : "Nova Atividade"} onClose={() => setShowForm(false)}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Colaborador" required>
-              <MemberSelect members={members} value={form.memberId} onChange={v => setForm(f => ({ ...f, memberId: v }))} required />
-            </Field>
-            <Field label="Título" required><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} /></Field>
-            <Field label="Descrição"><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="Prioridade">
-                <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))} className={selectClass}>
-                  {Object.entries(PRIORITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </Field>
-              <Field label="Recebida em"><input type="date" value={form.receivedAt} onChange={e => setForm(f => ({ ...f, receivedAt: e.target.value }))} className={inputClass} /></Field>
-              <Field label="Prazo"><input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} className={inputClass} /></Field>
-            </div>
-            <Field label="Resultado Esperado"><textarea value={form.expectedResult} onChange={e => setForm(f => ({ ...f, expectedResult: e.target.value }))} rows={2} className={inputClass} /></Field>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Para alterar o status use o botão <strong>↺</strong> na lista — exige observação obrigatória.</p>
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editing ? "Salvar" : "Criar"}</Button>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {showStatusModal && (
-        <Modal title={`Alterar Status — ${showStatusModal.title}`} onClose={() => setShowStatusModal(null)}>
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span>Status atual:</span>
-              <Badge label={ACTIVITY_STATUS[showStatusModal.status]?.label ?? showStatusModal.status} colorClass={ACTIVITY_STATUS[showStatusModal.status]?.color ?? "bg-slate-100 text-slate-600"} />
-            </div>
-            <Field label="Novo Status" required>
-              <select value={statusForm.status} onChange={e => setStatusForm(f => ({ ...f, status: e.target.value }))} className={selectClass} required>
-                <option value="">Selecione o novo status...</option>
-                {Object.entries(ACTIVITY_STATUS).filter(([k]) => k !== showStatusModal.status).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Observação (obrigatória)" required>
-              <textarea required value={statusForm.statusObservation} onChange={e => setStatusForm(f => ({ ...f, statusObservation: e.target.value }))} rows={3} className={inputClass} placeholder="Descreva o motivo da mudança de status, o que foi realizado ou o que está impedindo..." />
-            </Field>
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleStatusChange} disabled={saving}>{saving ? "Salvando..." : "Alterar Status"}</Button>
-              <Button variant="outline" onClick={() => setShowStatusModal(null)}>Cancelar</Button>
-            </div>
-          </div>
         </Modal>
       )}
     </div>

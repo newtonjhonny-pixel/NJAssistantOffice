@@ -494,17 +494,21 @@ function TaskAssistantPanel({ task, onRefresh }: { task: Task; onRefresh: () => 
         body: JSON.stringify({ message: msg || label, mode: mode || undefined, specialist }),
       })
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       if (data.specialist) setSpecialist(data.specialist)
+      const content = data.response && data.response.trim().length > 0
+        ? data.response
+        : 'Não foi possível gerar a resposta da IA. Tente novamente.'
       const aiMsg: TaskChatMsg = {
         id: data.id || `tmp-ai-${Date.now()}`, role: 'assistant',
-        content: data.response, mode: mode || null, createdAt: new Date().toISOString(),
+        content, mode: mode || null, createdAt: new Date().toISOString(),
       }
       setMessages(prev => [...prev.filter(m => m.id !== tempUser.id), tempUser, aiMsg])
       onRefresh()
     } catch {
       setMessages(prev => [...prev.filter(m => m.id !== tempUser.id), tempUser, {
         id: `err-${Date.now()}`, role: 'assistant',
-        content: 'Erro ao contactar o Assistente. Tente novamente.', mode: null, createdAt: new Date().toISOString(),
+        content: 'Não foi possível gerar a resposta da IA. Tente novamente.', mode: null, createdAt: new Date().toISOString(),
       }])
     }
     setLoading(false)

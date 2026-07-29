@@ -255,10 +255,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         systemPrompt: SYSTEM,
         message: currentUserContent,
         history: messages.slice(1, -1) as AIMessage[],
-        maxTokens: 1200,
       })
-      response = result.content
-      aiPowered = result.aiPowered
+      if (result.content && result.content.trim().length > 0) {
+        response = result.content
+        aiPowered = result.aiPowered
+      } else {
+        response = buildFallback(mode || 'free', message, item.title, item.pastedContent || '')
+      }
     } catch {
       response = buildFallback(mode || 'free', message, item.title, item.pastedContent || '')
     }

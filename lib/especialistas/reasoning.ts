@@ -8,25 +8,151 @@ import { specialistManager } from "@/lib/ai/specialists"
 import type { AIMessage, AITool } from "@/lib/ai/gateway"
 import { getSpecialist } from "./config"
 import { searchDocuments, buildContext, sanitizeResponse, NOT_FOUND_MESSAGE } from "./knowledge"
-import { needsUpdate, isConceptualQuestion, SPECIALIST_UPDATE_FALLBACK } from "./intelligence"
-import { getRelevantMemory, extractAndSaveMemory } from "./memory"
+import { isConceptualQuestion, classifyIntent, type IntentMode, SPECIALIST_UPDATE_FALLBACK } from "./intelligence"
+import { getRelevantMemory } from "./memory"
 import { SPECIALIST_TOOLS, executarFerramenta } from "./tools/index"
 import { knowledgeManager } from "@/lib/ai/knowledge"
 import { memoryManager } from "@/lib/ai/memory"
 import { updateManager } from "@/lib/ai/update"
 import type { KnowledgeSearchResult } from "@/lib/ai/knowledge"
 
-// ─── Classificação da pergunta ────────────────────────────────────────────────
+// ─── Detecção temporal ────────────────────────────────────────────────────────
+
+const TEMPORAL_TRIGGERS = [
+  "atualizacao", "atualizacoes", "novidade", "novidades",
+  "mudou", "mudanca", "ultima", "mais recente",
+  "hoje", "ontem", "esta semana", "este mes", "este ano",
+  "versao vigente", "nota tecnica nova",
+]
+
+const MONTH_MAP: Record<string, number> = {
+  janeiro: 0, fevereiro: 1, marco: 2, abril: 3, maio: 4, junho: 5,
+  julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11,
+}
+
+export type TemporalPeriod = "today" | "yesterday" | "week" | "month" | "year" | null
+
+export interface TemporalInfo {
+  isTemporal: boolean
+  period: TemporalPeriod
+  year?: number
+  month?: number
+}
+
+export function detectTemporalQuery(text: string): TemporalInfo {
+  const norm = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[çÇ]/g, "c")
+    .trim()
+
+  const isTemporal = TEMPORAL_TRIGGERS.some(kw => norm.includes(kw))
+  if (!isTemporal) return { isTemporal: false, period: null }
+
+  const now = new Date()
+
+  if (norm.includes("hoje")) {
+    return { isTemporal: true, period: "today", year: now.getFullYear(), month: now.getMonth() }
+  }
+  if (norm.includes("ontem")) {
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    return { isTemporal: true, period: "yesterday", year: yesterday.getFullYear(), month: yesterday.getMonth() }
+  }
+  if (norm.includes("esta semana")) {
+    return { isTemporal: true, period: "week" }
+  }
+  for (const [monthName, monthIdx] of Object.entries(MONTH_MAP)) {
+    if (norm.includes(monthName)) {
+      const yearMatch = norm.match(/\b(20\d{2})\b/)
+      const year = yearMatch ? parseInt(yearMatch[1], 10) : now.getFullYear()
+      return { isTemporal: true, period: "month", month: monthIdx, year }
+    }
+  }
+  if (norm.includes("este mes")) {
+    return { isTemporal: true, period: "month", year: now.getFullYear(), month: now.getMonth() }
+  }
+  if (norm.includes("este ano")) {
+    return { isTemporal: true, period: "year", year: now.getFullYear() }
+  }
+  const yearMatch = norm.match(/\b(20\d{2})\b/)
+  if (yearMatch) {
+    return { isTemporal: true, period: "year", year: parseInt(yearMatch[1], 10) }
+  }
+
+  return { isTemporal: true, period: null }
+}
+
+// ─── Filtro temporal de documentos ───────────────────────────────────────────
+
+function applyTemporalFilter(
+  docs: KnowledgeSearchResult[],
+  info: TemporalInfo,
+): { filtered: KnowledgeSearchResult[]; discardedByDate: number } {
+  if (!info.period) return { filtered: docs, discardedByDate: 0 }
+
+  const now = new Date()
+
+  const inPeriod = (doc: KnowledgeSearchResult): boolean => {
+    const ref = doc.updatedAt ?? doc.createdAt
+    if (!ref) return false
+
+    if (info.period === "today") {
+      const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0)
+      return ref >= startOfDay
+    }
+    if (info.period === "yesterday") {
+      const startOfYesterday = new Date(now); startOfYesterday.setDate(startOfYesterday.getDate() - 1); startOfYesterday.setHours(0, 0, 0, 0)
+      const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
+      return ref >= startOfYesterday && ref < startOfToday
+    }
+    if (info.period === "week") {
+      const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7)
+      return ref >= weekAgo
+    }
+    if (info.period === "month" && info.year !== undefined && info.month !== undefined) {
+      return ref.getFullYear() === info.year && ref.getMonth() === info.month
+    }
+    if (info.period === "year" && info.year !== undefined) {
+      return ref.getFullYear() === info.year
+    }
+    return true
+  }
+
+  const filtered = docs.filter(inPeriod)
+  return { filtered, discardedByDate: docs.length - filtered.length }
+}
+
+// ─── Thresholds RAG ───────────────────────────────────────────────────────────
+
+const THRESHOLD_DEFAULT  = 0.20
+const THRESHOLD_TEMPORAL = 0.55
+
+// ─── Classificação do modo de resposta ───────────────────────────────────────
+// Regra central: update-nofound SOMENTE para ATUALIZAÇÃO sem documentos recentes.
+// Todos os outros casos com docs=0 usam expert (conhecimento técnico do modelo).
 
 export type QuestionMode = "expert" | "rag" | "update-nofound"
 
-export function classifyQuestion(text: string, docs: unknown[]): QuestionMode {
+export function classifyQuestion(
+  text: string,
+  docs: unknown[],
+  intent: IntentMode,
+): QuestionMode {
+  // Conceitual → sempre expert (modelo responde com conhecimento nativo)
   if (isConceptualQuestion(text)) return "expert"
+  // Atualização sem documentos recentes → honest update-nofound
+  if (intent === "ATUALIZACAO" && docs.length === 0) return "update-nofound"
+  // Qualquer pergunta com documentos → RAG
   if (docs.length > 0) return "rag"
-  return "update-nofound"
+  // Todas as demais sem documentos → expert (nunca retorna fallback genérico)
+  return "expert"
 }
 
 // ─── Construção do system prompt por modo ─────────────────────────────────────
+// Mantém o systemPrompt do especialista intacto e apenas injeta docs + memória.
+// Evita duplicar instruções que já estão no prompt base (que é extenso).
 
 function buildSystemPrompt(
   basePrompt: string,
@@ -36,50 +162,29 @@ function buildSystemPrompt(
 ): string {
   const memSection = memoryBlock ? `\n\n${memoryBlock}` : ""
 
-  if (mode === "expert") {
-    const docsSection = contextBlock
-      ? `\n\nDOCUMENTOS DA BASE (use para validar e enriquecer):\n${contextBlock}`
-      : ""
+  if (mode === "update-nofound") {
     return (
       basePrompt +
-      docsSection +
       memSection +
-      `\n\nINSTRUÇÕES DE RESPOSTA:
-1. Responda com conhecimento técnico especializado completo — você é o expert, não depende da base.
-2. Use os documentos acima (se houver) para validar, citar versões específicas e enriquecer.
-3. Nunca mencione limitações de modelo, data de treinamento ou falta de acesso à internet.
-4. Se usar a memória da conversa, integre naturalmente sem anunciar que está usando.
-5. Estruture bem: use títulos, bullets e exemplos quando útil.
-6. Cite sempre a base legal ou metodológica ao final.`
+      "\n\nINSTRUÇÃO: Não foi localizada atualização oficial específica nas fontes indexadas " +
+      "para este período. Informe isso de forma clara, explique o funcionamento geral do tema " +
+      "com seu conhecimento especializado e indique as fontes oficiais para consulta " +
+      "(portal eSocial, Receita Federal, MTE, DOU)."
     )
   }
 
-  if (mode === "rag") {
+  // expert (sem docs) — inclui nota para não mencionar limitações
+  if (!contextBlock) {
     return (
       basePrompt +
-      `\n\n${contextBlock}` +
-      memSection +
-      `\n\nINSTRUÇÕES DE RESPOSTA:
-1. Para dados específicos (versões, datas, portarias, notas técnicas): use PREFERENCIALMENTE os documentos acima.
-2. Para conceitos, funcionamento geral e contexto: complemente com seu conhecimento especializado.
-3. Cite os documentos da base quando usar informações deles — "[1]", "[2]" etc.
-4. Nunca mencione limitações de modelo, data de treinamento ou falta de acesso à internet.
-5. Se usar a memória da conversa, integre naturalmente.
-6. Cite as fontes ao final.`
+      "\n\nNOTA: A Base de Conhecimento não retornou documentos específicos para esta consulta. " +
+      "Responda com conhecimento técnico especializado completo." +
+      memSection
     )
   }
 
-  // update-nofound
-  return (
-    basePrompt +
-    memSection +
-    `\n\nINSTRUÇÕES DE RESPOSTA:
-1. Não foi encontrada atualização oficial específica na Base de Conhecimento sobre este tema.
-2. Inicie a resposta comunicando isso de forma profissional e direta.
-3. Em seguida, explique o funcionamento geral do tema com seu conhecimento técnico especializado.
-4. Indique os documentos e fontes oficiais que o usuário deve consultar para a versão mais recente.
-5. Nunca mencione limitações de modelo, data de treinamento ou falta de acesso à internet.`
-  )
+  // expert com docs ou rag — injeta documentos diretamente
+  return basePrompt + `\n\n${contextBlock}` + memSection
 }
 
 // ─── Interface principal do motor ─────────────────────────────────────────────
@@ -108,29 +213,52 @@ export async function runReasoningPipeline(input: ReasoningInput): Promise<Reaso
   const gatewaySpecialistId = managedSpecialist?.id ?? specialist.id
   const basePrompt = specialist.systemPrompt || managedSpecialist?.basePrompt || ""
 
-  // ── Camadas 2 + 4: KnowledgeManager + MemoryManager (em paralelo) ─────────────
-  // Busca documentos (semântica → TF-IDF) e memória de médio/longo prazo juntos.
-  // Fallback silencioso para as implementações legadas se qualquer erro ocorrer.
+  // ── Classificação de intenção e detecção temporal ─────────────────────────
+  const intent       = classifyIntent(userMessage)
+  const temporalInfo = detectTemporalQuery(userMessage)
+  const threshold    = temporalInfo.isTemporal ? THRESHOLD_TEMPORAL : THRESHOLD_DEFAULT
+
+  // ── Camadas 2 + 4: KnowledgeManager + MemoryManager (em paralelo) ──────────
   let docs: KnowledgeSearchResult[] = []
   let contextBlock = ''
   let memoryBlock  = ''
+
+  const searchStart    = Date.now()
+  let docsRaw          = 0
+  let discardedByDate  = 0
 
   try {
     const knowledgeCtx = await knowledgeManager.getKnowledgeWithMemory(
       specialistId,
       userMessage,
       conversationId,
-      {
-        docLimit:     5,
-        threshold:    0.20,
-        historyLimit: 0,   // short-term history já vem no param `history`
-      },
+      { docLimit: 5, threshold, historyLimit: 0 },
     )
-    docs         = knowledgeCtx.docs
-    contextBlock = knowledgeCtx.contextBlock
-    memoryBlock  = knowledgeCtx.memoryBlock
+
+    if (temporalInfo.isTemporal && temporalInfo.period) {
+      docsRaw = knowledgeCtx.docs.length
+      const { filtered, discardedByDate: dbd } = applyTemporalFilter(knowledgeCtx.docs, temporalInfo)
+      discardedByDate = dbd
+
+      if (filtered.length !== docsRaw) {
+        const rebuiltCtx = knowledgeManager.buildContext(
+          specialistId, userMessage, filtered,
+          knowledgeCtx.memory, knowledgeCtx.history,
+        )
+        docs         = filtered
+        contextBlock = rebuiltCtx.contextBlock
+        memoryBlock  = knowledgeCtx.memoryBlock
+      } else {
+        docs         = knowledgeCtx.docs
+        contextBlock = knowledgeCtx.contextBlock
+        memoryBlock  = knowledgeCtx.memoryBlock
+      }
+    } else {
+      docs         = knowledgeCtx.docs
+      contextBlock = knowledgeCtx.contextBlock
+      memoryBlock  = knowledgeCtx.memoryBlock
+    }
   } catch {
-    // Fallback para implementações originais (preserva RAG atual)
     const [legacyDocs, legacyMemory] = await Promise.all([
       searchDocuments(specialistId, userMessage, 5),
       getRelevantMemory(specialistId, conversationId),
@@ -140,22 +268,34 @@ export async function runReasoningPipeline(input: ReasoningInput): Promise<Reaso
     memoryBlock  = legacyMemory
   }
 
-  // UpdateManager: verifica status da base de forma não-bloqueante (apenas log)
+  const searchMs = Date.now() - searchStart
+
+  // UpdateManager: verifica status da base (não-bloqueante)
   updateManager.isDue(specialistId).catch(() => {})
 
-  // ── Camada 6: Classificação da pergunta ──────────────────────────────────────
-  const mode = classifyQuestion(userMessage, docs)
+  // ── Classificação do modo de resposta ─────────────────────────────────────
+  const mode = classifyQuestion(userMessage, docs, intent)
 
-  // ── Camada 6: Montagem do system prompt ──────────────────────────────────────
+  // ── Log técnico ───────────────────────────────────────────────────────────
+  console.log(
+    `[specialist:reasoning] specialist=${specialistId} intent=${intent} mode=${mode}` +
+    ` threshold=${threshold} filtroTemporal=${temporalInfo.period ?? "none"} searchMs=${searchMs}` +
+    ` docsRaw=${docsRaw || docs.length} discardedByDate=${discardedByDate} docsFinal=${docs.length}`,
+  )
+
+  // ── Montagem do system prompt ─────────────────────────────────────────────
   const systemFull = buildSystemPrompt(basePrompt, contextBlock, memoryBlock, mode)
 
-  // ── Camada 5: Ferramentas disponíveis ────────────────────────────────────────
-  const tools = managedSpecialist?.policies.toolsEnabled === false
-    ? []
-    : SPECIALIST_TOOLS[specialistId] ?? []
+  // ── Ferramentas disponíveis ───────────────────────────────────────────────
+  // Só ativa ferramentas de cálculo quando a mensagem contém dados numéricos
+  // (salário, valor, datas). Sem dados → resposta explicativa sem tool calls.
+  const hasNumericData = /\d[\d.,]*|\bR\$|\bsalari[oa] de\b|\bremunera[çc][aã]o de\b/i.test(userMessage)
+  const tools = (managedSpecialist?.policies.toolsEnabled !== false && hasNumericData)
+    ? SPECIALIST_TOOLS[specialistId] ?? []
+    : []
   const toolsExecuted: Array<{ name: string; result: object }> = []
 
-  // ── Camada 6: Chamada à IA ───────────────────────────────────────────────────
+  // ── Chamada à IA ──────────────────────────────────────────────────────────
   const messages: AIMessage[] = [
     { role: "system", content: systemFull },
     ...history.slice(-20).map(m => ({ role: m.role, content: m.content })),
@@ -172,9 +312,9 @@ export async function runReasoningPipeline(input: ReasoningInput): Promise<Reaso
         systemPrompt: systemFull,
         message: userMessage,
         history: history.slice(-20) as AIMessage[],
-        maxTokens: 2000,
         temperature: mode === "expert" ? 0.35 : 0.2,
       })
+      // Se conteúdo vier vazio (erro técnico), usa NOT_FOUND_MESSAGE como bridge
       aiContent = result.content || NOT_FOUND_MESSAGE
     } else {
       const firstPass = await aiService.ask({
@@ -184,11 +324,9 @@ export async function runReasoningPipeline(input: ReasoningInput): Promise<Reaso
         messages,
         tools: tools as AITool[],
         toolChoice: "auto",
-        maxTokens: 2000,
         temperature: mode === "expert" ? 0.35 : 0.2,
       })
 
-      // ── Camada 5: Execução de ferramentas (function calling) ─────────────────
       if (firstPass.finishReason === "tool_calls" && firstPass.toolCalls?.length) {
         const toolMessages: AIMessage[] = [
           ...messages,
@@ -201,54 +339,60 @@ export async function runReasoningPipeline(input: ReasoningInput): Promise<Reaso
           const toolArgs = JSON.parse(fn.arguments) as Record<string, unknown>
           const toolResult = executarFerramenta(specialistId, toolName, toolArgs)
           toolsExecuted.push({ name: toolName, result: toolResult })
-
-          toolMessages.push({
-            role: "tool",
-            tool_call_id: tc.id,
-            content: JSON.stringify(toolResult),
-          })
+          toolMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(toolResult) })
         }
 
-        // Segunda chamada: IA interpreta o resultado das ferramentas
         const followUp = await aiService.ask({
           module: "especialistas.reasoning.tools.followup",
           specialist: gatewaySpecialistId,
           message: userMessage,
           messages: toolMessages,
-          maxTokens: 2000,
           temperature: 0.2,
         })
         aiContent = followUp.content || NOT_FOUND_MESSAGE
+      } else if (firstPass.content) {
+        // modelo respondeu em texto (sem invocar ferramenta)
+        aiContent = firstPass.content
       } else {
-        aiContent = firstPass.content || NOT_FOUND_MESSAGE
+        // firstPass sem content e sem tool_calls (ex: tokens esgotados no tool call JSON)
+        // fallback: chamada simples sem ferramentas
+        const plainFallback = await aiService.ask({
+          module: "especialistas.reasoning",
+          specialist: gatewaySpecialistId,
+          systemPrompt: systemFull,
+          message: userMessage,
+          history: history.slice(-20) as AIMessage[],
+          temperature: mode === "expert" ? 0.35 : 0.2,
+        })
+        aiContent = plainFallback.content || NOT_FOUND_MESSAGE
       }
     }
   } catch (err) {
-    console.error("[reasoning] OpenAI error:", err)
+    console.error("[specialist:reasoning] AI error:", err)
     aiContent = "Desculpe, ocorreu um erro ao processar sua solicitação. Por favor, tente novamente."
   }
 
-  // ── Sanitização ─────────────────────────────────────────────────────────────
-  const sanitized = sanitizeResponse(aiContent)
-  const finalContent = sanitized ?? (mode === "update-nofound" ? SPECIALIST_UPDATE_FALLBACK : NOT_FOUND_MESSAGE)
+  // ── Sanitização ───────────────────────────────────────────────────────────
+  // sanitizeResponse agora remove frases proibidas (não mata a resposta inteira).
+  // fallback só ocorre quando: modo=update-nofound E conteúdo é inválido após limpeza.
+  const sanitized   = sanitizeResponse(aiContent)
+  const finalContent = sanitized !== null
+    ? sanitized
+    : (mode === "update-nofound" ? SPECIALIST_UPDATE_FALLBACK : aiContent)
 
-  // ── Camada 4: Memória — registra aprendizado assincronamente ─────────────────
-  // MemoryManager extrai tópicos/entidades/preferências, persiste e promove long-term.
+  if (sanitized === null) {
+    console.log(`[specialist:reasoning] sanitize=null mode=${mode} specialist=${specialistId}`)
+  }
+
+  // ── Memória: registra aprendizado assincronamente ─────────────────────────
   const messageCount = history.length + 1
   memoryManager.afterExchange(specialistId, conversationId, userMessage, finalContent, messageCount)
     .catch(() => {})
 
-  // ── Metadados da resposta ────────────────────────────────────────────────────
+  // ── Metadados ─────────────────────────────────────────────────────────────
   const docsUsed   = docs.map(d => d.title)
   const sources    = docs.map(d => d.source).filter((s): s is string => !!s).filter((v, i, a) => a.indexOf(v) === i).join(" | ")
   const searchMode = (docs[0]?.searchMode ?? undefined) as string | undefined
 
-  return {
-    content: finalContent,
-    mode,
-    docsUsed,
-    sources,
-    toolsExecuted,
-    searchMode,
-  }
+  return { content: finalContent, mode, docsUsed, sources, toolsExecuted, searchMode }
 }

@@ -6,29 +6,39 @@ import { semanticSearch, type SemanticResult } from "./embeddings"
 
 // ─── Padrões proibidos (respostas de "limitação de modelo") ───────────────────
 
+// Padrões de limitação de modelo — removidos frase a frase, não matam a resposta inteira
 const FORBIDDEN_PATTERNS = [
-  /minha data de corte/i,
-  /não tenho acesso à internet/i,
-  /como (uma )?ia (language model|llm)/i,
-  /como (um )?modelo de linguagem/i,
-  /meu conhecimento (foi |é )?(treinado|limitado|restrito)/i,
-  /até a data do meu treinamento/i,
-  /não posso navegar na internet/i,
-  /não tenho capacidade de acessar/i,
-  /meus dados de treinamento/i,
-  /enquanto (ia|modelo de linguagem|assistente de ia)/i,
-  /as informações disponíveis para mim/i,
-  /meu conhecimento não vai além/i,
+  /minha data de corte[^.!?]*/i,
+  /não tenho acesso à internet[^.!?]*/i,
+  /como (uma )?ia (language model|llm)[^.!?]*/i,
+  /como (um )?modelo de linguagem[^.!?]*/i,
+  /meu conhecimento (foi |é )?(treinado|limitado|restrito)[^.!?]*/i,
+  /até a data do meu treinamento[^.!?]*/i,
+  /não posso navegar na internet[^.!?]*/i,
+  /não tenho capacidade de acessar[^.!?]*/i,
+  /meus dados de treinamento[^.!?]*/i,
+  /enquanto (ia|modelo de linguagem|assistente de ia)[^.!?]*/i,
+  /as informações disponíveis para mim[^.!?]*/i,
+  /meu conhecimento não vai além[^.!?]*/i,
 ]
 
+// Usado apenas como bridge quando o conteúdo da IA vem vazio por erro técnico
 export const NOT_FOUND_MESSAGE =
-  "Consultei a Base de Conhecimento e não localizei documentação específica sobre este ponto. " +
-  "Com base no meu conhecimento técnico especializado, posso orientar da seguinte forma:"
+  "Não localizei um documento específico na base para citar, mas posso explicar o tema " +
+  "com base no conhecimento técnico consolidado."
 
+// Sanitiza resposta: remove frases com padrões proibidos, não mata a resposta inteira
 export function sanitizeResponse(text: string | null | undefined): string | null {
-  if (!text) return null
-  if (FORBIDDEN_PATTERNS.some(p => p.test(text))) return null
-  return text
+  if (!text || text.trim().length < 10) return null
+
+  let cleaned = text
+  for (const pattern of FORBIDDEN_PATTERNS) {
+    cleaned = cleaned.replace(pattern, "")
+  }
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim()
+
+  // Se sobrou conteúdo útil (> 40 chars), retorna o texto limpo
+  return cleaned.length > 40 ? cleaned : null
 }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────

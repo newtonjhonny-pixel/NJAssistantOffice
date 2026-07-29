@@ -23,13 +23,19 @@ import "@xyflow/react/dist/style.css"
 import { FlowNode, FlowNodeData, FlowNodeModel, FlowNodeType } from "./FlowNode"
 import { FlowToolbar } from "./FlowToolbar"
 import { FlowNodeEditPanel } from "./FlowNodeEditPanel"
+import {
+  exportDiagramToPdf,
+  exportDiagramToPng,
+  exportDiagramToJpeg,
+  printDiagram,
+} from "@/lib/diagramExport"
 
 const NODE_TYPES = { flowNode: FlowNode } as NodeTypes
 
 const EDGE_STYLE = {
-  type:    "smoothstep" as const,
+  type:      "smoothstep" as const,
   markerEnd: { type: MarkerType.ArrowClosed, color: "#64748b" },
-  style:   { stroke: "#64748b", strokeWidth: 2 },
+  style:     { stroke: "#64748b", strokeWidth: 2 },
 }
 
 // ─── Auto-layout (top-down sequential) ───────────────────────────────────────
@@ -76,17 +82,17 @@ function autoLayout(nodes: FlowNodeModel[], edges: Edge[]): FlowNodeModel[] {
 function defaultNodes(isProcess: boolean): FlowNodeModel[] {
   if (isProcess) {
     return [
-      { id: "n1", type: "flowNode", position: { x: 100, y: 0   }, data: { label: "Solicitação",    nodeType: "start"    } },
-      { id: "n2", type: "flowNode", position: { x: 100, y: 160 }, data: { label: "Análise",         nodeType: "process"  } },
-      { id: "n3", type: "flowNode", position: { x: 100, y: 320 }, data: { label: "Aprovado?",       nodeType: "decision" } },
-      { id: "n4", type: "flowNode", position: { x: 250, y: 480 }, data: { label: "Retrabalho",      nodeType: "process"  } },
-      { id: "n5", type: "flowNode", position: { x: -50, y: 480 }, data: { label: "Encerramento",   nodeType: "end"      } },
+      { id: "n1", type: "flowNode", position: { x: 100, y: 0   }, data: { label: "Solicitação",  nodeType: "start"    } },
+      { id: "n2", type: "flowNode", position: { x: 100, y: 160 }, data: { label: "Análise",       nodeType: "process"  } },
+      { id: "n3", type: "flowNode", position: { x: 100, y: 320 }, data: { label: "Aprovado?",     nodeType: "decision" } },
+      { id: "n4", type: "flowNode", position: { x: 250, y: 480 }, data: { label: "Retrabalho",    nodeType: "process"  } },
+      { id: "n5", type: "flowNode", position: { x: -50, y: 480 }, data: { label: "Encerramento", nodeType: "end"      } },
     ]
   }
   return [
-    { id: "n1", type: "flowNode", position: { x: 100, y: 0   }, data: { label: "Início",      nodeType: "start"   } },
-    { id: "n2", type: "flowNode", position: { x: 100, y: 160 }, data: { label: "Processo 1",  nodeType: "process" } },
-    { id: "n3", type: "flowNode", position: { x: 100, y: 320 }, data: { label: "Fim",         nodeType: "end"     } },
+    { id: "n1", type: "flowNode", position: { x: 100, y: 0   }, data: { label: "Início",     nodeType: "start"   } },
+    { id: "n2", type: "flowNode", position: { x: 100, y: 160 }, data: { label: "Processo 1", nodeType: "process" } },
+    { id: "n3", type: "flowNode", position: { x: 100, y: 320 }, data: { label: "Fim",        nodeType: "end"     } },
   ]
 }
 
@@ -111,12 +117,14 @@ function defaultEdges(isProcess: boolean): Edge[] {
 interface InnerProps {
   initialContent: string | null
   isProcess:      boolean
+  title:          string
   onSave:         (content: string) => Promise<void>
   editorRef?:     React.RefObject<HTMLDivElement | null>
 }
 
-function FlowEditorInner({ initialContent, isProcess, onSave, editorRef }: InnerProps) {
-  const { fitView, zoomIn, zoomOut } = useReactFlow()
+function FlowEditorInner({ initialContent, isProcess, title, onSave, editorRef }: InnerProps) {
+  const { fitView, zoomIn, zoomOut, getNodesBounds } = useReactFlow()
+  const [exporting, setExporting] = useState(false)
 
   const [parsed] = useState(() => {
     if (initialContent) {
@@ -193,6 +201,38 @@ function FlowEditorInner({ initialContent, isProcess, onSave, editorRef }: Inner
     }
   }, [nodes, edges, onSave])
 
+  function getContainer(): HTMLElement | null {
+    return editorRef?.current ?? null
+  }
+
+  const handleExportPdf = useCallback(async () => {
+    const el = getContainer(); if (!el) return
+    setExporting(true)
+    try { await exportDiagramToPdf(el, getNodesBounds(nodes), title, "a4-landscape") }
+    finally { setExporting(false) }
+  }, [nodes, title, editorRef, getNodesBounds])
+
+  const handleExportPng = useCallback(async () => {
+    const el = getContainer(); if (!el) return
+    setExporting(true)
+    try { await exportDiagramToPng(el, getNodesBounds(nodes), title) }
+    finally { setExporting(false) }
+  }, [nodes, title, editorRef, getNodesBounds])
+
+  const handleExportJpeg = useCallback(async () => {
+    const el = getContainer(); if (!el) return
+    setExporting(true)
+    try { await exportDiagramToJpeg(el, getNodesBounds(nodes), title) }
+    finally { setExporting(false) }
+  }, [nodes, title, editorRef, getNodesBounds])
+
+  const handlePrint = useCallback(async () => {
+    const el = getContainer(); if (!el) return
+    setExporting(true)
+    try { await printDiagram(el, getNodesBounds(nodes), title) }
+    finally { setExporting(false) }
+  }, [nodes, title, editorRef, getNodesBounds])
+
   const canDelete = !!selected && selected.data.nodeType !== "start"
 
   return (
@@ -200,6 +240,7 @@ function FlowEditorInner({ initialContent, isProcess, onSave, editorRef }: Inner
       <FlowToolbar
         canDelete={canDelete}
         saving={saving}
+        exporting={exporting}
         onAddNode={addNode}
         onDelete={deleteSelected}
         onSave={handleSave}
@@ -207,6 +248,10 @@ function FlowEditorInner({ initialContent, isProcess, onSave, editorRef }: Inner
         onZoomIn={() => zoomIn()}
         onZoomOut={() => zoomOut()}
         onAutoLayout={handleAutoLayout}
+        onExportPdf={handleExportPdf}
+        onExportPng={handleExportPng}
+        onExportJpeg={handleExportJpeg}
+        onPrint={handlePrint}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -259,14 +304,21 @@ function FlowEditorInner({ initialContent, isProcess, onSave, editorRef }: Inner
 interface FlowEditorProps {
   initialContent: string | null
   isProcess?:     boolean
+  title?:         string
   onSave:         (content: string) => Promise<void>
   editorRef?:     React.RefObject<HTMLDivElement | null>
 }
 
-export function FlowEditor({ initialContent, isProcess = false, onSave, editorRef }: FlowEditorProps) {
+export function FlowEditor({ initialContent, isProcess = false, title = "Fluxograma", onSave, editorRef }: FlowEditorProps) {
   return (
     <ReactFlowProvider>
-      <FlowEditorInner initialContent={initialContent} isProcess={isProcess} onSave={onSave} editorRef={editorRef} />
+      <FlowEditorInner
+        initialContent={initialContent}
+        isProcess={isProcess}
+        title={title}
+        onSave={onSave}
+        editorRef={editorRef}
+      />
     </ReactFlowProvider>
   )
 }

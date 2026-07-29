@@ -3,19 +3,20 @@
 import { useState } from "react"
 import {
   X, Presentation, LayoutTemplate, Share2, Brain,
-  BarChart2, GitBranch, Clock, FileText, Users,
+  BarChart2, GitBranch, Clock, FileText, Users, Network,
 } from "lucide-react"
 
 const TIPOS = [
-  { value: "slides",      label: "Slides",                     icon: Presentation,  desc: "Apresentação com múltiplos slides",                    color: "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100" },
-  { value: "organogram",  label: "Organograma",                icon: Share2,        desc: "Estrutura hierárquica da equipe/empresa",               color: "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100" },
-  { value: "team-org",    label: "Organograma de Equipe",      icon: Users,         desc: "Segmentos, colaboradores e responsabilidades",          color: "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100" },
-  { value: "flowchart",   label: "Fluxograma",                 icon: GitBranch,     desc: "Processos e fluxo de trabalho",                        color: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100" },
-  { value: "mindmap",     label: "Mapa Mental",                icon: Brain,         desc: "Organização visual de ideias",                         color: "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100" },
-  { value: "timeline",    label: "Cronograma",                 icon: Clock,         desc: "Linha do tempo e planejamento",                        color: "bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100" },
-  { value: "process",     label: "Mapa de Processo",           icon: LayoutTemplate,desc: "Mapeamento de processos e procedimentos",              color: "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100" },
-  { value: "infographic", label: "Infográfico",                icon: BarChart2,     desc: "Dados e informações visualmente",                      color: "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100" },
-  { value: "report",      label: "Relatório Visual",           icon: FileText,      desc: "Relatório estruturado com dados",                      color: "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100" },
+  { value: "slides",       label: "Slides",                                icon: Presentation,  desc: "Apresentação com múltiplos slides",                    color: "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100" },
+  { value: "organogram",   label: "Organograma",                           icon: Share2,        desc: "Estrutura hierárquica da equipe/empresa",               color: "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100" },
+  { value: "team-org",     label: "Organograma de Equipe",                 icon: Users,         desc: "Segmentos, colaboradores e responsabilidades",          color: "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100" },
+  { value: "process-org",  label: "Organograma de Processos",              icon: Network,       desc: "Colaboradores, funções, atividades e itens integrados", color: "bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100" },
+  { value: "flowchart",    label: "Fluxograma",                            icon: GitBranch,     desc: "Processos e fluxo de trabalho",                        color: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100" },
+  { value: "mindmap",      label: "Mapa Mental",                           icon: Brain,         desc: "Organização visual de ideias",                         color: "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100" },
+  { value: "timeline",     label: "Cronograma",                            icon: Clock,         desc: "Linha do tempo e planejamento",                        color: "bg-cyan-50 border-cyan-200 text-cyan-700 hover:bg-cyan-100" },
+  { value: "process",      label: "Mapa de Processo",                      icon: LayoutTemplate,desc: "Mapeamento de processos e procedimentos",              color: "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100" },
+  { value: "infographic",  label: "Infográfico",                           icon: BarChart2,     desc: "Dados e informações visualmente",                      color: "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100" },
+  { value: "report",       label: "Relatório Visual",                      icon: FileText,      desc: "Relatório estruturado com dados",                      color: "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100" },
 ]
 
 interface Props {

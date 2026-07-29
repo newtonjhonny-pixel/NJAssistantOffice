@@ -121,10 +121,13 @@ ANALISE: [análise completa e detalhada do documento]`
         specialist: 'Departamento Pessoal',
         systemPrompt: SYSTEM,
         message: prompt,
-        maxTokens: 1500,
       })
-      raw = result.content
-      aiPowered = result.aiPowered
+      if (result.content && result.content.trim().length > 0) {
+        raw = result.content
+        aiPowered = result.aiPowered
+      } else {
+        raw = buildFallback(item.title, contentForAI)
+      }
     } catch {
       raw = buildFallback(item.title, contentForAI)
     }

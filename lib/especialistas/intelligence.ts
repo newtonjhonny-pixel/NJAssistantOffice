@@ -62,6 +62,84 @@ export function isConceptualQuestion(text: string): boolean {
   return CONCEPTUAL_INDICATORS.some(kw => normalized.includes(kw))
 }
 
+// ─── Classificação de intenção em 7 modos ────────────────────────────────────
+// Determina como o especialista deve responder independentemente da base.
+
+export type IntentMode =
+  | "CONCEITUAL"     // "O que é X?", "Como funciona Y?"
+  | "TECNICO"        // "Qual a regra para...?" — conhecimento aplicado
+  | "ATUALIZACAO"    // "O que mudou?", "atualização de hoje"
+  | "ANALISE"        // "Analise este caso / situação"
+  | "PROCEDIMENTO"   // "Como fazer uma admissão?" — passo a passo
+  | "CALCULO"        // "Calcule férias de R$ 3.000,00"
+  | "CONVERSACIONAL" // "Não entendi", "explique melhor", "continue"
+
+const INTENT_ATUALIZACAO = [
+  "atualiz", "mudou", "mudanc", "novidade", "nova norma",
+  "ultima", "mais recente", "hoje", "ontem", "esta semana",
+  "este mes", "este ano", "versao vigente", "nota tecnica nova",
+  "publicou", "publicad", "saiu", "lancou", "alterou",
+  "alteracao", "modificou", "entrou em vigor", "passou a valer",
+]
+
+const INTENT_CALCULO = [
+  "calcul", "calcule", "quanto fica", "quanto seria", "qual o valor",
+  "qual seria", "r$", "salario de", "remuneracao de", "quanto recebe",
+  "quanto paga", "calculo de", "resultado do calculo",
+]
+
+const INTENT_PROCEDIMENTO = [
+  "como devo", "como fazer", "quais os passos", "quais as etapas",
+  "passo a passo", "procedimento", "como proceder", "o que devo",
+  "o que preciso fazer", "como realizar", "como efetuar",
+  "como executar", "como implementar", "como montar", "como elaborar",
+  "como criar", "como registrar", "como enviar", "como transmitir",
+]
+
+const INTENT_ANALISE = [
+  "analise", "analisa", "verifique", "confira", "avalie", "avalia",
+  "revise", "revisa", "esse caso", "nesta situacao", "nesse cenario",
+  "minha situacao", "meu caso", "esta correto", "esta certo",
+  "esta errado", "o que voce acha",
+]
+
+const INTENT_CONVERSACIONAL = [
+  "nao entendi", "nao entendo", "explique melhor", "explica melhor",
+  "pode repetir", "nao ficou claro", "nao compreendi",
+  "isso nao se aplica", "nao se aplica ao meu caso",
+  "e no caso de", "e se tiver", "e no caso", "continue",
+  "pode continuar", "faca um exemplo", "da um exemplo",
+  "com salario de", "com remuneracao de",
+]
+
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[çÇ]/g, "c")
+    .trim()
+}
+
+export function classifyIntent(text: string): IntentMode {
+  const norm = normalize(text)
+
+  // Conversacional — frases de continuidade/esclarecimento
+  if (INTENT_CONVERSACIONAL.some(kw => norm.includes(kw))) return "CONVERSACIONAL"
+  // Atualização — sempre antes das demais (keyword overlap intencional)
+  if (INTENT_ATUALIZACAO.some(kw => norm.includes(kw))) return "ATUALIZACAO"
+  // Cálculo — pede processamento numérico
+  if (INTENT_CALCULO.some(kw => norm.includes(kw))) return "CALCULO"
+  // Análise — pede avaliação de um caso concreto
+  if (INTENT_ANALISE.some(kw => norm.includes(kw))) return "ANALISE"
+  // Procedimento — pede orientação de como fazer
+  if (INTENT_PROCEDIMENTO.some(kw => norm.includes(kw))) return "PROCEDIMENTO"
+  // Conceitual — pergunta explicativa/definitória
+  if (isConceptualQuestion(text)) return "CONCEITUAL"
+  // Default: técnico
+  return "TECNICO"
+}
+
 // ─── No-update fallback (used when update query finds nothing) ─────────────────
 
 export const SPECIALIST_UPDATE_FALLBACK =

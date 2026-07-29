@@ -23,9 +23,9 @@ const chatModuleConfig = (
 })
 
 export const MODULE_MODEL_CONFIG: Record<string, Partial<AIModelConfig>> = {
-  'central.analyze': chatModuleConfig(1500),
-  'central.chat': chatModuleConfig(1200),
-  'tasks.chat': chatModuleConfig(1500),
+  'central.analyze': chatModuleConfig(16000),
+  'central.chat': chatModuleConfig(16000),
+  'tasks.chat': chatModuleConfig(16000),
   'notes.chat': chatModuleConfig(1200),
   'conferencia.checklist-chat': chatModuleConfig(1600),
   'projects.relatorios.analyze': chatModuleConfig(1200),
@@ -40,22 +40,22 @@ export const MODULE_MODEL_CONFIG: Record<string, Partial<AIModelConfig>> = {
   'especialistas.conversation.title': chatModuleConfig(20, 0.3),
   'especialistas.memory.extract': chatModuleConfig(400, 0),
   'especialistas.memory.summarize': chatModuleConfig(150, 0),
-  'especialistas.reasoning': chatModuleConfig(2000),
-  'especialistas.reasoning.tools': chatModuleConfig(2000),
-  'especialistas.reasoning.tools.followup': chatModuleConfig(2000, 0.2),
+  'especialistas.reasoning': chatModuleConfig(16000),
+  'especialistas.reasoning.tools': chatModuleConfig(16000),
+  'especialistas.reasoning.tools.followup': chatModuleConfig(16000, 0.2),
 }
 
 export const SPECIALIST_MODEL_CONFIG: Record<string, Partial<AIModelConfig>> = {
-  departamento_pessoal: chatModuleConfig(2000),
-  esocial: chatModuleConfig(2000),
-  legislacao_trabalhista: chatModuleConfig(2000),
-  juridico_trabalhista: chatModuleConfig(2000),
-  seguranca_trabalho: chatModuleConfig(2000),
-  medicina_trabalho: chatModuleConfig(2000),
-  processos: chatModuleConfig(2000),
-  qualidade: chatModuleConfig(2000),
-  recrutamento_selecao: chatModuleConfig(2000),
-  comportamento: chatModuleConfig(2000),
+  departamento_pessoal: chatModuleConfig(16000),
+  esocial: chatModuleConfig(16000),
+  legislacao_trabalhista: chatModuleConfig(16000),
+  juridico_trabalhista: chatModuleConfig(16000),
+  seguranca_trabalho: chatModuleConfig(16000),
+  medicina_trabalho: chatModuleConfig(16000),
+  processos: chatModuleConfig(16000),
+  qualidade: chatModuleConfig(16000),
+  recrutamento_selecao: chatModuleConfig(16000),
+  comportamento: chatModuleConfig(16000),
 }
 
 export const FUTURE_CHAT_MODEL_FALLBACK = DEFAULT_CHAT_MODEL

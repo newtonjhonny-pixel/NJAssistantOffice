@@ -279,14 +279,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         systemPrompt: SYSTEM,
         message: userContent,
         history: messages.slice(1, -1) as AIMessage[],
-        maxTokens: 1500,
       })
-      response  = result.content
-      aiPowered = result.aiPowered
+
+      // Guard: GPT-5 may return empty content when reasoning consumes all tokens
+      if (result.content && result.content.trim().length > 0) {
+        response  = result.content
+        aiPowered = result.aiPowered
+      } else {
+        response = buildFallback(mode || 'free', task.title, specialist, task.responsible)
+      }
     } catch {
       response = buildFallback(mode || 'free', task.title, specialist, task.responsible)
     }
   } else {
+    response = buildFallback(mode || 'free', task.title, specialist, task.responsible)
+  }
+
+  // Guard: never persist an empty assistant message
+  if (!response || response.trim().length === 0) {
     response = buildFallback(mode || 'free', task.title, specialist, task.responsible)
   }
 

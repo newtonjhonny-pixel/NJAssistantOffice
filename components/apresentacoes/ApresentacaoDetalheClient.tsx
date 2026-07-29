@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation"
 import {
   ArrowLeft, Presentation, Star, StarOff, Pencil, Share2,
   Brain, GitBranch, LayoutTemplate, BarChart2, Clock,
-  FileText, FileQuestion, Loader2, History, CheckCircle2, Download,
+  FileText, FileQuestion, Loader2, History, CheckCircle2, Download, Network,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { OrgEditor }         from "./organogram/OrgEditor"
 import { FlowEditor }        from "./flowchart/FlowEditor"
 import { SlideEditor }       from "./slides/SlideEditor"
 import { TeamOrgEditor }     from "./teamorg/TeamOrgEditor"
+import { ProcessOrgEditor }  from "./process-org/ProcessOrgEditor"
 import { AiAssistantPanel }  from "./AiAssistantPanel"
 import { ExportModal }       from "./export/ExportModal"
 import { VersionPanel }      from "./VersionPanel"
@@ -38,8 +39,9 @@ interface PresentationDetail {
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   slides:      { label: "Slides",                    icon: Presentation,   color: "text-blue-600",   bg: "bg-blue-50" },
   organogram:  { label: "Organograma",               icon: Share2,         color: "text-purple-600", bg: "bg-purple-50" },
-  "team-org":  { label: "Organograma de Equipe",     icon: Brain,          color: "text-indigo-600", bg: "bg-indigo-50" },
-  flowchart:   { label: "Fluxograma",                icon: GitBranch,      color: "text-emerald-600",bg: "bg-emerald-50" },
+  "team-org":    { label: "Organograma de Equipe",          icon: Brain,          color: "text-indigo-600", bg: "bg-indigo-50" },
+  "process-org": { label: "Organograma de Processos",       icon: Network,        color: "text-teal-600",   bg: "bg-teal-50" },
+  flowchart:     { label: "Fluxograma",                     icon: GitBranch,      color: "text-emerald-600",bg: "bg-emerald-50" },
   mindmap:     { label: "Mapa Mental",               icon: Brain,          color: "text-amber-600",  bg: "bg-amber-50" },
   timeline:    { label: "Cronograma",                icon: Clock,          color: "text-cyan-600",   bg: "bg-cyan-50" },
   process:     { label: "Mapa de Processo",          icon: LayoutTemplate, color: "text-orange-600", bg: "bg-orange-50" },
@@ -177,7 +179,7 @@ export function ApresentacaoDetalheClient({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {(data.type === "slides" || data.type === "organogram" || data.type === "team-org" || data.type === "flowchart" || data.type === "process") && (
+          {(data.type === "slides" || data.type === "organogram" || data.type === "team-org" || data.type === "flowchart" || data.type === "process" || data.type === "process-org") && (
             <button
               onClick={() => setShowExport(true)}
               title="Exportar apresentação"
@@ -286,6 +288,7 @@ export function ApresentacaoDetalheClient({ id }: { id: string }) {
             editorRef={editorRef}
             initialContent={data.content}
             isProcess={data.type === "process"}
+            title={data.title}
             onSave={async (content) => {
               await fetch(`/api/apresentacoes/${id}`, {
                 method:  "PUT",
@@ -296,6 +299,21 @@ export function ApresentacaoDetalheClient({ id }: { id: string }) {
             }}
           />
         </div>
+      ) : data.type === "process-org" ? (
+        <ProcessOrgEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          title={data.title}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Organograma de processos editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
       ) : (
         <div className={cn("rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-16 gap-3", cfg.bg)}>
           <Icon className={cn("w-10 h-10 opacity-30", cfg.color)} />

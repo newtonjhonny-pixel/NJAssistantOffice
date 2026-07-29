@@ -576,12 +576,13 @@ model TeamMember {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  feedbacks   TeamFeedback[]
-  directions  TeamActivityDirection[]
-  vacations   TeamVacation[]
-  trainings   TeamTraining[]
-  activities  TeamActivity[]
-  history     TeamHistory[]
+  feedbacks           TeamFeedback[]
+  directions          TeamActivityDirection[]
+  vacations           TeamVacation[]
+  trainings           TeamTraining[]
+  activities          TeamActivity[]
+  history             TeamHistory[]
+  memberActivityLinks MemberActivityLink[]
 }
 
 model TeamFeedback {
@@ -680,6 +681,98 @@ model TeamActivity {
   coordinatorRating String?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+}
+
+// ─── BIBLIOTECA DE ATIVIDADES ─────────────────────────────────────────────────
+
+model ActivityCategory {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  department  String?
+  color       String   @default("#6B7280")
+  icon        String   @default("📋")
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  activities ActivityTemplate[]
+
+  @@index([active])
+}
+
+model ActivityTemplate {
+  id           String            @id @default(cuid())
+  name         String
+  description  String?
+  category     String?           // legado — mantido para compatibilidade
+  categoryId   String?
+  actCategory  ActivityCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  department   String?
+  active       Boolean           @default(true)
+  order        Int               @default(0)
+  observations String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  items       ActivityItem[]
+  memberLinks MemberActivityLink[]
+
+  @@index([active])
+  @@index([categoryId])
+}
+
+model ActivityItem {
+  id                 String           @id @default(cuid())
+  activityId         String
+  activity           ActivityTemplate @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  order              Int              @default(0)
+  required           Boolean          @default(true)
+  defaultResponsible String?
+  defaultDays        Int?
+  observation        String?
+  active             Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  memberItemLinks MemberActivityItemLink[]
+
+  @@index([activityId])
+}
+
+model MemberActivityLink {
+  id                 String           @id @default(cuid())
+  memberId           String
+  member             TeamMember       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  activityTemplateId String
+  activityTemplate   ActivityTemplate @relation(fields: [activityTemplateId], references: [id], onDelete: Restrict)
+  observation        String?
+  includedAt         String           // YYYY-MM-DD — sem conversão UTC para evitar off-by-one
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  itemLinks MemberActivityItemLink[]
+
+  @@unique([memberId, activityTemplateId])
+  @@index([memberId])
+}
+
+model MemberActivityItemLink {
+  id          String             @id @default(cuid())
+  linkId      String
+  link        MemberActivityLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  itemId      String
+  item        ActivityItem       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  observation String?
+  includedAt  String             // YYYY-MM-DD
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([linkId, itemId])
+  @@index([linkId])
 }
 
 model TeamGuideline {
