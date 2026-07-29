@@ -1,5 +1,5 @@
--- Additive migration: biblioteca de atividades + vínculos por colaborador
--- Nenhum dado existente é alterado ou removido.
+-- Additive migration: activity library and member links
+-- Existing data is not changed or removed.
 
 CREATE TABLE IF NOT EXISTS "ActivityTemplate" (
   "id"           TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS "MemberActivityLink" (
   CONSTRAINT "MemberActivityLink_pkey" PRIMARY KEY ("id")
 );
 
--- Unique constraint: um colaborador não pode ter a mesma atividade duas vezes
+-- Unique constraint: a member cannot have the same activity twice
 CREATE UNIQUE INDEX IF NOT EXISTS "MemberActivityLink_memberId_activityTemplateId_key"
   ON "MemberActivityLink"("memberId", "activityTemplateId");
 
@@ -56,7 +56,3 @@ BEGIN
       ON DELETE RESTRICT ON UPDATE CASCADE;
   END IF;
 END $$;
-
--- Foreign keys (SQLite enforces only when PRAGMA foreign_keys = ON)
--- memberId → TeamMember.id
--- activityTemplateId → ActivityTemplate.id
