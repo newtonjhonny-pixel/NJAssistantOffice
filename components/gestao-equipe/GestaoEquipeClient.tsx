@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { TabCargos } from "./TabCargos"
-import { TabProcedimentos } from "./TabProcedimentos"
 import { TabAtividades } from "./TabAtividades"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent } from "@/components/ui/Card"
 import {
   Users, MessageSquare, Navigation, Umbrella, BookOpen,
-  Activity, BookMarked, Briefcase, ClipboardList, LayoutDashboard, Plus, Edit2, Trash2,
+  Activity, BookMarked, Briefcase, LayoutDashboard, Plus, Edit2, Trash2,
   Sparkles, X, ChevronDown, AlertTriangle, CheckCircle,
   Clock, Calendar, RefreshCw, Search, Filter,
 } from "lucide-react"
@@ -218,7 +217,6 @@ function TabVisaoGeral({ summary, onTabSwitch }: { summary: Summary | null; onTa
     { label: "Atividades",    value: counts.totalActivities, sub: `${counts.pendingActivities} pendentes`, tab: "atividades", color: "from-orange-500 to-orange-600", icon: Activity },
     { label: "Diretrizes",         value: counts.totalGuidelines, sub: "ativas",                    tab: "diretrizes",    color: "from-emerald-500 to-emerald-600", icon: BookMarked    },
     { label: "Descrição de Cargos", value: counts.totalCargos ?? 0, sub: "cargos cadastrados",        tab: "cargos",        color: "from-rose-500 to-rose-600",     icon: Briefcase     },
-    { label: "Procedimentos",       value: counts.totalProcedimentos ?? 0, sub: "POPs, ITs e checklists", tab: "procedimentos", color: "from-violet-500 to-violet-600", icon: ClipboardList },
   ]
 
   return (
@@ -1761,7 +1759,6 @@ const TABS = [
   { id: "atividades",     label: "Atividades",     icon: Activity },
   { id: "diretrizes",     label: "Diretrizes",     icon: BookMarked },
   { id: "cargos",         label: "Descrição de Cargos", icon: Briefcase },
-  { id: "procedimentos",  label: "Procedimentos",       icon: ClipboardList },
 ]
 
 export function GestaoEquipeClient() {
@@ -1839,7 +1836,6 @@ export function GestaoEquipeClient() {
         {activeTab === "atividades"     && <TabAtividades members={members} />}
         {activeTab === "diretrizes"     && <TabDiretrizes />}
         {activeTab === "cargos"         && <TabCargos />}
-        {activeTab === "procedimentos"  && <TabProcedimentos />}
       </div>
     </div>
   )

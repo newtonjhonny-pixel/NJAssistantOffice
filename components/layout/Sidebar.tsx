@@ -14,6 +14,7 @@ import {
   Users,
   PenLine,
   Presentation,
+  Workflow,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/especialistas", label: "Especialistas",        icon: Sparkles },
   { href: "/projetos",     label: "Projetos",           icon: FolderKanban },
   { href: "/conferencia",  label: "Conferência",        icon: ShieldCheck },
+  { href: "/processos",    label: "Processos",          icon: Workflow },
   { href: "/gestao-equipe",   label: "Gestão de Equipe",  icon: Users },
   { href: "/apresentacoes",   label: "Apresentações",     icon: Presentation },
 ]
@@ -81,6 +83,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             ? pathname.startsWith("/especialistas")
             : href === "/apresentacoes"
             ? pathname.startsWith("/apresentacoes")
+            : href === "/processos"
+            ? pathname.startsWith("/processos")
             : pathname === href
           return (
             <Link

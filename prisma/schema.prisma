@@ -897,8 +897,8 @@ model JobVersion {
 }
 
 model ProcedureDocument {
-  id               String   @id @default(cuid())
-  type             String   // POP | IT | CHECKLIST
+  id               String    @id @default(cuid())
+  type             String    // POP | IT | CHECKLIST | POLITICA | NORMA | MANUAL | CONTINGENCIA | TERMO
   title            String
   process          String?
   department       String?
@@ -912,12 +912,56 @@ model ProcedureDocument {
   risks            String?
   expectedResult   String?
   notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  // Fase 3 — versionamento e governança
+  processId        String?   // FK → Process.id (opcional)
+  code             String?   // ex: POP-001
+  version          String?   @default("1.0")
+  docStatus        String?   @default("RASCUNHO") // RASCUNHO | VIGENTE | REVISAO | OBSOLETO
+  nextReview       String?   // data ISO da próxima revisão
+  reviewer         String?
+  approver         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   steps          ProcedureStep[]
   checklistItems ProcedureChecklistItem[]
   attachments    ProcedureAttachment[]
+  flows          ProcedureFlow[]
+}
+
+// ─── PROCESSOS ────────────────────────────────────────────────────────────────
+
+model Process {
+  id          String   @id @default(cuid())
+  code        String?  // ex: PROC-001
+  name        String
+  description String?
+  objective   String?
+  owner       String?  // dono do processo
+  department  String?
+  category    String?  // OPERACIONAL | GESTAO | APOIO | ESTRATEGICO
+  status      String   @default("ATIVO") // ATIVO | EM_REVISAO | INATIVO
+  sla         String?  // tempo médio do ciclo
+  frequency   String?  // DIARIO | SEMANAL | MENSAL | SOB_DEMANDA
+  inputs      String?  // JSON: entradas do processo
+  outputs     String?  // JSON: saídas do processo
+  tools       String?  // sistemas utilizados
+  risks       String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProcedureFlow {
+  id         String            @id @default(cuid())
+  documentId String
+  document   ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  type       String            // AS_IS | TO_BE
+  content    String            // JSON serializado do diagrama React Flow
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([documentId, type])
 }
 
 model ProcedureStep {

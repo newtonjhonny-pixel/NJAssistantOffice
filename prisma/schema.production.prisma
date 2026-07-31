@@ -897,8 +897,8 @@ model JobVersion {
 }
 
 model ProcedureDocument {
-  id               String   @id @default(cuid())
-  type             String   // POP | IT | CHECKLIST
+  id               String    @id @default(cuid())
+  type             String    // POP | IT | CHECKLIST | POLITICA | NORMA | MANUAL | CONTINGENCIA | TERMO
   title            String
   process          String?
   department       String?
@@ -912,12 +912,53 @@ model ProcedureDocument {
   risks            String?
   expectedResult   String?
   notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  processId        String?
+  code             String?
+  version          String?   @default("1.0")
+  docStatus        String?   @default("RASCUNHO")
+  nextReview       String?
+  reviewer         String?
+  approver         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   steps          ProcedureStep[]
   checklistItems ProcedureChecklistItem[]
   attachments    ProcedureAttachment[]
+  flows          ProcedureFlow[]
+}
+
+model Process {
+  id          String   @id @default(cuid())
+  code        String?
+  name        String
+  description String?
+  objective   String?
+  owner       String?
+  department  String?
+  category    String?
+  status      String   @default("ATIVO")
+  sla         String?
+  frequency   String?
+  inputs      String?
+  outputs     String?
+  tools       String?
+  risks       String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProcedureFlow {
+  id         String            @id @default(cuid())
+  documentId String
+  document   ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  type       String
+  content    String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([documentId, type])
 }
 
 model ProcedureStep {
