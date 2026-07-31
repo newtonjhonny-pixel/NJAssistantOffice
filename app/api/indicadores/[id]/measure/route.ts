@@ -8,9 +8,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body  = await req.json()
   const id    = randomUUID()
-  const now   = new Date().toISOString()
+  const now   = new Date()
   const value = Number(body.value)
-  const measuredAt = body.measuredAt || now
+  const measuredAt = body.measuredAt || now.toISOString()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "IndicatorMeasurement" (id, "indicatorId", value, "measuredAt", notes, "createdAt")

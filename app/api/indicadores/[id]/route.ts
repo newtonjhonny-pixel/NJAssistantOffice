@@ -27,7 +27,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const now  = new Date().toISOString()
+  const now  = new Date()
 
   const target  = body.target       != null ? Number(body.target)       : null
   const minimum = body.minimum      != null ? Number(body.minimum)      : null

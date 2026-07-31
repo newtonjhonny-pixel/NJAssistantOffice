@@ -11,7 +11,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const body = await req.json()
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
 
-  const now = new Date().toISOString()
+  const now = new Date()
   await prisma.$executeRawUnsafe(
     `UPDATE "Process" SET code=?, name=?, description=?, objective=?, owner=?, department=?, category=?, status=?, sla=?, frequency=?, inputs=?, outputs=?, tools=?, risks=?, notes=?, "updatedAt"=? WHERE id=?`,
     body.code        ?? null,

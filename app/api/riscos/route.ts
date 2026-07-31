@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id   = randomUUID()
-  const now  = new Date().toISOString()
+  const now  = new Date()
   const prob = Number(body.probability) || 3
   const imp  = Number(body.impact)      || 3
   const level = calcLevel(prob, imp)

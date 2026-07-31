@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id  = randomUUID()
-  const now = new Date().toISOString()
+  const now = new Date()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Evidence"

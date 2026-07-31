@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
 
   const id  = randomUUID()
-  const now = new Date().toISOString()
+  const now = new Date()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Process" (id, code, name, description, objective, owner, department, category, status, sla, frequency, inputs, outputs, tools, risks, notes, "createdAt", "updatedAt")

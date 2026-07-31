@@ -25,7 +25,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const now = new Date().toISOString()
+  const now = new Date()
   // type só é atualizado quando explicitamente enviado (migração de legado)
   const typeClause = body.type ? ', type = ?' : ''
   const typeParam  = body.type ? [body.type] : []

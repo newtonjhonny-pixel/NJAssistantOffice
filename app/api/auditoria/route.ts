@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id   = randomUUID()
-  const now  = new Date().toISOString()
+  const now  = new Date()
 
   const rows = await prisma.$queryRawUnsafe<{ cnt: unknown }[]>(`SELECT COUNT(*) AS cnt FROM "AuditRecord"`)
   const n    = Number(rows[0]?.cnt ?? 0) + 1

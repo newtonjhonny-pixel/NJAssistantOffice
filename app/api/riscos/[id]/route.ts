@@ -24,7 +24,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const now  = new Date().toISOString()
+  const now  = new Date()
   const prob = Number(body.probability) || 3
   const imp  = Number(body.impact)      || 3
   const level = calcLevel(prob, imp)
