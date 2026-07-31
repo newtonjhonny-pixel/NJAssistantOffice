@@ -174,12 +174,13 @@ function RiskForm({
   async function save() {
     if (!form.title.trim()) return
     setSaving(true)
-    const url    = initial ? `/api/riscos/${initial.id}` : "/api/riscos"
-    const method = initial ? "PUT" : "POST"
-    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
-    setSaving(false)
-    onSaved()
-    onClose()
+    try {
+      const url    = initial ? `/api/riscos/${initial.id}` : "/api/riscos"
+      const method = initial ? "PUT" : "POST"
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      onSaved()
+      onClose()
+    } finally { setSaving(false) }
   }
 
   return (
@@ -388,16 +389,17 @@ export function TabRiscos() {
 
   async function load() {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (filterLevel) params.set("status", filterLevel)
-    if (filterCat)   params.set("category", filterCat)
-    const [rs, pr] = await Promise.all([
-      fetch(`/api/riscos?${params}`).then(r => r.json()),
-      fetch("/api/processes").then(r => r.json()).catch(() => []),
-    ])
-    setItems(Array.isArray(rs) ? rs : [])
-    setProcesses(Array.isArray(pr) ? pr : [])
-    setLoading(false)
+    try {
+      const params = new URLSearchParams()
+      if (filterLevel) params.set("status", filterLevel)
+      if (filterCat)   params.set("category", filterCat)
+      const [rs, pr] = await Promise.all([
+        fetch(`/api/riscos?${params}`).then(r => r.json()),
+        fetch("/api/processes").then(r => r.json()).catch(() => []),
+      ])
+      setItems(Array.isArray(rs) ? rs : [])
+      setProcesses(Array.isArray(pr) ? pr : [])
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [filterLevel, filterCat])

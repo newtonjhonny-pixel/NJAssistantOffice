@@ -300,20 +300,32 @@ export async function getDailySummary(): Promise<AgentResponse> {
     const ctx = await buildSystemContext()
     const systemPrompt = buildCoordinatorSystem(ctx)
     const userPrompt = `Gere o Resumo Inteligente do Dia para Newton.
-Seja direto e prático. Estruture assim:
-1. **Situação atual** — panorama em 2-3 frases
-2. **Prioridades imediatas** — máximo 5 itens, ordenados por urgência
-3. **O que pode aguardar** — tarefas que podem ser postergadas hoje
-4. **Alertas críticos** — pendências que representam risco real
-5. **Recomendação do dia** — frase final de orientação estratégica`
+
+Dados reais disponíveis:
+- Tarefas abertas: ${ctx.totalOpen}
+- Urgentes: ${ctx.totalUrgent}
+- Atrasadas: ${ctx.totalOverdue}
+- Aguardando retorno: ${ctx.totalWaiting}
+- Itens na caixa de entrada: ${ctx.inboxCount}
+${ctx.urgentList.length ? `\nUrgentes:\n${ctx.urgentList.map(t => `- ${t.title}${t.person ? ` (${t.person})` : ''}${t.dueDate ? ` — vence ${new Date(t.dueDate).toLocaleDateString('pt-BR')}` : ''}`).join('\n')}` : ''}
+${ctx.overdueList.length ? `\nAtrasadas:\n${ctx.overdueList.map(t => `- ${t.title}${t.person ? ` (${t.person})` : ''}${t.dueDate ? ` — venceu ${new Date(t.dueDate).toLocaleDateString('pt-BR')}` : ''}`).join('\n')}` : ''}
+${ctx.waitingList.length ? `\nAguardando retorno:\n${ctx.waitingList.map(t => `- ${t.title}${t.person ? ` (${t.person})` : ''}`).join('\n')}` : ''}
+
+Use ESSES dados reais. Não seja genérico. Estruture assim:
+1. **Situação atual** — panorama objetivo em 2-3 frases com os números reais
+2. **Prioridades imediatas** — máximo 5 itens concretos, ordenados por urgência/impacto
+3. **O que pode aguardar** — itens que podem ser postergados hoje sem risco
+4. **Alertas críticos** — pendências que representam risco real de atraso ou prejuízo
+5. **Recomendação do dia** — orientação estratégica específica para hoje`
 
     const content = await askAgentMessages([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
-    ], { temperature: 0.6, maxTokens: 1000 })
+    ], { temperature: 0.6, maxTokens: 1200 })
 
     return { agent: 'COORDENADOR', agentName: meta.name, icon: meta.icon, aiPowered: true, content }
-  } catch {
+  } catch (err) {
+    console.error('[getDailySummary] falha na IA, usando fallback:', err instanceof Error ? err.message : err)
     const ctx = await buildSystemContext()
     return {
       agent: 'COORDENADOR', agentName: meta.name, icon: meta.icon, aiPowered: false,

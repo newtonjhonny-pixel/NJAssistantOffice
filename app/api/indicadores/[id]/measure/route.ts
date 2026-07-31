@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const measuredAt = body.measuredAt || now
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "IndicatorMeasurement" (id, indicatorId, value, measuredAt, notes, createdAt)
+    `INSERT INTO "IndicatorMeasurement" (id, "indicatorId", value, "measuredAt", notes, "createdAt")
      VALUES (?, ?, ?, ?, ?, ?)`,
     id, params.id, value, measuredAt, body.notes || null, now,
   )
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const trend   = prevVal === null ? null : value > prevVal ? 'SUBINDO' : value < prevVal ? 'CAINDO' : 'ESTAVEL'
 
   await prisma.$executeRawUnsafe(
-    `UPDATE "Indicator" SET currentValue = ?, status = ?, trend = ?, lastMeasuredAt = ?, updatedAt = ? WHERE id = ?`,
+    `UPDATE "Indicator" SET "currentValue" = ?, status = ?, trend = ?, "lastMeasuredAt" = ?, "updatedAt" = ? WHERE id = ?`,
     value, status, trend, measuredAt, now, params.id,
   )
 

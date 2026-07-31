@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const responsible = searchParams.get('responsible')|| ''
 
   let sql = `SELECT d.*,
-    (SELECT COUNT(*) FROM "ProcedureStep" s WHERE s.documentId = d.id) AS stepCount,
-    (SELECT COUNT(*) FROM "ProcedureChecklistItem" c WHERE c.documentId = d.id) AS checklistCount
+    (SELECT COUNT(*) FROM "ProcedureStep" s WHERE s."documentId" = d.id) AS stepCount,
+    (SELECT COUNT(*) FROM "ProcedureChecklistItem" c WHERE c."documentId" = d.id) AS checklistCount
     FROM "ProcedureDocument" d WHERE 1=1`
   const params: unknown[] = []
 
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     sql += ` AND (d.title LIKE ? OR d.process LIKE ? OR d.description LIKE ?)`
     params.push(s, s, s)
   }
-  sql += ` ORDER BY d.updatedAt DESC`
+  sql += ` ORDER BY d."updatedAt" DESC`
 
   const docs = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(docs.map(d => {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "ProcedureDocument"
       (id, type, title, process, department, responsible, objective, application,
-       systemsUsed, description, responsibilities, attentionPoints, risks, expectedResult, notes, createdAt, updatedAt)
+       "systemsUsed", description, responsibilities, "attentionPoints", risks, "expectedResult", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     body.type,

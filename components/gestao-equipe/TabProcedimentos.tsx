@@ -528,22 +528,31 @@ function POPForm({ doc, onSaved }: { doc: ProcedureDoc; onSaved: () => void }) {
 
   async function save() {
     setSaving(true)
-    await fetch(`/api/procedures/${doc.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, processId: linkedProcId || null }),
-    })
-    setSaving(false)
-    onSaved()
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, processId: linkedProcId || null }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      onSaved()
+    } catch (err) {
+      console.error('[POPForm.save]', err)
+      alert('Erro ao salvar. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function runAI(mode: string) {
     setAiLoading(true); setAiMode(mode); setAiResult(null)
-    const res  = await fetch(`/api/procedures/${doc.id}/analyze`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, content: form.description }),
-    })
-    setAiResult(await res.json())
-    setAiLoading(false)
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}/analyze`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, content: form.description }),
+      })
+      if (res.ok) setAiResult(await res.json())
+    } catch { /* IA indisponível */ }
+    finally { setAiLoading(false) }
   }
 
   // Apply AI result to relevant fields based on mode
@@ -745,46 +754,50 @@ function ITForm({ doc, onSaved }: { doc: ProcedureDoc; onSaved: () => void }) {
 
   async function save() {
     setSaving(true)
-    // Save doc header
-    await fetch(`/api/procedures/${doc.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
-    })
-    // Delete all existing steps and recreate (simplest approach for ordering)
-    for (const s of doc.steps) {
-      await fetch(`/api/procedures/${doc.id}/steps/${s.id}`, { method: 'DELETE' })
-    }
-    for (const s of steps) {
-      await fetch(`/api/procedures/${doc.id}/steps`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order:          s.order,
-          title:          s.title,
-          description:    s.description || null,
-          notes:          s.notes       || null,
-          attentionPoint: s.attentionPoint || null,
-          imageBase64:    s.imageBase64 || undefined,
-          // Keep existing imagePath if no new image selected
-          imagePath:      s.imageBase64 ? undefined : (s.imagePath || null),
-        }),
+    try {
+      await fetch(`/api/procedures/${doc.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       })
+      for (const s of doc.steps) {
+        await fetch(`/api/procedures/${doc.id}/steps/${s.id}`, { method: 'DELETE' })
+      }
+      for (const s of steps) {
+        await fetch(`/api/procedures/${doc.id}/steps`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order:          s.order,
+            title:          s.title,
+            description:    s.description || null,
+            notes:          s.notes       || null,
+            attentionPoint: s.attentionPoint || null,
+            imageBase64:    s.imageBase64 || undefined,
+            imagePath:      s.imageBase64 ? undefined : (s.imagePath || null),
+          }),
+        })
+      }
+      onSaved()
+    } catch (err) {
+      console.error('[ITForm.save]', err)
+      alert('Erro ao salvar. Tente novamente.')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    onSaved()
   }
 
   async function runAI(mode: string) {
-    // Save current description to doc first so AI can read it
-    await fetch(`/api/procedures/${doc.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: steps.map((s, i) => `${i + 1}. ${s.title}: ${s.description}`).join('\n') }),
-    })
     setAiLoading(true); setAiMode(mode); setAiResult(null)
-    const res = await fetch(`/api/procedures/${doc.id}/analyze`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, content: form.objective || form.title }),
-    })
-    setAiResult(await res.json())
-    setAiLoading(false)
+    try {
+      await fetch(`/api/procedures/${doc.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: steps.map((s, i) => `${i + 1}. ${s.title}: ${s.description}`).join('\n') }),
+      })
+      const res = await fetch(`/api/procedures/${doc.id}/analyze`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, content: form.objective || form.title }),
+      })
+      if (res.ok) setAiResult(await res.json())
+    } catch { /* IA indisponível */ }
+    finally { setAiLoading(false) }
   }
 
   function applySteps() {
@@ -984,25 +997,33 @@ function ChecklistForm({ doc, onSaved }: { doc: ProcedureDoc; onSaved: () => voi
 
   async function save() {
     setSaving(true)
-    await fetch(`/api/procedures/${doc.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
-    })
-    await fetch(`/api/procedures/${doc.id}/checklist`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-    })
-    setSaving(false)
-    onSaved()
+    try {
+      await fetch(`/api/procedures/${doc.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+      })
+      await fetch(`/api/procedures/${doc.id}/checklist`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      onSaved()
+    } catch (err) {
+      console.error('[ChecklistForm.save]', err)
+      alert('Erro ao salvar. Tente novamente.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function runAI(mode: string) {
     setAiLoading(true); setAiMode(mode); setAiResult(null)
-    const res = await fetch(`/api/procedures/${doc.id}/analyze`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, processType: form.process || form.title }),
-    })
-    setAiResult(await res.json())
-    setAiLoading(false)
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}/analyze`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, processType: form.process || form.title }),
+      })
+      if (res.ok) setAiResult(await res.json())
+    } catch { /* IA indisponível */ }
+    finally { setAiLoading(false) }
   }
 
   function applyChecklist() {
@@ -1299,9 +1320,11 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
   const [activeTab,  setActiveTab]  = useState<DetailTab>("dados")
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/procedures/${docId}`)
-    setDoc(await res.json())
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/procedures/${docId}`)
+      if (res.ok) setDoc(await res.json())
+    } catch { /* rede */ }
+    finally { setLoading(false) }
   }, [docId])
 
   useEffect(() => { load() }, [load])
@@ -1419,24 +1442,33 @@ function DocList({
 
   const load = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({ type: typeKey })
-    if (search)     params.set('search', search)
-    const res = await fetch(`/api/procedures?${params}`)
-    setDocs(await res.json())
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ type: typeKey })
+      if (search) params.set('search', search)
+      const res = await fetch(`/api/procedures?${params}`)
+      if (res.ok) setDocs(await res.json())
+    } catch { /* rede indisponível — mantém lista vazia */ }
+    finally { setLoading(false) }
   }, [typeKey, search])
 
   useEffect(() => { load() }, [load])
 
   async function createDoc() {
     setCreating(true)
-    const res = await fetch('/api/procedures', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: typeKey, title: `Novo ${TYPE_LABELS[typeKey]}` }),
-    })
-    const doc = await res.json()
-    setCreating(false)
-    onSelect(doc.id)
+    try {
+      const res = await fetch('/api/procedures', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: typeKey, title: `Novo ${TYPE_LABELS[typeKey]}` }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const doc = await res.json()
+      onSelect(doc.id)
+    } catch (err) {
+      console.error('[createDoc]', err)
+      alert('Erro ao criar documento. Verifique a conexão e tente novamente.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   async function deleteDoc(id: string) {

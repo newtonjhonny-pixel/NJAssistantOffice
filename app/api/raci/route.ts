@@ -6,8 +6,8 @@ export async function GET(req: NextRequest) {
   const processId = new URL(req.url).searchParams.get("processId") || ""
   const rows = await prisma.$queryRawUnsafe(
     processId
-      ? `SELECT * FROM "RaciMatrix" WHERE processId = ? ORDER BY updatedAt DESC`
-      : `SELECT * FROM "RaciMatrix" ORDER BY updatedAt DESC`,
+      ? `SELECT * FROM "RaciMatrix" WHERE "processId" = ? ORDER BY "updatedAt" DESC`
+      : `SELECT * FROM "RaciMatrix" ORDER BY "updatedAt" DESC`,
     ...(processId ? [processId] : [])
   )
   return NextResponse.json(rows)
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const id  = randomUUID()
   const now = new Date().toISOString()
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "RaciMatrix" (id, processId, name, description, activities, roles, entries, notes, createdAt, updatedAt)
+    `INSERT INTO "RaciMatrix" (id, "processId", name, description, activities, roles, entries, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     body.processId   || null,

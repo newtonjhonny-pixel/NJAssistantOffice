@@ -13,24 +13,24 @@ async function ensureTable() {
       title         TEXT NOT NULL,
       description   TEXT,
       category      TEXT NOT NULL DEFAULT 'OPERACIONAL',
-      processId     TEXT,
+      "processId"     TEXT,
       probability   INTEGER NOT NULL DEFAULT 3,
       impact        INTEGER NOT NULL DEFAULT 3,
-      riskLevel     TEXT NOT NULL DEFAULT 'MEDIO',
+      "riskLevel"     TEXT NOT NULL DEFAULT 'MEDIO',
       cause         TEXT,
       effect        TEXT,
-      currentControl TEXT,
-      treatmentType TEXT NOT NULL DEFAULT 'MITIGAR',
-      actionPlan    TEXT,
+      "currentControl" TEXT,
+      "treatmentType" TEXT NOT NULL DEFAULT 'MITIGAR',
+      "actionPlan"    TEXT,
       responsible   TEXT,
-      dueDate       TEXT,
+      "dueDate"       TEXT,
       status        TEXT NOT NULL DEFAULT 'IDENTIFICADO',
-      residualProbability INTEGER,
-      residualImpact      INTEGER,
-      residualLevel       TEXT,
+      "residualProbability" INTEGER,
+      "residualImpact"      INTEGER,
+      "residualLevel"       TEXT,
       notes         TEXT,
-      createdAt     TEXT NOT NULL,
-      updatedAt     TEXT NOT NULL
+      "createdAt"     TEXT NOT NULL,
+      "updatedAt"     TEXT NOT NULL
     )
   `)
 }
@@ -44,15 +44,15 @@ export async function GET(req: NextRequest) {
 
   let sql = `SELECT r.*, p.name AS processName, p.code AS processCode
     FROM "Risk" r
-    LEFT JOIN "Process" p ON p.id = r.processId
+    LEFT JOIN "Process" p ON p.id = r."processId"
     WHERE 1=1`
   const params: unknown[] = []
 
   if (status)    { sql += ` AND r.status = ?`;    params.push(status) }
   if (category)  { sql += ` AND r.category = ?`;  params.push(category) }
-  if (processId) { sql += ` AND r.processId = ?`; params.push(processId) }
+  if (processId) { sql += ` AND r."processId" = ?`; params.push(processId) }
 
-  sql += ` ORDER BY r.impact DESC, r.probability DESC, r.createdAt DESC`
+  sql += ` ORDER BY r.impact DESC, r.probability DESC, r."createdAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(rows.map(r => ({
@@ -80,9 +80,9 @@ export async function POST(req: NextRequest) {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Risk"
-      (id, code, title, description, category, processId, probability, impact, riskLevel,
-       cause, effect, currentControl, treatmentType, actionPlan, responsible,
-       dueDate, status, residualProbability, residualImpact, residualLevel, notes, createdAt, updatedAt)
+      (id, code, title, description, category, "processId", probability, impact, "riskLevel",
+       cause, effect, "currentControl", "treatmentType", "actionPlan", responsible,
+       "dueDate", status, "residualProbability", "residualImpact", "residualLevel", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, code,
     body.title        || 'Novo Risco',

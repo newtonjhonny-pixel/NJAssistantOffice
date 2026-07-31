@@ -7,13 +7,13 @@ export const dynamic = 'force-dynamic'
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT i.*, p.name AS processName, p.code AS processCode
-     FROM "Indicator" i LEFT JOIN "Process" p ON p.id = i.processId
+     FROM "Indicator" i LEFT JOIN "Process" p ON p.id = i."processId"
      WHERE i.id = ?`, params.id
   )
   if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const r = rows[0]
   const measurements = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "IndicatorMeasurement" WHERE indicatorId = ? ORDER BY measuredAt DESC LIMIT 12`, params.id
+    `SELECT * FROM "IndicatorMeasurement" WHERE "indicatorId" = ? ORDER BY "measuredAt" DESC LIMIT 12`, params.id
   )
   return NextResponse.json({
     ...r,
@@ -38,9 +38,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   await prisma.$executeRawUnsafe(
     `UPDATE "Indicator" SET
       name = ?, description = ?, unit = ?, frequency = ?, category = ?,
-      processId = ?, responsible = ?,
-      target = ?, minimum = ?, maximum = ?, currentValue = ?, status = ?,
-      lastMeasuredAt = ?, trend = ?, notes = ?, updatedAt = ?
+      "processId" = ?, responsible = ?,
+      target = ?, minimum = ?, maximum = ?, "currentValue" = ?, status = ?,
+      "lastMeasuredAt" = ?, trend = ?, notes = ?, "updatedAt" = ?
     WHERE id = ?`,
     body.name        ?? null,
     body.description ?? null,
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT i.*, p.name AS processName, p.code AS processCode
-     FROM "Indicator" i LEFT JOIN "Process" p ON p.id = i.processId
+     FROM "Indicator" i LEFT JOIN "Process" p ON p.id = i."processId"
      WHERE i.id = ?`, params.id
   )
   const r = rows[0]
@@ -72,7 +72,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  await prisma.$executeRawUnsafe(`DELETE FROM "IndicatorMeasurement" WHERE indicatorId = ?`, params.id)
+  await prisma.$executeRawUnsafe(`DELETE FROM "IndicatorMeasurement" WHERE "indicatorId" = ?`, params.id)
   await prisma.$executeRawUnsafe(`DELETE FROM "Indicator" WHERE id = ?`, params.id)
   return NextResponse.json({ ok: true })
 }

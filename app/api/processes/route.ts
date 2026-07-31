@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   if (department) { params.push(`%${department}%`); sql += ` AND department LIKE ?` }
   if (status)     { params.push(status);     sql += ` AND status = ?` }
 
-  sql += ` ORDER BY updatedAt DESC`
+  sql += ` ORDER BY "updatedAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe(sql, ...params)
   return NextResponse.json(rows)
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString()
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "Process" (id, code, name, description, objective, owner, department, category, status, sla, frequency, inputs, outputs, tools, risks, notes, createdAt, updatedAt)
+    `INSERT INTO "Process" (id, code, name, description, objective, owner, department, category, status, sla, frequency, inputs, outputs, tools, risks, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     body.code        || null,

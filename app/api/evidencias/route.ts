@@ -11,15 +11,15 @@ async function ensureTable() {
       title        TEXT NOT NULL,
       type         TEXT NOT NULL DEFAULT 'DOCUMENTO',
       description  TEXT,
-      processId    TEXT,
-      documentId   TEXT,
+      "processId"    TEXT,
+      "documentId"   TEXT,
       responsible  TEXT,
-      evidenceDate TEXT,
+      "evidenceDate" TEXT,
       status       TEXT NOT NULL DEFAULT 'PENDENTE',
-      expiresAt    TEXT,
+      "expiresAt"    TEXT,
       notes        TEXT,
-      createdAt    TEXT NOT NULL,
-      updatedAt    TEXT NOT NULL
+      "createdAt"    TEXT NOT NULL,
+      "updatedAt"    TEXT NOT NULL
     )
   `)
 }
@@ -33,15 +33,15 @@ export async function GET(req: NextRequest) {
 
   let sql = `SELECT e.*, p.name AS processName, p.code AS processCode
     FROM "Evidence" e
-    LEFT JOIN "Process" p ON p.id = e.processId
+    LEFT JOIN "Process" p ON p.id = e."processId"
     WHERE 1=1`
   const params: unknown[] = []
 
   if (status)    { sql += ` AND e.status = ?`;    params.push(status) }
   if (type)      { sql += ` AND e.type = ?`;      params.push(type) }
-  if (processId) { sql += ` AND e.processId = ?`; params.push(processId) }
+  if (processId) { sql += ` AND e."processId" = ?`; params.push(processId) }
 
-  sql += ` ORDER BY e.createdAt DESC`
+  sql += ` ORDER BY e."createdAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(rows)
@@ -55,8 +55,8 @@ export async function POST(req: NextRequest) {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Evidence"
-      (id, title, type, description, processId, documentId, responsible,
-       evidenceDate, status, expiresAt, notes, createdAt, updatedAt)
+      (id, title, type, description, "processId", "documentId", responsible,
+       "evidenceDate", status, "expiresAt", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     body.title        || 'Nova Evidência',

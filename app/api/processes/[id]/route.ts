@@ -13,7 +13,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const now = new Date().toISOString()
   await prisma.$executeRawUnsafe(
-    `UPDATE "Process" SET code=?, name=?, description=?, objective=?, owner=?, department=?, category=?, status=?, sla=?, frequency=?, inputs=?, outputs=?, tools=?, risks=?, notes=?, updatedAt=? WHERE id=?`,
+    `UPDATE "Process" SET code=?, name=?, description=?, objective=?, owner=?, department=?, category=?, status=?, sla=?, frequency=?, inputs=?, outputs=?, tools=?, risks=?, notes=?, "updatedAt"=? WHERE id=?`,
     body.code        ?? null,
     body.name.trim(),
     body.description ?? null,

@@ -14,28 +14,28 @@ async function ensureTable() {
       unit         TEXT NOT NULL DEFAULT '%',
       frequency    TEXT NOT NULL DEFAULT 'MENSAL',
       category     TEXT NOT NULL DEFAULT 'QUALIDADE',
-      processId    TEXT,
+      "processId"    TEXT,
       responsible  TEXT,
       target       REAL,
       minimum      REAL,
       maximum      REAL,
-      currentValue REAL,
+      "currentValue" REAL,
       status       TEXT NOT NULL DEFAULT 'SEM_DADOS',
-      lastMeasuredAt TEXT,
+      "lastMeasuredAt" TEXT,
       trend        TEXT,
       notes        TEXT,
-      createdAt    TEXT NOT NULL,
-      updatedAt    TEXT NOT NULL
+      "createdAt"    TEXT NOT NULL,
+      "updatedAt"    TEXT NOT NULL
     )
   `)
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "IndicatorMeasurement" (
       id          TEXT PRIMARY KEY,
-      indicatorId TEXT NOT NULL,
+      "indicatorId" TEXT NOT NULL,
       value       REAL NOT NULL,
-      measuredAt  TEXT NOT NULL,
+      "measuredAt"  TEXT NOT NULL,
       notes       TEXT,
-      createdAt   TEXT NOT NULL
+      "createdAt"   TEXT NOT NULL
     )
   `)
 }
@@ -51,15 +51,15 @@ export async function GET(req: NextRequest) {
 
   let sql = `SELECT i.*, p.name AS processName, p.code AS processCode
     FROM "Indicator" i
-    LEFT JOIN "Process" p ON p.id = i.processId
+    LEFT JOIN "Process" p ON p.id = i."processId"
     WHERE 1=1`
   const params: unknown[] = []
 
   if (status)    { sql += ` AND i.status = ?`;    params.push(status) }
   if (category)  { sql += ` AND i.category = ?`;  params.push(category) }
-  if (processId) { sql += ` AND i.processId = ?`; params.push(processId) }
+  if (processId) { sql += ` AND i."processId" = ?`; params.push(processId) }
 
-  sql += ` ORDER BY i.createdAt DESC`
+  sql += ` ORDER BY i."createdAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(rows.map(r => ({
@@ -89,9 +89,9 @@ export async function POST(req: NextRequest) {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Indicator"
-      (id, code, name, description, unit, frequency, category, processId,
-       responsible, target, minimum, maximum, currentValue, status,
-       lastMeasuredAt, trend, notes, createdAt, updatedAt)
+      (id, code, name, description, unit, frequency, category, "processId",
+       responsible, target, minimum, maximum, "currentValue", status,
+       "lastMeasuredAt", trend, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, code,
     body.name        || 'Novo Indicador',

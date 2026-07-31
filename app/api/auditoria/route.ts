@@ -12,21 +12,21 @@ async function ensureTable() {
       title        TEXT NOT NULL,
       type         TEXT NOT NULL DEFAULT 'INTERNA',
       scope        TEXT,
-      processId    TEXT,
+      "processId"    TEXT,
       auditor      TEXT,
       auditee      TEXT,
-      plannedDate  TEXT,
-      executedDate TEXT,
+      "plannedDate"  TEXT,
+      "executedDate" TEXT,
       status       TEXT NOT NULL DEFAULT 'PLANEJADA',
       result       TEXT,
       findings     TEXT,
-      nonConformities TEXT,
+      "nonConformities" TEXT,
       opportunities   TEXT,
-      actionPlan   TEXT,
-      nextAudit    TEXT,
+      "actionPlan"   TEXT,
+      "nextAudit"    TEXT,
       notes        TEXT,
-      createdAt    TEXT NOT NULL,
-      updatedAt    TEXT NOT NULL
+      "createdAt"    TEXT NOT NULL,
+      "updatedAt"    TEXT NOT NULL
     )
   `)
 }
@@ -40,15 +40,15 @@ export async function GET(req: NextRequest) {
 
   let sql = `SELECT a.*, p.name AS processName, p.code AS processCode
     FROM "AuditRecord" a
-    LEFT JOIN "Process" p ON p.id = a.processId
+    LEFT JOIN "Process" p ON p.id = a."processId"
     WHERE 1=1`
   const params: unknown[] = []
 
   if (status)    { sql += ` AND a.status = ?`;    params.push(status) }
   if (type)      { sql += ` AND a.type = ?`;      params.push(type) }
-  if (processId) { sql += ` AND a.processId = ?`; params.push(processId) }
+  if (processId) { sql += ` AND a."processId" = ?`; params.push(processId) }
 
-  sql += ` ORDER BY a.plannedDate DESC, a.createdAt DESC`
+  sql += ` ORDER BY a."plannedDate" DESC, a."createdAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(rows)
@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "AuditRecord"
-      (id, code, title, type, scope, processId, auditor, auditee,
-       plannedDate, executedDate, status, result, findings,
-       nonConformities, opportunities, actionPlan, nextAudit, notes, createdAt, updatedAt)
+      (id, code, title, type, scope, "processId", auditor, auditee,
+       "plannedDate", "executedDate", status, result, findings,
+       "nonConformities", opportunities, "actionPlan", "nextAudit", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, code,
     body.title           || 'Nova Auditoria',

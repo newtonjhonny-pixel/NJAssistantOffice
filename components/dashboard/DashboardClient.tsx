@@ -45,9 +45,10 @@ interface OrigemStat {
 }
 
 interface SummaryData {
-  content: string
+  content?: string
   aiPowered: boolean
   aiConfigured: boolean
+  error?: string
 }
 
 const statCards = [
@@ -82,7 +83,13 @@ export function DashboardClient() {
     try {
       const res = await fetch("/api/dashboard/summary")
       const d = await res.json()
-      setSummary(d)
+      if (!res.ok) {
+        setSummary({ aiPowered: false, aiConfigured: false, error: d.error ?? 'Erro ao gerar resumo' })
+      } else {
+        setSummary(d)
+      }
+    } catch {
+      setSummary({ aiPowered: false, aiConfigured: false, error: 'Falha de conexão. Verifique o servidor.' })
     } finally {
       setSummaryLoading(false)
     }
@@ -196,7 +203,18 @@ export function DashboardClient() {
 
           {summary && !summaryLoading && (
             <>
-              {summary.aiConfigured === false && (
+              {summary.error && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-red-800 font-medium">{summary.error}</p>
+                    <button onClick={loadSummary} className="text-xs text-red-600 underline mt-1 hover:text-red-800">
+                      Tentar novamente
+                    </button>
+                  </div>
+                </div>
+              )}
+              {summary.aiConfigured === false && !summary.error && (
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                   <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-800">
@@ -206,14 +224,16 @@ export function DashboardClient() {
                   </p>
                 </div>
               )}
-              <div
-                className="text-sm text-slate-700 leading-relaxed agent-content"
-                dangerouslySetInnerHTML={{
-                  __html: summary.content
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\n/g, '<br/>')
-                }}
-              />
+              {summary.content && (
+                <div
+                  className="text-sm text-slate-700 leading-relaxed agent-content"
+                  dangerouslySetInnerHTML={{
+                    __html: summary.content
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\n/g, '<br/>')
+                  }}
+                />
+              )}
             </>
           )}
         </CardContent>

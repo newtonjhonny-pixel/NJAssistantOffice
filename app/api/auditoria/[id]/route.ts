@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT a.*, p.name AS processName, p.code AS processCode
-     FROM "AuditRecord" a LEFT JOIN "Process" p ON p.id = a.processId
+     FROM "AuditRecord" a LEFT JOIN "Process" p ON p.id = a."processId"
      WHERE a.id = ?`, params.id
   )
   if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -19,11 +19,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   await prisma.$executeRawUnsafe(
     `UPDATE "AuditRecord" SET
-      title = ?, type = ?, scope = ?, processId = ?,
-      auditor = ?, auditee = ?, plannedDate = ?, executedDate = ?,
+      title = ?, type = ?, scope = ?, "processId" = ?,
+      auditor = ?, auditee = ?, "plannedDate" = ?, "executedDate" = ?,
       status = ?, result = ?, findings = ?,
-      nonConformities = ?, opportunities = ?,
-      actionPlan = ?, nextAudit = ?, notes = ?, updatedAt = ?
+      "nonConformities" = ?, opportunities = ?,
+      "actionPlan" = ?, "nextAudit" = ?, notes = ?, "updatedAt" = ?
     WHERE id = ?`,
     body.title           ?? null,
     body.type            ?? 'INTERNA',
@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT a.*, p.name AS processName, p.code AS processCode
-     FROM "AuditRecord" a LEFT JOIN "Process" p ON p.id = a.processId
+     FROM "AuditRecord" a LEFT JOIN "Process" p ON p.id = a."processId"
      WHERE a.id = ?`, params.id
   )
   return NextResponse.json(rows[0])

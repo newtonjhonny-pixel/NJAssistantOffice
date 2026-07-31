@@ -11,13 +11,13 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const doc = docs[0]
 
   const steps = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureStep" WHERE documentId = ? ORDER BY "order" ASC`, params.id
+    `SELECT * FROM "ProcedureStep" WHERE "documentId" = ? ORDER BY "order" ASC`, params.id
   )
   const checklistItems = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureChecklistItem" WHERE documentId = ? ORDER BY "order" ASC`, params.id
+    `SELECT * FROM "ProcedureChecklistItem" WHERE "documentId" = ? ORDER BY "order" ASC`, params.id
   )
   const attachments = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureAttachment" WHERE documentId = ? ORDER BY createdAt ASC`, params.id
+    `SELECT * FROM "ProcedureAttachment" WHERE "documentId" = ? ORDER BY "createdAt" ASC`, params.id
   )
 
   return NextResponse.json({ ...doc, steps, checklistItems, attachments })
@@ -33,9 +33,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   await prisma.$executeRawUnsafe(
     `UPDATE "ProcedureDocument" SET
       title = ?, process = ?, department = ?, responsible = ?,
-      objective = ?, application = ?, systemsUsed = ?, description = ?,
-      responsibilities = ?, attentionPoints = ?, risks = ?, expectedResult = ?,
-      notes = ?, processId = ?, "docStatus" = ?, version = ?${typeClause}, updatedAt = ?
+      objective = ?, application = ?, "systemsUsed" = ?, description = ?,
+      responsibilities = ?, "attentionPoints" = ?, risks = ?, "expectedResult" = ?,
+      notes = ?, "processId" = ?, "docStatus" = ?, version = ?${typeClause}, "updatedAt" = ?
     WHERE id = ?`,
     body.title          ?? null,
     body.process        ?? null,
@@ -61,13 +61,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     `SELECT * FROM "ProcedureDocument" WHERE id = ?`, params.id
   )
   const steps = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureStep" WHERE documentId = ? ORDER BY "order" ASC`, params.id
+    `SELECT * FROM "ProcedureStep" WHERE "documentId" = ? ORDER BY "order" ASC`, params.id
   )
   const checklistItems = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureChecklistItem" WHERE documentId = ? ORDER BY "order" ASC`, params.id
+    `SELECT * FROM "ProcedureChecklistItem" WHERE "documentId" = ? ORDER BY "order" ASC`, params.id
   )
   const attachments = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT * FROM "ProcedureAttachment" WHERE documentId = ? ORDER BY createdAt ASC`, params.id
+    `SELECT * FROM "ProcedureAttachment" WHERE "documentId" = ? ORDER BY "createdAt" ASC`, params.id
   )
   return NextResponse.json({ ...rows[0], steps, checklistItems, attachments })
 }

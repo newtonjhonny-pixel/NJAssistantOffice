@@ -116,12 +116,13 @@ function ControlForm({
   async function save() {
     if (!form.title.trim()) return
     setSaving(true)
-    const url    = initial ? `/api/controles/${initial.id}` : "/api/controles"
-    const method = initial ? "PUT" : "POST"
-    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
-    setSaving(false)
-    onSaved()
-    onClose()
+    try {
+      const url    = initial ? `/api/controles/${initial.id}` : "/api/controles"
+      const method = initial ? "PUT" : "POST"
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      onSaved()
+      onClose()
+    } finally { setSaving(false) }
   }
 
   return (
@@ -259,18 +260,19 @@ export function TabControles() {
 
   async function load() {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (filterStatus) params.set("status", filterStatus)
-    if (filterType)   params.set("type", filterType)
-    const [ct, pr, rs] = await Promise.all([
-      fetch(`/api/controles?${params}`).then(r => r.json()),
-      fetch("/api/processes").then(r => r.json()).catch(() => []),
-      fetch("/api/riscos").then(r => r.json()).catch(() => []),
-    ])
-    setItems(Array.isArray(ct) ? ct : [])
-    setProcesses(Array.isArray(pr) ? pr : [])
-    setRisks(Array.isArray(rs) ? rs : [])
-    setLoading(false)
+    try {
+      const params = new URLSearchParams()
+      if (filterStatus) params.set("status", filterStatus)
+      if (filterType)   params.set("type", filterType)
+      const [ct, pr, rs] = await Promise.all([
+        fetch(`/api/controles?${params}`).then(r => r.json()),
+        fetch("/api/processes").then(r => r.json()).catch(() => []),
+        fetch("/api/riscos").then(r => r.json()).catch(() => []),
+      ])
+      setItems(Array.isArray(ct) ? ct : [])
+      setProcesses(Array.isArray(pr) ? pr : [])
+      setRisks(Array.isArray(rs) ? rs : [])
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [filterStatus, filterType])

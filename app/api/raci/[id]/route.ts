@@ -12,7 +12,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
   const now = new Date().toISOString()
   await prisma.$executeRawUnsafe(
-    `UPDATE "RaciMatrix" SET processId=?, name=?, description=?, activities=?, roles=?, entries=?, notes=?, updatedAt=? WHERE id=?`,
+    `UPDATE "RaciMatrix" SET "processId"=?, name=?, description=?, activities=?, roles=?, entries=?, notes=?, "updatedAt"=? WHERE id=?`,
     body.processId   ?? null,
     body.name.trim(),
     body.description ?? null,

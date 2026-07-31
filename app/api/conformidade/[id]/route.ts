@@ -7,7 +7,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT c.*, p.name AS processName, p.code AS processCode
      FROM "ComplianceObligation" c
-     LEFT JOIN "Process" p ON p.id = c.processId
+     LEFT JOIN "Process" p ON p.id = c."processId"
      WHERE c.id = ?`, params.id
   )
   if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -20,8 +20,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   await prisma.$executeRawUnsafe(
     `UPDATE "ComplianceObligation" SET
-      title = ?, legalBasis = ?, category = ?, responsible = ?,
-      frequency = ?, dueDate = ?, status = ?, description = ?, notes = ?, processId = ?, updatedAt = ?
+      title = ?, "legalBasis" = ?, category = ?, responsible = ?,
+      frequency = ?, "dueDate" = ?, status = ?, description = ?, notes = ?, "processId" = ?, "updatedAt" = ?
     WHERE id = ?`,
     body.title       ?? null,
     body.legalBasis  ?? null,
@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT c.*, p.name AS processName, p.code AS processCode
      FROM "ComplianceObligation" c
-     LEFT JOIN "Process" p ON p.id = c.processId
+     LEFT JOIN "Process" p ON p.id = c."processId"
      WHERE c.id = ?`, params.id
   )
   return NextResponse.json(rows[0])

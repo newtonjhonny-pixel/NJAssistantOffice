@@ -13,18 +13,18 @@ async function ensureTable() {
       description  TEXT,
       type         TEXT NOT NULL DEFAULT 'PREVENTIVO',
       category     TEXT NOT NULL DEFAULT 'PROCESSO',
-      processId    TEXT,
-      riskId       TEXT,
+      "processId"    TEXT,
+      "riskId"       TEXT,
       responsible  TEXT,
       frequency    TEXT NOT NULL DEFAULT 'MENSAL',
       status       TEXT NOT NULL DEFAULT 'ATIVO',
-      lastExecution TEXT,
-      nextExecution TEXT,
+      "lastExecution" TEXT,
+      "nextExecution" TEXT,
       evidence     TEXT,
       effectiveness TEXT NOT NULL DEFAULT 'NAO_AVALIADO',
       notes        TEXT,
-      createdAt    TEXT NOT NULL,
-      updatedAt    TEXT NOT NULL
+      "createdAt"    TEXT NOT NULL,
+      "updatedAt"    TEXT NOT NULL
     )
   `)
 }
@@ -39,16 +39,16 @@ export async function GET(req: NextRequest) {
   let sql = `SELECT c.*, p.name AS processName, p.code AS processCode,
       r.title AS riskTitle, r.code AS riskCode
     FROM "Control" c
-    LEFT JOIN "Process" p ON p.id = c.processId
-    LEFT JOIN "Risk"    r ON r.id = c.riskId
+    LEFT JOIN "Process" p ON p.id = c."processId"
+    LEFT JOIN "Risk"    r ON r.id = c."riskId"
     WHERE 1=1`
   const params: unknown[] = []
 
   if (status)    { sql += ` AND c.status = ?`;    params.push(status) }
   if (type)      { sql += ` AND c.type = ?`;      params.push(type) }
-  if (processId) { sql += ` AND c.processId = ?`; params.push(processId) }
+  if (processId) { sql += ` AND c."processId" = ?`; params.push(processId) }
 
-  sql += ` ORDER BY c.nextExecution ASC, c.createdAt DESC`
+  sql += ` ORDER BY c."nextExecution" ASC, c."createdAt" DESC`
 
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(rows)
@@ -66,9 +66,9 @@ export async function POST(req: NextRequest) {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Control"
-      (id, code, title, description, type, category, processId, riskId,
-       responsible, frequency, status, lastExecution, nextExecution,
-       evidence, effectiveness, notes, createdAt, updatedAt)
+      (id, code, title, description, type, category, "processId", "riskId",
+       responsible, frequency, status, "lastExecution", "nextExecution",
+       evidence, effectiveness, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, code,
     body.title         || 'Novo Controle',

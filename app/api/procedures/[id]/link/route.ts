@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const { processId } = await req.json()
   await prisma.$executeRawUnsafe(
-    `UPDATE "ProcedureDocument" SET processId = ?, updatedAt = ? WHERE id = ?`,
+    `UPDATE "ProcedureDocument" SET "processId" = ?, "updatedAt" = ? WHERE id = ?`,
     processId ?? null,
     new Date().toISOString(),
     params.id,

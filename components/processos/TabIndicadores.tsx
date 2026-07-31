@@ -127,14 +127,15 @@ function MeasureModal({ indicator, onClose, onSaved }: {
   async function save() {
     if (!value) return
     setSaving(true)
-    await fetch(`/api/indicadores/${indicator.id}/measure`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: Number(value), notes: notes || null, measuredAt: date }),
-    })
-    setSaving(false)
-    onSaved()
-    onClose()
+    try {
+      await fetch(`/api/indicadores/${indicator.id}/measure`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: Number(value), notes: notes || null, measuredAt: date }),
+      })
+      onSaved()
+      onClose()
+    } finally { setSaving(false) }
   }
 
   return (
@@ -196,12 +197,13 @@ function IndicatorForm({ initial, processes, onClose, onSaved }: {
   async function save() {
     if (!form.name.trim()) return
     setSaving(true)
-    const url    = initial ? `/api/indicadores/${initial.id}` : "/api/indicadores"
-    const method = initial ? "PUT" : "POST"
-    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
-    setSaving(false)
-    onSaved()
-    onClose()
+    try {
+      const url    = initial ? `/api/indicadores/${initial.id}` : "/api/indicadores"
+      const method = initial ? "PUT" : "POST"
+      await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      onSaved()
+      onClose()
+    } finally { setSaving(false) }
   }
 
   return (
@@ -306,16 +308,17 @@ export function TabIndicadores() {
 
   async function load() {
     setLoading(true)
-    const params = new URLSearchParams()
-    if (filterStatus) params.set("status", filterStatus)
-    if (filterCat)    params.set("category", filterCat)
-    const [ind, pr] = await Promise.all([
-      fetch(`/api/indicadores?${params}`).then(r => r.json()),
-      fetch("/api/processes").then(r => r.json()).catch(() => []),
-    ])
-    setItems(Array.isArray(ind) ? ind : [])
-    setProcesses(Array.isArray(pr) ? pr : [])
-    setLoading(false)
+    try {
+      const params = new URLSearchParams()
+      if (filterStatus) params.set("status", filterStatus)
+      if (filterCat)    params.set("category", filterCat)
+      const [ind, pr] = await Promise.all([
+        fetch(`/api/indicadores?${params}`).then(r => r.json()),
+        fetch("/api/processes").then(r => r.json()).catch(() => []),
+      ])
+      setItems(Array.isArray(ind) ? ind : [])
+      setProcesses(Array.isArray(pr) ? pr : [])
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [filterStatus, filterCat])
