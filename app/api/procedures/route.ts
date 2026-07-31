@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const responsible = searchParams.get('responsible')|| ''
 
   let sql = `SELECT d.*,
-    (SELECT COUNT(*) FROM "ProcedureStep" s WHERE s."documentId" = d.id) AS stepCount,
-    (SELECT COUNT(*) FROM "ProcedureChecklistItem" c WHERE c."documentId" = d.id) AS checklistCount
+    (SELECT COUNT(*) FROM "ProcedureStep" s WHERE s."documentId" = d.id) AS "stepCount",
+    (SELECT COUNT(*) FROM "ProcedureChecklistItem" c WHERE c."documentId" = d.id) AS "checklistCount"
     FROM "ProcedureDocument" d WHERE 1=1`
   const params: unknown[] = []
 
@@ -29,8 +29,14 @@ export async function GET(req: NextRequest) {
 
   const docs = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params)
   return NextResponse.json(docs.map(d => {
-    const { stepCount, checklistCount, ...rest } = d
-    return { ...rest, _count: { steps: Number(stepCount ?? 0), checklistItems: Number(checklistCount ?? 0) } }
+    const { stepCount, checklistCount, stepcount, checklistcount, ...rest } = d
+    return {
+      ...rest,
+      _count: {
+        steps: Number(stepCount ?? stepcount ?? 0),
+        checklistItems: Number(checklistCount ?? checklistcount ?? 0),
+      },
+    }
   }))
 }
 
