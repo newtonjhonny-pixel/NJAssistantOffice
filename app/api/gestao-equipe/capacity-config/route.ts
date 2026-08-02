@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT * FROM "CapacityConfig" WHERE "active" = 1 LIMIT 1
+      SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1
     `
     return NextResponse.json(rows[0] ?? null)
   } catch (e) {
@@ -35,9 +35,9 @@ export async function PUT(req: Request) {
         "bandYellow"       = COALESCE(${body.bandYellow       ?? null}, "bandYellow"),
         "bandOrange"       = COALESCE(${body.bandOrange       ?? null}, "bandOrange"),
         "updatedAt"        = ${now}
-      WHERE "active" = 1
+      WHERE "active" = true
     `
-    const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "CapacityConfig" WHERE "active" = 1 LIMIT 1`
+    const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1`
     return NextResponse.json(rows[0])
   } catch (e) {
     return NextResponse.json({ error: 'Erro ao salvar configuraÃ§Ã£o' }, { status: 500 })

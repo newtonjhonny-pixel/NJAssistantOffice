@@ -28,7 +28,7 @@ function calcBand(pct: number, cfg: Config): string {
 }
 
 async function getDimData() {
-  const cfgRows = await prisma.$queryRaw<Config[]>`SELECT * FROM "CapacityConfig" WHERE "active" = 1 LIMIT 1`
+  const cfgRows = await prisma.$queryRaw<Config[]>`SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1`
   const cfg: Config = cfgRows[0] ?? {
     weightEmployee: 1, weightCompany: 5, weightProcess: 2, weightVolume: 0.5,
     weightComplexity: 3, weightManual: 2, weightCritical: 3, capacityRef: 100,
