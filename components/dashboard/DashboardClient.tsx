@@ -85,6 +85,8 @@ export function DashboardClient() {
       const d = await res.json()
       if (!res.ok) {
         setSummary({ aiPowered: false, aiConfigured: false, error: d.error ?? 'Erro ao gerar resumo' })
+      } else if (d.aiPowered && !d.content?.trim()) {
+        setSummary({ aiPowered: true, aiConfigured: true, error: 'Não foi possível gerar o resumo inteligente. Tente novamente.' })
       } else {
         setSummary(d)
       }

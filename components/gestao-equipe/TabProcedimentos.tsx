@@ -9,11 +9,25 @@ import {
   GripVertical, AlertCircle, Check, Copy, Search, Filter,
   Image as ImageIcon, Upload, Link2,
   Shield, BookOpen, BookMarked, AlertTriangle, ScrollText,
+  Bookmark, BookmarkCheck, LayoutTemplate,
 } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card"
 import { cn, formatDate } from "@/lib/utils"
 import { FluxoProcessoTab } from "./procedimentos/FluxoProcessoTab"
+import { DocIdentificationTab, type IdentificationDoc } from "./procedimentos/DocIdentificationTab"
+import { DocGovernanceTab, type GovernanceDoc } from "./procedimentos/DocGovernanceTab"
+import { DocHistoryTab } from "./procedimentos/DocHistoryTab"
+import { DocContentPolitica } from "./procedimentos/DocContentPolitica"
+import { DocContentNorma } from "./procedimentos/DocContentNorma"
+import { DocContentContingencia } from "./procedimentos/DocContentContingencia"
+import { DocContentTermo } from "./procedimentos/DocContentTermo"
+import { DocRiscosControles } from "./procedimentos/DocRiscosControles"
+import { DocEvidencias } from "./procedimentos/DocEvidencias"
+import { DocTreinamentos } from "./procedimentos/DocTreinamentos"
+import { DocLeituraAceite } from "./procedimentos/DocLeituraAceite"
+import { DocAssistenteIA } from "./procedimentos/DocAssistenteIA"
+import { ConformidadeDashboard } from "./procedimentos/ConformidadeDashboard"
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +48,24 @@ interface ProcedureDoc {
   application: string | null; systemsUsed: string | null; description: string | null
   responsibilities: string | null; attentionPoints: string | null; risks: string | null
   expectedResult: string | null; notes: string | null
-  status: string; version: string
+  status: string; version: string; code?: string | null
+  workflowStatus?: string | null
+  // Fase 1 — Identificação
+  subtitle?: string | null; category?: string | null; macroprocess?: string | null
+  unit?: string | null; company?: string | null; targetAudience?: string | null
+  scope?: string | null; infoClassification?: string | null; legalBasis?: string | null
+  retentionPeriod?: string | null; revisionNumber?: number | null
+  elaborationDate?: string | null; approvalDate?: string | null
+  effectiveDate?: string | null; nextReview?: string | null
+  reviewPeriodicity?: string | null; creationReason?: string | null
+  revisionReason?: string | null; replacedDocument?: string | null
+  successorDocument?: string | null; tags?: string | null; keywords?: string | null
+  // Fase 1 — Governança
+  elaboratedBy?: string | null; technicalReviewer?: string | null
+  qualityReviewer?: string | null; legalReviewer?: string | null
+  processOwner?: string | null; publicationResponsible?: string | null
+  substitute?: string | null; approvalCommittee?: string | null
+  approvalLevel?: string | null; approvalDeadline?: string | null
   createdAt: string; updatedAt: string
   steps: ProcedureStep[]
   checklistItems: ChecklistItem[]
@@ -315,8 +346,43 @@ async function exportPDF(doc: ProcedureDoc) {
     if (b64) base64Map[p] = b64
   }))
 
+  // Fetch extras data in parallel (graceful fallback on failure)
+  const [evRes, trRes, hiRes] = await Promise.allSettled([
+    fetch(`/api/procedures/${doc.id}/evidencias`),
+    fetch(`/api/procedures/${doc.id}/treinamentos`),
+    fetch(`/api/procedures/${doc.id}/history`),
+  ])
+
+  const extras: PdfExtras = {
+    evidencias: evRes.status === 'fulfilled' && evRes.value.ok
+      ? (await evRes.value.json() as Record<string, string>[]).map(e => ({
+          titulo: e.titulo ?? e.fileName ?? '',
+          tipo: e.tipo ?? e.fileType ?? '',
+          descricao: e.descricao ?? e.description ?? '',
+          referencia: e.referencia ?? e.filePath ?? '',
+          responsavel: e.responsavel ?? '',
+          periodicidade: e.periodicidade ?? '',
+        }))
+      : [],
+    treinamentos: trRes.status === 'fulfilled' && trRes.value.ok
+      ? (await trRes.value.json() as Record<string, string>[]).map(t => ({
+          titulo: t.titulo ?? t.fileName ?? '',
+          modalidade: t.modalidade ?? '',
+          participante: t.participante ?? '',
+          status: t.status ?? '',
+          data: t.data ?? t.createdAt ?? '',
+          instrutor: t.instrutor ?? '',
+        }))
+      : [],
+    leituras: hiRes.status === 'fulfilled' && hiRes.value.ok
+      ? (await hiRes.value.json() as Record<string, string>[])
+          .filter(r => r.action === 'LEITURA')
+          .map(r => ({ userName: r.userName ?? '', version: r.version ?? null, createdAt: r.createdAt ?? '', comment: r.comment ?? null }))
+      : [],
+  }
+
   const date = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-  const html = buildDocHTML(doc, base64Map, 'pdf', date)
+  const html = buildDocHTML(doc, base64Map, 'pdf', date, extras)
 
   const win = window.open('', '_blank', 'width=900,height=700')
   if (!win) { alert('Popup bloqueado. Permita popups para este site.'); return }
@@ -358,7 +424,13 @@ function exportWord(doc: ProcedureDoc) {
   URL.revokeObjectURL(url)
 }
 
-function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, format: 'pdf' | 'word'): string {
+interface PdfExtras {
+  evidencias?: { titulo: string; tipo: string; descricao: string; referencia: string; responsavel: string; periodicidade?: string }[]
+  treinamentos?: { titulo: string; modalidade: string; participante: string; status: string; data: string; instrutor: string }[]
+  leituras?: { userName: string; version: string | null; createdAt: string; comment: string | null }[]
+}
+
+function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, format: 'pdf' | 'word', extras?: PdfExtras): string {
   const imgTag = (path: string) => {
     const src = base64Map[path] || (format === 'word' ? `http://localhost:3000${path}` : path)
     return `<img src="${src}" class="${format === 'pdf' ? 'step-image' : 'step-img'}" alt="Imagem do passo" />`
@@ -366,6 +438,88 @@ function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, form
 
   const section = (title: string, content: string | null) =>
     content ? `<h2>${title}</h2><p>${content.replace(/\n/g, '<br>')}</p>` : ''
+
+  // Seção de Riscos e Controles (parsed do JSON)
+  const riscosSection = (() => {
+    if (!doc.risks) return ''
+    try {
+      const r = JSON.parse(doc.risks)
+      if (r.__tipo !== 'RISCOS_CONTROLES') return section('Riscos e Controles', doc.risks)
+      const riscos: Record<string, string>[]   = r.riscos   ?? []
+      const controles: Record<string, string>[] = r.controles ?? []
+      if (!riscos.length && !controles.length) return ''
+      const SEV_COLOR: Record<string, string> = {
+        CRITICO: '#fee2e2', ALTO: '#ffedd5', MEDIO: '#fef9c3', BAIXO: '#f0fdf4',
+      }
+      const riscosHTML = riscos.map(rk => {
+        const c = controles.find(ct => ct.riscoId === rk.id)
+        return `
+          <tr style="background:${SEV_COLOR[rk.severidade] ?? '#f8fafc'}">
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${rk.titulo}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:center;font-size:8pt">${rk.probabilidade?.replace(/_/g,' ') ?? '—'}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:center;font-size:8pt">${rk.impacto?.replace(/_/g,' ') ?? '—'}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:center;font-size:8pt;font-weight:600">${rk.severidade ?? '—'}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;font-size:8pt">${c ? c.titulo : '—'}</td>
+          </tr>`
+      }).join('')
+      return `<h2>Riscos e Controles</h2>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:8pt;font-size:8.5pt">
+          <tr style="background:#f8fafc">
+            <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:left">Risco</th>
+            <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:70pt">Probabilidade</th>
+            <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:60pt">Impacto</th>
+            <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:60pt">Severidade</th>
+            <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:left">Controle</th>
+          </tr>
+          ${riscosHTML}
+        </table>
+        ${r.notasGerais ? `<p style="font-size:8pt;color:#64748b">${r.notasGerais}</p>` : ''}
+      `
+    } catch { return section('Riscos e Controles', doc.risks) }
+  })()
+
+  // Seção de Evidências
+  const evidenciasSection = (() => {
+    if (!extras?.evidencias?.length) return ''
+    return `<h2>Evidências Documentais</h2>
+      <table style="border-collapse:collapse;width:100%;margin-bottom:8pt;font-size:8.5pt">
+        <tr style="background:#f8fafc">
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:left">Título</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:80pt">Tipo</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:80pt">Responsável</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:80pt">Periodicidade</th>
+        </tr>
+        ${extras.evidencias.map(e => `
+          <tr>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${e.titulo}${e.descricao ? `<br><span style="font-size:7.5pt;color:#64748b">${e.descricao}</span>` : ''}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:center">${e.tipo.replace(/_/g,' ')}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${e.responsavel || '—'}</td>
+            <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${e.periodicidade || '—'}</td>
+          </tr>`).join('')}
+      </table>`
+  })()
+
+  // Seção de Leituras
+  const leiturasSection = (() => {
+    if (!extras?.leituras?.length) return ''
+    const rows = extras.leituras.map(l => `
+      <tr>
+        <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${l.userName}</td>
+        <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:center">${l.version ?? '—'}</td>
+        <td style="padding:4pt 6pt;border:1pt solid #e2e8f0">${new Date(l.createdAt).toLocaleDateString('pt-BR')}</td>
+        <td style="padding:4pt 6pt;border:1pt solid #e2e8f0;font-size:8pt;color:#64748b">${l.comment ?? ''}</td>
+      </tr>`).join('')
+    return `<h2>Registro de Leitura</h2>
+      <table style="border-collapse:collapse;width:100%;margin-bottom:8pt;font-size:8.5pt">
+        <tr style="background:#f8fafc">
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:left">Nome</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:50pt">Versão</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;width:80pt">Data</th>
+          <th style="padding:4pt 6pt;border:1pt solid #e2e8f0;text-align:left">Observação</th>
+        </tr>
+        ${rows}
+      </table>`
+  })()
 
   const metaRows = [
     ['Tipo', TYPE_LABELS[doc.type]],
@@ -386,9 +540,11 @@ function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, form
       ${section('Descrição do Procedimento',       doc.description)}
       ${section('Responsabilidades',  doc.responsibilities)}
       ${section('Pontos de Atenção',  doc.attentionPoints)}
-      ${section('Riscos e Controles', doc.risks)}
+      ${riscosSection}
       ${section('Resultado Esperado', doc.expectedResult)}
       ${section('Observações',        doc.notes)}
+      ${evidenciasSection}
+      ${leiturasSection}
     `
   }
 
@@ -409,20 +565,72 @@ function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, form
       ${stepsHTML || '<p>Nenhum passo cadastrado.</p>'}
       ${section('Resultado Esperado', doc.expectedResult)}
       ${section('Observações',        doc.notes)}
+      ${riscosSection}
+      ${evidenciasSection}
+      ${leiturasSection}
     `
   }
 
-  // Tipos baseados em texto (Política, Norma, Manual, Plano de Contingência, Termo)
+  // Tipos baseados em JSON estruturado (Política, Norma, Contingência, Termo)
   if (doc.type === 'POLITICA' || doc.type === 'NORMA' || doc.type === 'MANUAL' || doc.type === 'CONTINGENCIA' || doc.type === 'TERMO') {
+    let structuredContent = ''
+    try {
+      const parsed = JSON.parse(doc.description ?? '')
+      if (parsed.__tipo === 'POLITICA') {
+        structuredContent = `
+          ${section('Declaração da Política', parsed.declaracao)}
+          ${section('Âmbito de Aplicação', parsed.ambito)}
+          ${parsed.diretrizes?.length ? `<h2>Diretrizes</h2><ul>${(parsed.diretrizes as string[]).map(d => `<li>${d}</li>`).join('')}</ul>` : ''}
+          ${section('Responsabilidades', parsed.responsabilidades)}
+          ${section('Penalidades e Consequências', parsed.penalidades)}
+          ${parsed.referencias?.length ? `<h2>Referências Normativas</h2><ul>${(parsed.referencias as string[]).map(r => `<li>${r}</li>`).join('')}</ul>` : ''}
+          ${section('Vigência', parsed.vigencia)}
+        `
+      } else if (parsed.__tipo === 'NORMA') {
+        structuredContent = `
+          ${section('Objetivo', parsed.objetivo)}
+          ${section('Campo de Aplicação', parsed.campoAplicacao)}
+          ${parsed.referencias?.length ? `<h2>Referências Normativas</h2><ul>${(parsed.referencias as string[]).map(r => `<li>${r}</li>`).join('')}</ul>` : ''}
+          ${parsed.definicoes?.length ? `<h2>Definições e Termos</h2><ul>${(parsed.definicoes as string[]).map(d => `<li>${d}</li>`).join('')}</ul>` : ''}
+          ${section('Requisitos', parsed.requisitos)}
+          ${section('Não-Conformidades', parsed.naoConformidades)}
+          ${section('Sanções', parsed.sancoes)}
+        `
+      } else if (parsed.__tipo === 'CONTINGENCIA') {
+        structuredContent = `
+          ${section('Objetivo', parsed.objetivo)}
+          ${section('Escopo', parsed.escopo)}
+          <table class="meta-table"><tr><td><strong>RTO</strong></td><td>${parsed.rto || '—'}</td><td><strong>RPO</strong></td><td>${parsed.rpo || '—'}</td></tr></table>
+          ${parsed.riscos?.length ? `<h2>Riscos Cobertos</h2><ul>${(parsed.riscos as string[]).map(r => `<li>${r}</li>`).join('')}</ul>` : ''}
+          ${parsed.equipe?.length ? `<h2>Equipe de Resposta</h2><ul>${(parsed.equipe as string[]).map(e => `<li>${e}</li>`).join('')}</ul>` : ''}
+          ${parsed.passos?.length ? `<h2>Passos de Ativação</h2><ol>${(parsed.passos as string[]).map(p => `<li>${p}</li>`).join('')}</ol>` : ''}
+          ${parsed.canais?.length ? `<h2>Canais de Comunicação</h2><ul>${(parsed.canais as string[]).map(c => `<li>${c}</li>`).join('')}</ul>` : ''}
+          ${section('Teste Periódico', parsed.testePeriodico)}
+          ${section('Lições Aprendidas', parsed.licoesAprendidas)}
+        `
+      } else if (parsed.__tipo === 'TERMO') {
+        structuredContent = `
+          ${section('Tipo de Termo', parsed.tipoTermo)}
+          ${parsed.partes?.length ? `<h2>Partes Envolvidas</h2><ul>${(parsed.partes as string[]).map(p => `<li>${p}</li>`).join('')}</ul>` : ''}
+          ${section('Objeto do Termo', parsed.objeto)}
+          ${parsed.clausulas?.length ? `<h2>Cláusulas</h2><ol>${(parsed.clausulas as string[]).map(c => `<li>${c}</li>`).join('')}</ol>` : ''}
+          <table class="meta-table">
+            <tr><td><strong>Início</strong></td><td>${parsed.dataInicio || '—'}</td><td><strong>Fim</strong></td><td>${parsed.dataFim || '—'}</td></tr>
+            <tr><td><strong>Foro</strong></td><td colspan="3">${parsed.foro || '—'}</td></tr>
+            <tr><td><strong>Legislação</strong></td><td colspan="3">${parsed.legislacao || '—'}</td></tr>
+          </table>
+          ${section('Observações', parsed.observacoes)}
+        `
+      }
+    } catch { /* fallback para texto puro */ }
+
     return `
       ${meta}
       ${section('Objetivo',            doc.objective)}
       ${section('Aplicação',           doc.application)}
-      ${section('Descrição / Conteúdo', doc.description)}
+      ${structuredContent || section('Conteúdo', doc.description)}
       ${section('Responsabilidades',   doc.responsibilities)}
       ${section('Pontos de Atenção',   doc.attentionPoints)}
-      ${section('Riscos e Controles',  doc.risks)}
-      ${section('Resultado Esperado',  doc.expectedResult)}
       ${section('Observações',         doc.notes)}
     `
   }
@@ -455,8 +663,8 @@ function buildDocBody(doc: ProcedureDoc, base64Map: Record<string, string>, form
   `
 }
 
-function buildDocHTML(doc: ProcedureDoc, base64Map: Record<string, string>, format: 'pdf' | 'word', date: string): string {
-  const body = buildDocBody(doc, base64Map, format)
+function buildDocHTML(doc: ProcedureDoc, base64Map: Record<string, string>, format: 'pdf' | 'word', date: string, extras?: PdfExtras): string {
+  const body = buildDocBody(doc, base64Map, format, extras)
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
 <title>${TYPE_LABELS[doc.type]} — ${doc.title}</title>
@@ -669,7 +877,6 @@ function POPForm({ doc, onSaved }: { doc: ProcedureDoc; onSaved: () => void }) {
         ['description',      'Descrição do Procedimento (passo a passo)', 6],
         ['responsibilities', 'Responsabilidades',            3],
         ['attentionPoints',  'Pontos de Atenção',            3],
-        ['risks',            'Riscos e Controles',           3],
         ['expectedResult',   'Resultado Esperado',           2],
         ['notes',            'Observações',                  2],
       ] as [keyof typeof form, string, number][]).map(([k, label, rows]) => (
@@ -1163,67 +1370,285 @@ function ChecklistForm({ doc, onSaved }: { doc: ProcedureDoc; onSaved: () => voi
 
 // ─── DETAIL VIEW ─────────────────────────────────────────────────────────────
 
-type DetailTab = "dados" | "fluxo" | "docs-relacionados" | "relatorios"
+type DetailTab = "identificacao" | "governanca" | "dados" | "riscos" | "evidencias" | "treinamentos" | "leitura-aceite" | "fluxo" | "docs-relacionados" | "historico" | "relatorios" | "ia"
 
-// ─── Aba: Documentos Relacionados ─────────────────────────────────────────────
+// ─── Workflow: botões de transição de status ──────────────────────────────────
+
+const WORKFLOW_TRANSITIONS: Record<string, { label: string; next: string; nextStatus: string; color: string }[]> = {
+  RASCUNHO:   [{ label: "Enviar para Revisão", next: "EM_REVISAO",  nextStatus: "EM_REVISAO",  color: "bg-blue-600 hover:bg-blue-700 text-white" }],
+  EM_REVISAO: [
+    { label: "Aprovar",   next: "VIGENTE",    nextStatus: "VIGENTE",    color: "bg-emerald-600 hover:bg-emerald-700 text-white" },
+    { label: "Reprovar",  next: "RASCUNHO",   nextStatus: "RASCUNHO",   color: "bg-red-100 hover:bg-red-200 text-red-700 border border-red-200" },
+  ],
+  VIGENTE: [
+    { label: "Iniciar Revisão", next: "EM_REVISAO", nextStatus: "EM_REVISAO", color: "bg-amber-500 hover:bg-amber-600 text-white" },
+    { label: "Tornar Obsoleto", next: "OBSOLETO",   nextStatus: "OBSOLETO",   color: "bg-slate-200 hover:bg-slate-300 text-slate-700" },
+  ],
+  OBSOLETO: [],
+}
+
+function WorkflowButtons({ doc, onUpdated }: { doc: ProcedureDoc; onUpdated: (d: Partial<ProcedureDoc>) => void }) {
+  const [saving, setSaving] = useState<string | null>(null)
+  const transitions = WORKFLOW_TRANSITIONS[doc.status as string] ?? []
+
+  async function transition(next: string, nextStatus: string) {
+    setSaving(next)
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus, workflowStatus: next }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        onUpdated({ status: updated.status, workflowStatus: updated.workflowStatus })
+      }
+    } catch { /* ignore */ }
+    finally { setSaving(null) }
+  }
+
+  if (transitions.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {doc.status === "dados" && (
+        <>
+          <Button variant="outline" size="sm" onClick={() => exportPDF(doc)}>
+            <Download className="w-3.5 h-3.5" /> PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportWord(doc)}>
+            <Download className="w-3.5 h-3.5" /> Word
+          </Button>
+        </>
+      )}
+      {transitions.map(t => (
+        <button
+          key={t.next}
+          onClick={() => transition(t.next, t.nextStatus)}
+          disabled={!!saving}
+          type="button"
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60", t.color)}
+        >
+          {saving === t.next
+            ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            : <Check className="w-3 h-3" />}
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── Aba: Docs relacionados (auto + manual) ───────────────────────────────────
+
+interface DocLink {
+  linkId: string
+  targetId: string
+  targetTitle: string
+  targetType: string | null
+  targetStatus: string | null
+  targetVersion: string | null
+}
 
 function DocsRelacionados({ doc }: { doc: ProcedureDoc }) {
-  const [related, setRelated] = useState<ProcedureDoc[]>([])
-  const [loading, setLoading] = useState(true)
+  const [autoRelated, setAutoRelated] = useState<ProcedureDoc[]>([])
+  const [links,       setLinks]       = useState<DocLink[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [searching,   setSearching]   = useState(false)
+  const [search,      setSearch]      = useState("")
+  const [results,     setResults]     = useState<ProcedureDoc[]>([])
+  const [addingLink,  setAddingLink]  = useState(false)
+  const [deletingId,  setDeletingId]  = useState<string | null>(null)
+
+  const loadLinks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}/links`)
+      if (res.ok) setLinks(await res.json())
+    } catch { setLinks([]) }
+  }, [doc.id])
 
   useEffect(() => {
-    if (!doc.process) { setLoading(false); return }
-    fetch(`/api/procedures?search=${encodeURIComponent(doc.process)}`)
-      .then(r => r.json())
-      .then((docs: ProcedureDoc[]) => setRelated(docs.filter(d => d.id !== doc.id)))
-      .catch(() => setRelated([]))
-      .finally(() => setLoading(false))
-  }, [doc.id, doc.process])
+    setLoading(true)
+    const autoFetch = doc.process
+      ? fetch(`/api/procedures?search=${encodeURIComponent(doc.process)}`)
+          .then(r => r.json())
+          .then((docs: ProcedureDoc[]) => setAutoRelated(docs.filter(d => d.id !== doc.id)))
+          .catch(() => setAutoRelated([]))
+      : Promise.resolve()
 
-  const byType = related.reduce<Record<string, ProcedureDoc[]>>((acc, d) => {
-    acc[d.type] = [...(acc[d.type] ?? []), d]
-    return acc
-  }, {})
+    Promise.all([autoFetch, loadLinks()]).finally(() => setLoading(false))
+  }, [doc.id, doc.process, loadLinks])
+
+  async function searchDocs(q: string) {
+    if (!q.trim()) { setResults([]); return }
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/procedures?search=${encodeURIComponent(q)}`)
+      const all: ProcedureDoc[] = res.ok ? await res.json() : []
+      setResults(all.filter(d =>
+        d.id !== doc.id &&
+        !links.some(l => l.targetId === d.id)
+      ))
+    } catch { setResults([]) }
+    finally { setSearching(false) }
+  }
+
+  async function addLink(targetId: string) {
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}/links`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId }),
+      })
+      if (res.ok || res.status === 409) {
+        setSearch(""); setResults([]); setAddingLink(false)
+        await loadLinks()
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function removeLink(linkId: string) {
+    setDeletingId(linkId)
+    try {
+      await fetch(`/api/procedures/${doc.id}/links?linkId=${linkId}`, { method: "DELETE" })
+      setLinks(prev => prev.filter(l => l.linkId !== linkId))
+    } catch { /* ignore */ }
+    finally { setDeletingId(null) }
+  }
 
   if (loading) return <div className="h-32 bg-slate-100 rounded-xl animate-pulse" />
 
-  if (related.length === 0) return (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-      <Link2 className="w-8 h-8 mb-2 opacity-30" />
-      <p className="text-sm font-medium text-slate-500">Nenhum documento relacionado encontrado</p>
-      <p className="text-xs mt-1">Documentos com o mesmo processo serão listados aqui.</p>
-    </div>
-  )
+  const manualTargetIds = new Set(links.map(l => l.targetId))
+  const autoOnly = autoRelated.filter(d => !manualTargetIds.has(d.id))
 
   return (
-    <div className="space-y-4">
-      {Object.entries(byType).map(([type, docs]) => (
-        <div key={type}>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{TYPE_LABELS[type as DocType] ?? type}</p>
-          <div className="space-y-2">
-            {docs.map(d => {
-              const Icon = TYPE_ICONS[d.type]
-              return (
-                <div key={d.id} className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl border",
-                  TYPE_COLORS[d.type].replace(/text-\S+/g, '').replace(/bg-\S+/g, 'bg-white border-slate-200'),
-                )}>
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", TYPE_COLORS[d.type].split(' ')[0])}>
-                    <Icon className={cn("w-4 h-4", TYPE_COLORS[d.type].split(' ')[1].replace('700','600'))} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-700 truncate">{d.title}</p>
-                    {d.responsible && <p className="text-xs text-slate-400">{d.responsible}</p>}
-                  </div>
-                  <span className={cn('text-xs border rounded-full px-2 py-0.5 font-medium shrink-0', TYPE_COLORS[d.type])}>
-                    {TYPE_LABELS[d.type]}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+    <div className="space-y-5">
+      {/* Vínculos manuais */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documentos Vinculados</p>
+          <button
+            onClick={() => setAddingLink(v => !v)}
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Vincular documento
+          </button>
         </div>
-      ))}
+
+        {addingLink && (
+          <div className="border border-blue-200 rounded-xl p-3 space-y-2 bg-blue-50/30">
+            <div className="flex gap-2">
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); searchDocs(e.target.value) }}
+                placeholder="Buscar por título do documento…"
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searching && <Loader2 className="w-4 h-4 text-slate-400 animate-spin self-center" />}
+            </div>
+            {results.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                {results.map(r => {
+                  const Icon = TYPE_ICONS[r.type]
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => addLink(r.id)}
+                      type="button"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                    >
+                      <div className={cn("w-6 h-6 rounded flex items-center justify-center shrink-0", TYPE_COLORS[r.type].split(' ')[0])}>
+                        <Icon className={cn("w-3.5 h-3.5", TYPE_COLORS[r.type].split(' ')[1]?.replace('700','600') ?? 'text-slate-500')} />
+                      </div>
+                      <span className="text-sm text-slate-700 truncate flex-1">{r.title}</span>
+                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded shrink-0", TYPE_COLORS[r.type])}>{TYPE_LABELS[r.type]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {search && results.length === 0 && !searching && (
+              <p className="text-xs text-slate-400 text-center py-2">Nenhum documento encontrado.</p>
+            )}
+          </div>
+        )}
+
+        {links.length === 0 && !addingLink && (
+          <p className="text-xs text-slate-400 italic text-center py-4">Nenhum vínculo manual adicionado.</p>
+        )}
+
+        {links.map(l => {
+          const type = l.targetType as DocType | null
+          const Icon = type ? TYPE_ICONS[type] : Link2
+          return (
+            <div key={l.linkId} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 bg-white group hover:border-slate-300 transition-colors">
+              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", type ? TYPE_COLORS[type].split(' ')[0] : 'bg-slate-100')}>
+                <Icon className={cn("w-4 h-4", type ? (TYPE_COLORS[type].split(' ')[1]?.replace('700','600') ?? 'text-slate-500') : 'text-slate-400')} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-700 truncate">{l.targetTitle}</p>
+                {l.targetStatus && <p className="text-xs text-slate-400">{STATUS_LABELS[l.targetStatus as DocStatus] ?? l.targetStatus} • {l.targetVersion}</p>}
+              </div>
+              {type && (
+                <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border shrink-0", TYPE_COLORS[type])}>
+                  {TYPE_LABELS[type]}
+                </span>
+              )}
+              <button
+                onClick={() => removeLink(l.linkId)}
+                disabled={deletingId === l.linkId}
+                type="button"
+                className="p-1.5 text-slate-300 group-hover:text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+              >
+                {deletingId === l.linkId
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Trash2 className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Automáticos (mesmo processo) */}
+      {autoOnly.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Mesmo Processo</p>
+          {autoOnly.map(d => {
+            const Icon = TYPE_ICONS[d.type]
+            return (
+              <div key={d.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", TYPE_COLORS[d.type].split(' ')[0])}>
+                  <Icon className={cn("w-4 h-4", TYPE_COLORS[d.type].split(' ')[1]?.replace('700','600') ?? 'text-slate-500')} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-700 truncate">{d.title}</p>
+                  {d.responsible && <p className="text-xs text-slate-400">{d.responsible}</p>}
+                </div>
+                <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border shrink-0", TYPE_COLORS[d.type])}>
+                  {TYPE_LABELS[d.type]}
+                </span>
+                <button
+                  onClick={() => addLink(d.id)}
+                  type="button"
+                  title="Adicionar como vínculo manual"
+                  className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {autoOnly.length === 0 && links.length === 0 && !addingLink && (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <Link2 className="w-8 h-8 mb-2 opacity-30" />
+          <p className="text-sm font-medium text-slate-500">Nenhum documento relacionado</p>
+          <p className="text-xs mt-1">Use o botão acima para vincular documentos manualmente.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -1317,7 +1742,11 @@ function DocRelatorios({ doc }: { doc: ProcedureDoc }) {
 function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
   const [doc,        setDoc]        = useState<ProcedureDoc | null>(null)
   const [loading,    setLoading]    = useState(true)
-  const [activeTab,  setActiveTab]  = useState<DetailTab>("dados")
+  const [activeTab,  setActiveTab]  = useState<DetailTab>("identificacao")
+
+  function mergeDoc(partial: Partial<ProcedureDoc>) {
+    setDoc(prev => prev ? { ...prev, ...partial } : prev)
+  }
 
   const load = useCallback(async () => {
     try {
@@ -1361,36 +1790,49 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
               STATUS_COLORS[doc.status as DocStatus] ?? 'bg-slate-100 text-slate-500 border-slate-200')}>
               {STATUS_LABELS[doc.status as DocStatus] ?? doc.status ?? 'Vigente'}
             </span>
+            {doc.workflowStatus && doc.workflowStatus !== doc.status && (
+              <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5 font-semibold">
+                {doc.workflowStatus.replace(/_/g, ' ')}
+              </span>
+            )}
             {doc.version && (
               <span className="text-xs text-slate-400 font-medium">{doc.version}</span>
             )}
+            {doc.code && (
+              <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{doc.code}</span>
+            )}
           </div>
         </div>
-        {activeTab === "dados" && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => exportPDF(doc)}>
-              <Download className="w-3.5 h-3.5" /> PDF
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportWord(doc)}>
-              <Download className="w-3.5 h-3.5" /> Word
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <SaveAsTemplateButton
+            doc={doc}
+            onToggled={tags => mergeDoc({ tags })}
+          />
+          <WorkflowButtons doc={doc} onUpdated={d => mergeDoc(d)} />
+        </div>
       </div>
 
       {/* Tab strip */}
       <div className="flex border-b border-slate-200 overflow-x-auto">
         {([
-          { id: "dados",            label: "Dados do Procedimento" },
-          { id: "fluxo",            label: "Fluxo do Processo"     },
+          { id: "identificacao",    label: "Identificação"         },
+          { id: "governanca",       label: "Governança"            },
+          { id: "dados",            label: "Conteúdo"              },
+          { id: "riscos",           label: "Riscos e Controles"    },
+          { id: "evidencias",       label: "Evidências"            },
+          { id: "treinamentos",     label: "Treinamentos"          },
+          { id: "leitura-aceite",   label: "Leitura e Aceite"      },
+          { id: "fluxo",            label: "Fluxo"                 },
           { id: "docs-relacionados",label: "Docs Relacionados"     },
+          { id: "historico",        label: "Histórico"             },
           { id: "relatorios",       label: "Relatórios"            },
+          { id: "ia",               label: "✦ IA"                  },
         ] as { id: DetailTab; label: string }[]).map(t => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
             className={cn(
-              "shrink-0 px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+              "shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
               activeTab === t.id
                 ? "border-blue-600 text-blue-700"
                 : "border-transparent text-slate-500 hover:text-slate-700",
@@ -1402,15 +1844,50 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
       </div>
 
       {/* Content */}
+      {activeTab === "identificacao" && (
+        <DocIdentificationTab
+          doc={doc as unknown as IdentificationDoc}
+          onSaved={(updated) => {
+            setDoc(prev => prev ? { ...prev, ...(updated as unknown as Partial<ProcedureDoc>), type: prev.type } : prev)
+          }}
+        />
+      )}
+
+      {activeTab === "governanca" && (
+        <DocGovernanceTab
+          doc={doc as unknown as GovernanceDoc}
+          onSaved={(updated) => {
+            setDoc(prev => prev ? { ...prev, ...(updated as unknown as Partial<ProcedureDoc>), type: prev.type } : prev)
+          }}
+        />
+      )}
+
       {activeTab === "dados" && (
         <>
-          {doc.type === 'POP'         && <POPForm       doc={doc} onSaved={() => { load(); onBack() }} />}
-          {doc.type === 'IT'          && <ITForm         doc={doc} onSaved={() => { load(); onBack() }} />}
-          {doc.type === 'CHECKLIST'   && <ChecklistForm  doc={doc} onSaved={() => { load(); onBack() }} />}
-          {(doc.type === 'POLITICA' || doc.type === 'NORMA' || doc.type === 'MANUAL' || doc.type === 'CONTINGENCIA' || doc.type === 'TERMO') && (
-            <POPForm doc={doc} onSaved={() => { load(); onBack() }} />
-          )}
+          {doc.type === 'POP'         && <POPForm       doc={doc} onSaved={() => { load() }} />}
+          {doc.type === 'IT'          && <ITForm         doc={doc} onSaved={() => { load() }} />}
+          {doc.type === 'CHECKLIST'   && <ChecklistForm  doc={doc} onSaved={() => { load() }} />}
+          {doc.type === 'POLITICA'    && <DocContentPolitica    docId={doc.id} description={doc.description} onSaved={() => { load() }} />}
+          {doc.type === 'NORMA'       && <DocContentNorma       docId={doc.id} description={doc.description} onSaved={() => { load() }} />}
+          {(doc.type === 'CONTINGENCIA' || doc.type === 'MANUAL') && <DocContentContingencia docId={doc.id} description={doc.description} onSaved={() => { load() }} />}
+          {doc.type === 'TERMO'       && <DocContentTermo       docId={doc.id} description={doc.description} onSaved={() => { load() }} />}
         </>
+      )}
+
+      {activeTab === "riscos" && (
+        <DocRiscosControles docId={doc.id} risks={doc.risks} onSaved={() => { load() }} />
+      )}
+
+      {activeTab === "evidencias" && (
+        <DocEvidencias docId={doc.id} />
+      )}
+
+      {activeTab === "treinamentos" && (
+        <DocTreinamentos docId={doc.id} />
+      )}
+
+      {activeTab === "leitura-aceite" && (
+        <DocLeituraAceite docId={doc.id} docVersion={doc.version ?? 'v1.0'} />
       )}
 
       {activeTab === "fluxo" && (
@@ -1423,8 +1900,164 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
 
       {activeTab === "docs-relacionados" && <DocsRelacionados doc={doc} />}
 
+      {activeTab === "historico" && <DocHistoryTab docId={docId} />}
+
       {activeTab === "relatorios" && <DocRelatorios doc={doc} />}
+
+      {activeTab === "ia" && (
+        <DocAssistenteIA docId={doc.id} docTitle={doc.title} />
+      )}
     </div>
+  )
+}
+
+// ─── TEMPLATES ───────────────────────────────────────────────────────────────
+
+interface TemplateSummary {
+  id: string; type: string; title: string; process: string | null
+  department: string | null; responsible: string | null; objective: string | null; description: string | null
+}
+
+function TemplatePickerModal({
+  typeKey, onSelect, onSkip, onClose,
+}: {
+  typeKey: ActiveDocType
+  onSelect: (templateId: string) => void
+  onSkip: () => void
+  onClose: () => void
+}) {
+  const [templates, setTemplates] = useState<TemplateSummary[]>([])
+  const [loading,   setLoading]   = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/procedures/templates?type=${typeKey}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setTemplates)
+      .catch(() => setTemplates([]))
+      .finally(() => setLoading(false))
+  }, [typeKey])
+
+  const Icon = TYPE_ICONS[typeKey]
+  const colors = TYPE_COLORS[typeKey]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', colors.split(' ')[0])}>
+              <LayoutTemplate className={cn('w-5 h-5', colors.split(' ')[1].replace('700','600'))} />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-800">Novo {TYPE_LABELS[typeKey]}</p>
+              <p className="text-xs text-slate-400">Escolha um template ou crie do zero</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">
+              <BookmarkCheck className="w-10 h-10 mx-auto mb-2 opacity-20" />
+              <p className="text-sm font-medium text-slate-500">Nenhum template disponível</p>
+              <p className="text-xs mt-1">Salve um documento como template para usá-lo aqui.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Templates disponíveis</p>
+              {templates.map(t => (
+                <button
+                  key={t.id} type="button"
+                  onClick={() => onSelect(t.id)}
+                  className="w-full text-left rounded-xl border-2 border-slate-200 bg-white p-4 hover:border-blue-300 hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5', colors.split(' ')[0])}>
+                      <Icon className={cn('w-4 h-4', colors.split(' ')[1].replace('700','600'))} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{t.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {t.process    && <span className="text-xs text-slate-400">{t.process}</span>}
+                        {t.department && <span className="text-xs text-slate-400">• {t.department}</span>}
+                      </div>
+                      {t.objective && (
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.objective}</p>
+                      )}
+                    </div>
+                    <BookmarkCheck className="w-4 h-4 text-amber-500 shrink-0 mt-1" />
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+          <button
+            type="button" onClick={onSkip}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-slate-300 text-slate-600 text-sm font-medium hover:border-blue-400 hover:text-blue-600 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Criar do zero
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SaveAsTemplateButton({ doc, onToggled }: { doc: ProcedureDoc; onToggled: (tags: string | null) => void }) {
+  const isTemplate = doc.tags?.includes('__template__') ?? false
+  const [saving, setSaving] = useState(false)
+
+  async function toggle() {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/procedures/${doc.id}/template`, {
+        method: isTemplate ? 'DELETE' : 'POST',
+      })
+      if (res.ok) {
+        const current = doc.tags ?? ''
+        if (isTemplate) {
+          const newTags = current.split(',').map(t => t.trim()).filter(t => t && t !== '__template__').join(',') || null
+          onToggled(newTags)
+        } else {
+          onToggled(current ? `${current},__template__` : '__template__')
+        }
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <button
+      type="button" onClick={toggle} disabled={saving}
+      title={isTemplate ? 'Remover dos templates' : 'Salvar como template'}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-60",
+        isTemplate
+          ? "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+          : "bg-white border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50"
+      )}
+    >
+      {saving
+        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        : isTemplate
+        ? <BookmarkCheck className="w-3.5 h-3.5" />
+        : <Bookmark className="w-3.5 h-3.5" />}
+      {isTemplate ? 'Template salvo' : 'Salvar como template'}
+    </button>
   )
 }
 
@@ -1433,12 +2066,18 @@ function DocDetail({ docId, onBack }: { docId: string; onBack: () => void }) {
 function DocList({
   typeKey, onBack, onSelect,
 }: { typeKey: ActiveDocType; onBack: () => void; onSelect: (id: string) => void }) {
-  const [docs,       setDocs]       = useState<ProcedureDoc[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [search,     setSearch]     = useState('')
-  const [filterProc, setFilterProc] = useState('')
-  const [migratingId,setMigratingId]= useState<string | null>(null)
-  const [creating,   setCreating]   = useState(false)
+  const [docs,           setDocs]           = useState<ProcedureDoc[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [search,         setSearch]         = useState('')
+  const [filterProc,     setFilterProc]     = useState('')
+  const [filterStatus,   setFilterStatus]   = useState('')
+  const [filterDept,     setFilterDept]     = useState('')
+  const [sortBy,         setSortBy]         = useState<'date' | 'title' | 'status'>('date')
+  const [showFilters,    setShowFilters]    = useState(false)
+  const [migratingId,    setMigratingId]    = useState<string | null>(null)
+  const [creating,       setCreating]       = useState(false)
+  const [templatePicker, setTemplatePicker] = useState(false)
+  const [hasTemplates,   setHasTemplates]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1453,12 +2092,23 @@ function DocList({
 
   useEffect(() => { load() }, [load])
 
-  async function createDoc() {
+  // Verifica se existem templates para o tipo atual
+  useEffect(() => {
+    fetch(`/api/procedures/templates?type=${typeKey}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((tpls: unknown[]) => setHasTemplates(tpls.length > 0))
+      .catch(() => setHasTemplates(false))
+  }, [typeKey])
+
+  async function createDoc(templateId?: string) {
     setCreating(true)
+    setTemplatePicker(false)
     try {
+      const body: Record<string, unknown> = { type: typeKey, title: `Novo ${TYPE_LABELS[typeKey]}` }
+      if (templateId) body.templateId = templateId
       const res = await fetch('/api/procedures', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: typeKey, title: `Novo ${TYPE_LABELS[typeKey]}` }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const doc = await res.json()
@@ -1489,9 +2139,17 @@ function DocList({
   const Icon    = TYPE_ICONS[typeKey]
   const colors  = TYPE_COLORS[typeKey]
 
-  const filtered = docs.filter(d =>
-    !filterProc || d.process?.toLowerCase().includes(filterProc.toLowerCase())
-  )
+  const activeFilterCount = (filterProc ? 1 : 0) + (filterStatus ? 1 : 0) + (filterDept ? 1 : 0)
+
+  const filtered = docs
+    .filter(d => !filterProc   || d.process?.toLowerCase().includes(filterProc.toLowerCase()))
+    .filter(d => !filterStatus || d.status === filterStatus)
+    .filter(d => !filterDept   || d.department?.toLowerCase().includes(filterDept.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'title')  return a.title.localeCompare(b.title, 'pt-BR')
+      if (sortBy === 'status') return a.status.localeCompare(b.status)
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
 
   return (
     <div className="space-y-4">
@@ -1510,31 +2168,110 @@ function DocList({
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-800">{TYPE_LABELS[typeKey]}</h2>
-            <p className="text-xs text-slate-400">{docs.length} documento{docs.length !== 1 ? 's' : ''} cadastrado{docs.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-slate-400">
+              {activeFilterCount > 0 ? `${filtered.length} de ${docs.length}` : docs.length} documento{docs.length !== 1 ? 's' : ''}
+              {activeFilterCount > 0 ? ' encontrado' : ' cadastrado'}{docs.length !== 1 ? 's' : ''}
+            </p>
           </div>
         </div>
         <button
-          onClick={createDoc} disabled={creating}
+          onClick={() => hasTemplates ? setTemplatePicker(true) : createDoc()}
+          disabled={creating}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-60"
         >
           {creating
             ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            : <Plus className="w-4 h-4" />}
+            : hasTemplates ? <LayoutTemplate className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           Novo {TYPE_LABELS[typeKey]}
         </button>
       </div>
 
-      {/* Busca */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input type="text" placeholder="Buscar por título..." value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+      {/* Barra de filtros */}
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text" placeholder="Buscar por título, código..."
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters(s => !s)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors",
+              showFilters || activeFilterCount > 0
+                ? "bg-blue-50 border-blue-300 text-blue-700"
+                : "border-slate-200 text-slate-500 hover:border-slate-300"
+            )}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as typeof sortBy)}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white text-slate-700"
+          >
+            <option value="date">Mais recente</option>
+            <option value="title">Título A–Z</option>
+            <option value="status">Por status</option>
+          </select>
         </div>
-        <input type="text" placeholder="Filtrar por processo..." value={filterProc}
-          onChange={e => setFilterProc(e.target.value)}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-48" />
+
+        {showFilters && (
+          <div className="flex gap-2 flex-wrap items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <div className="flex gap-1.5 flex-wrap items-center">
+              <span className="text-xs text-slate-400 font-medium mr-1">Status:</span>
+              {(['', 'VIGENTE', 'RASCUNHO', 'EM_REVISAO', 'OBSOLETO'] as const).map(s => (
+                <button
+                  key={s} type="button"
+                  onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
+                  className={cn(
+                    "text-xs px-2.5 py-1 rounded-full border font-medium transition-colors",
+                    filterStatus === s && s !== ''
+                      ? STATUS_COLORS[s as DocStatus]
+                      : s === '' && filterStatus === ''
+                      ? "bg-slate-700 text-white border-slate-700"
+                      : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                  )}
+                >
+                  {s === '' ? 'Todos' : STATUS_LABELS[s as DocStatus]}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-px h-5 bg-slate-200 mx-1 shrink-0" />
+
+            <input
+              type="text" placeholder="Processo..." value={filterProc}
+              onChange={e => setFilterProc(e.target.value)}
+              className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-36 bg-white"
+            />
+            <input
+              type="text" placeholder="Departamento..." value={filterDept}
+              onChange={e => setFilterDept(e.target.value)}
+              className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 w-36 bg-white"
+            />
+
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={() => { setFilterProc(''); setFilterStatus(''); setFilterDept('') }}
+                className="text-xs text-slate-400 hover:text-slate-600 ml-auto flex items-center gap-1"
+              >
+                <X className="w-3 h-3" /> Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Lista */}
@@ -1543,7 +2280,7 @@ function DocList({
       ) : filtered.length === 0 ? (
         <div className="text-center py-14 text-slate-400">
           <Icon className="w-10 h-10 mx-auto mb-2 opacity-20" />
-          <p className="font-medium text-slate-500">{search || filterProc ? 'Nenhum resultado encontrado' : `Nenhum ${TYPE_LABELS[typeKey]} cadastrado`}</p>
+          <p className="font-medium text-slate-500">{search || activeFilterCount > 0 ? 'Nenhum resultado encontrado' : `Nenhum ${TYPE_LABELS[typeKey]} cadastrado`}</p>
           <p className="text-xs mt-1">Clique em &quot;Novo {TYPE_LABELS[typeKey]}&quot; para começar.</p>
         </div>
       ) : (
@@ -1565,6 +2302,11 @@ function DocList({
                         </span>
                       )}
                       {doc.version && <span className="text-xs text-slate-400 shrink-0">{doc.version}</span>}
+                      {doc.tags?.includes('__template__') && (
+                        <span className="text-xs border border-amber-300 bg-amber-50 text-amber-700 rounded-full px-2 py-0.5 font-medium shrink-0 flex items-center gap-1">
+                          <BookmarkCheck className="w-3 h-3" /> Template
+                        </span>
+                      )}
                       {doc.type === 'MANUAL' && (
                         <span className="text-xs border border-amber-300 bg-amber-50 text-amber-700 rounded-full px-2 py-0.5 font-medium shrink-0">Legado</span>
                       )}
@@ -1617,6 +2359,16 @@ function DocList({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Modal de seleção de template */}
+      {templatePicker && (
+        <TemplatePickerModal
+          typeKey={typeKey}
+          onSelect={templateId => createDoc(templateId)}
+          onSkip={() => createDoc()}
+          onClose={() => setTemplatePicker(false)}
+        />
       )}
     </div>
   )
@@ -1671,6 +2423,7 @@ function TypeSelector({ counts, onSelect }: {
           )}
         </div>
       </div>
+      <ConformidadeDashboard />
     </div>
   )
 }

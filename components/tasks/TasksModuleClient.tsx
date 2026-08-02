@@ -1,11 +1,12 @@
 "use client"
 
 import { useSearchParams, useRouter } from "next/navigation"
-import { CheckSquare, AlertCircle, History, ChevronRight } from "lucide-react"
+import { CheckSquare, AlertCircle, History, ChevronRight, CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TasksClient } from "./TasksClient"
 import { PendenciasClient } from "@/components/pendencias/PendenciasClient"
 import { HistoricoClient } from "@/components/historico/HistoricoClient"
+import { DailyTasksClient } from "./DailyTasksClient"
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
@@ -15,6 +16,12 @@ const TABS = [
     param: "",
     label: "Lista de Tarefas",
     icon:  CheckSquare,
+  },
+  {
+    key:   "diarias",
+    param: "diarias",
+    label: "Tarefa Diária",
+    icon:  CalendarDays,
   },
   {
     key:   "pendencias",
@@ -89,6 +96,7 @@ export function TasksModuleClient() {
 
       {/* Tab content */}
       {activeTab.key === "lista"      && <TasksClient />}
+      {activeTab.key === "diarias"    && <DailyTasksClient />}
       {activeTab.key === "pendencias" && <PendenciasClient />}
       {activeTab.key === "historico"  && <HistoricoClient />}
     </div>

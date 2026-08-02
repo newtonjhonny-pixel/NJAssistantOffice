@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma-sqlite'
 import { saveBase64Image } from './image-utils'
 
 export const dynamic = 'force-dynamic'
+
+
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const steps = await prisma.procedureStep.findMany({

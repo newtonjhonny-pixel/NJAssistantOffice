@@ -9,8 +9,9 @@ import {
   Users, MessageSquare, Navigation, Umbrella, BookOpen,
   Activity, BookMarked, Briefcase, LayoutDashboard, Plus, Edit2, Trash2,
   Sparkles, X, ChevronDown, AlertTriangle, CheckCircle,
-  Clock, Calendar, RefreshCw, Search, Filter,
+  Clock, Calendar, RefreshCw, Search, Filter, Eye, Building2, Save, Loader2 as Spin, BarChart2, FileDown,
 } from "lucide-react"
+import { TeamMemberProfileModal } from "./perfil/TeamMemberProfileModal"
 import { cn } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -329,6 +330,7 @@ function TabVisaoGeral({ summary, onTabSwitch }: { summary: Summary | null; onTa
 function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () => void }) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Member | null>(null)
+  const [profileId, setProfileId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
@@ -413,8 +415,9 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
                 </div>
               )}
               <div className="flex gap-2 mt-3">
-                <button onClick={() => openEdit(m)} className="text-slate-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => handleDelete(m.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => setProfileId(m.id)} title="Ver perfil completo" className="text-slate-400 hover:text-indigo-600"><Eye className="w-4 h-4" /></button>
+                <button onClick={() => openEdit(m)} title="Editar" className="text-slate-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={() => handleDelete(m.id)} title="Excluir" className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
               </div>
             </CardContent>
           </Card>
@@ -423,6 +426,16 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
           <div className="col-span-3 text-center py-12 text-slate-400 text-sm">Nenhum colaborador encontrado.</div>
         )}
       </div>
+
+      <TeamMemberProfileModal
+        memberId={profileId}
+        onClose={() => setProfileId(null)}
+        onEdit={(id) => {
+          setProfileId(null)
+          const m = members.find(x => x.id === id)
+          if (m) openEdit(m)
+        }}
+      />
 
       {showForm && (
         <Modal title={editing ? "Editar Colaborador" : "Novo Colaborador"} onClose={() => setShowForm(false)}>
@@ -1747,18 +1760,502 @@ function TabDiretrizes() {
   )
 }
 
+// ─── Tab: Empresas ────────────────────────────────────────────────────────────
+
+interface Company { id: string; name: string; cnpj?: string | null; segment?: string | null; observations?: string | null; active: number }
+
+function TabEmpresas() {
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Company | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', cnpj: '', segment: '', observations: '' })
+
+  async function load() {
+    setLoading(true)
+    const res = await fetch('/api/gestao-equipe/companies')
+    if (res.ok) setCompanies(await res.json())
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  function openNew() { setEditing(null); setForm({ name: '', cnpj: '', segment: '', observations: '' }); setShowForm(true) }
+  function openEdit(c: Company) { setEditing(c); setForm({ name: c.name, cnpj: c.cnpj ?? '', segment: c.segment ?? '', observations: c.observations ?? '' }); setShowForm(true) }
+
+  async function save() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      if (editing) {
+        await fetch(`/api/gestao-equipe/companies/${editing.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        })
+      } else {
+        await fetch('/api/gestao-equipe/companies', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        })
+      }
+      setShowForm(false); await load()
+    } finally { setSaving(false) }
+  }
+
+  async function toggleActive(c: Company) {
+    await fetch(`/api/gestao-equipe/companies/${c.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: c.active ? 0 : 1 }),
+    })
+    await load()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{companies.length} empresa(s) cadastrada(s)</p>
+        <button onClick={openNew}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
+          <Plus className="w-3.5 h-3.5" /> Nova empresa
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+          <p className="text-sm font-semibold text-slate-700">{editing ? 'Editar empresa' : 'Nova empresa'}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-slate-500 block mb-1">Nome *</label>
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className={inputClass} placeholder="Nome da empresa" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">CNPJ</label>
+              <input value={form.cnpj} onChange={e => setForm(p => ({ ...p, cnpj: e.target.value }))}
+                className={inputClass} placeholder="00.000.000/0000-00" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Segmento</label>
+              <input value={form.segment} onChange={e => setForm(p => ({ ...p, segment: e.target.value }))}
+                className={inputClass} placeholder="Comércio, Indústria, Serviços..." />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-slate-500 block mb-1">Observações</label>
+              <input value={form.observations} onChange={e => setForm(p => ({ ...p, observations: e.target.value }))}
+                className={inputClass} />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
+            <button onClick={save} disabled={saving || !form.name.trim()}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {saving ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {editing ? 'Salvar' : 'Adicionar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8"><Spin className="w-5 h-5 animate-spin text-slate-400" /></div>
+      ) : companies.length === 0 ? (
+        <div className="text-center py-12 text-slate-400 text-sm">
+          <Building2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          <p>Nenhuma empresa cadastrada.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {companies.map(c => (
+            <div key={c.id} className={cn("rounded-xl border bg-white p-4", c.active ? "border-slate-200" : "border-slate-100 opacity-60")}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-800">{c.name}</p>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(c)} className="text-slate-400 hover:text-blue-600 p-1 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+              {c.cnpj && <p className="text-xs text-slate-400 mb-1">CNPJ: {c.cnpj}</p>}
+              {c.segment && <span className="inline-block text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{c.segment}</span>}
+              <button onClick={() => toggleActive(c)}
+                className={cn("mt-3 text-xs px-2 py-1 rounded-full border transition-colors",
+                  c.active ? "text-green-600 bg-green-50 border-green-200 hover:bg-green-100" : "text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100")}>
+                {c.active ? 'Ativa' : 'Inativa'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Tab: Dimensionamento ─────────────────────────────────────────────────────
+
+const DIM_BAND: Record<string, { bar: string; bg: string; border: string; text: string; label: string }> = {
+  green:    { bar: 'bg-green-500',  bg: 'bg-green-50',  border: 'border-green-200',  text: 'text-green-700',  label: 'Disponível'        },
+  blue:     { bar: 'bg-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   label: 'Equilibrado'       },
+  yellow:   { bar: 'bg-amber-400',  bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700',  label: 'Atenção'           },
+  orange:   { bar: 'bg-orange-500', bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', label: 'Sobrecarga'        },
+  critical: { bar: 'bg-red-600',    bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700',    label: 'Sobrecarga Crítica'},
+}
+
+interface DimMember {
+  id: string; name: string; role: string; sector: string | null
+  companyCount: number; totalHeadcount: number; totalProcesses: number
+  totalScore: number; capacityPct: number; band: string; bandLabel: string
+  linkBreakdown: { companyId: string; companyName: string; score: number }[]
+}
+interface DimResult {
+  config: {
+    weightEmployee: number; weightCompany: number; weightProcess: number
+    weightVolume: number; weightComplexity: number; weightManual: number; weightCritical: number
+    capacityRef: number; bandGreen: number; bandBlue: number; bandYellow: number; bandOrange: number
+  }
+  summary: {
+    totalMembers: number; totalHeadcount: number; avgCapacity: number
+    bandCounts: Record<string, number>
+  }
+  members: DimMember[]
+}
+
+function TabDimensionamento() {
+  const [data, setData] = useState<DimResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [showConfig, setShowConfig] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [configForm, setConfigForm] = useState<Record<string, string>>({})
+  const [aiContent, setAiContent] = useState<string | null>(null)
+  const [aiPowered, setAiPowered] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showAI, setShowAI] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch('/api/gestao-equipe/dimensionamento')
+    if (res.ok) {
+      const d: DimResult = await res.json()
+      setData(d)
+      setConfigForm({
+        weightEmployee: d.config.weightEmployee.toString(),
+        weightCompany: d.config.weightCompany.toString(),
+        weightProcess: d.config.weightProcess.toString(),
+        weightVolume: d.config.weightVolume.toString(),
+        weightComplexity: d.config.weightComplexity.toString(),
+        weightManual: d.config.weightManual.toString(),
+        weightCritical: d.config.weightCritical.toString(),
+        capacityRef: d.config.capacityRef.toString(),
+        bandGreen: d.config.bandGreen.toString(),
+        bandBlue: d.config.bandBlue.toString(),
+        bandYellow: d.config.bandYellow.toString(),
+        bandOrange: d.config.bandOrange.toString(),
+      })
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function analyzeAI() {
+    if (!data) return
+    setAiLoading(true)
+    setShowAI(true)
+    const res = await fetch('/api/gestao-equipe/dimensionamento/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary: data.summary, members: data.members, config: data.config }),
+    })
+    if (res.ok) {
+      const r = await res.json()
+      setAiContent(r.content)
+      setAiPowered(r.aiPowered)
+    } else {
+      setAiContent('Erro ao gerar análise.')
+    }
+    setAiLoading(false)
+  }
+
+  function downloadReport(format: 'xlsx' | 'pdf') {
+    const a = document.createElement('a')
+    a.href = `/api/gestao-equipe/dimensionamento/report?format=${format}`
+    a.download = `dimensionamento.${format}`
+    a.click()
+  }
+
+  async function saveConfig() {
+    setSavingConfig(true)
+    const payload = Object.fromEntries(
+      Object.entries(configForm).map(([k, v]) => [k, parseFloat(v) || 0])
+    )
+    await fetch('/api/gestao-equipe/capacity-config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    setShowConfig(false)
+    await load()
+    setSavingConfig(false)
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <Spin className="w-6 h-6 animate-spin text-slate-400" />
+    </div>
+  )
+  if (!data) return <p className="text-sm text-slate-400 text-center py-12">Erro ao carregar dados.</p>
+
+  const { summary, members, config } = data
+  const bandOrder = ['green', 'blue', 'yellow', 'orange', 'critical'] as const
+
+  return (
+    <div className="space-y-6">
+      {/* Resumo da equipe */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+          <p className="text-2xl font-bold text-blue-600">{summary.totalMembers}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Colaboradores</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+          <p className="text-2xl font-bold text-slate-700">{summary.totalHeadcount}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Total Empregados</p>
+        </div>
+        <div className={cn("rounded-xl border p-4 text-center",
+          summary.avgCapacity <= config.bandGreen  ? "bg-green-50 border-green-200" :
+          summary.avgCapacity <= config.bandBlue   ? "bg-blue-50 border-blue-200" :
+          summary.avgCapacity <= config.bandYellow ? "bg-amber-50 border-amber-200" :
+          summary.avgCapacity <= config.bandOrange ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"
+        )}>
+          <p className="text-2xl font-bold text-slate-700">{summary.avgCapacity}%</p>
+          <p className="text-xs text-slate-400 mt-0.5">Capacidade Média</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-400 mb-2">Distribuição</p>
+          <div className="space-y-1">
+            {bandOrder.map(b => {
+              const count = summary.bandCounts[b] ?? 0
+              if (count === 0) return null
+              const c = DIM_BAND[b]
+              return (
+                <div key={b} className="flex items-center gap-1.5 text-xs">
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", c.bar)} />
+                  <span className="text-slate-500 truncate">{c.label}</span>
+                  <span className={cn("ml-auto font-semibold", c.text)}>{count}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Header + Config */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm font-semibold text-slate-700">Colaboradores — Análise de Capacidade</p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={load} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Recalcular
+          </button>
+          <button onClick={() => setShowConfig(v => !v)}
+            className="inline-flex items-center gap-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 transition-colors">
+            <Filter className="w-3.5 h-3.5" /> {showConfig ? 'Fechar config' : 'Configurar pesos'}
+          </button>
+          <button onClick={analyzeAI} disabled={aiLoading}
+            className="inline-flex items-center gap-1 text-xs bg-purple-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-purple-700 disabled:opacity-60 transition-colors">
+            {aiLoading ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            Analisar com IA
+          </button>
+          <div className="relative group">
+            <button className="inline-flex items-center gap-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 transition-colors">
+              <FileDown className="w-3.5 h-3.5" /> Exportar <ChevronDown className="w-3 h-3" />
+            </button>
+            <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-10 hidden group-hover:block min-w-[130px]">
+              <button onClick={() => downloadReport('xlsx')} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 text-slate-700 flex items-center gap-2 rounded-t-lg">
+                <span className="text-green-600">⊞</span> Excel (.xlsx)
+              </button>
+              <button onClick={() => downloadReport('pdf')} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 text-slate-700 flex items-center gap-2 rounded-b-lg border-t border-slate-100">
+                <span className="text-red-500">⊟</span> PDF (.pdf)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Config panel */}
+      {showConfig && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+          <p className="text-sm font-semibold text-slate-700">Configuração dos Pesos e Faixas</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { key: 'weightEmployee',   label: 'Peso: Empregado'  },
+              { key: 'weightCompany',    label: 'Peso: Empresa'    },
+              { key: 'weightProcess',    label: 'Peso: Processo'   },
+              { key: 'weightVolume',     label: 'Peso: Volume'     },
+              { key: 'weightComplexity', label: 'Peso: Complexidade'},
+              { key: 'weightManual',     label: 'Bônus: Manual'    },
+              { key: 'weightCritical',   label: 'Bônus: Crítico'   },
+              { key: 'capacityRef',      label: 'Referência (pts)' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
+                <input type="number" step="0.1" min="0"
+                  value={configForm[f.key] ?? ''}
+                  onChange={e => setConfigForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={inputClass} />
+              </div>
+            ))}
+          </div>
+          <p className="text-xs font-medium text-slate-500 pt-1">Faixas (%) — limite superior de cada faixa</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { key: 'bandGreen',  label: '🟢 Disponível até'    },
+              { key: 'bandBlue',   label: '🔵 Equilibrado até'   },
+              { key: 'bandYellow', label: '🟡 Atenção até'       },
+              { key: 'bandOrange', label: '🟠 Sobrecarga até'    },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
+                <input type="number" step="1" min="0"
+                  value={configForm[f.key] ?? ''}
+                  onChange={e => setConfigForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={inputClass} />
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setShowConfig(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
+            <button onClick={saveConfig} disabled={savingConfig}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {savingConfig ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Salvar e Recalcular
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* AI Analysis Panel */}
+      {showAI && (
+        <div className="rounded-xl border border-purple-200 bg-purple-50/30 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-purple-200 bg-purple-50">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-semibold text-purple-800">Análise de Dimensionamento</span>
+              {!aiLoading && (
+                <span className={cn("text-xs px-2 py-0.5 rounded-full", aiPowered ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500")}>
+                  {aiPowered ? '✨ IA' : 'Modelo padrão'}
+                </span>
+              )}
+            </div>
+            <button onClick={() => setShowAI(false)} className="text-purple-400 hover:text-purple-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="px-4 py-4 text-sm text-slate-700 leading-relaxed max-h-[480px] overflow-y-auto">
+            {aiLoading ? (
+              <div className="flex items-center gap-2 text-slate-400">
+                <Spin className="w-4 h-4 animate-spin" /> Gerando análise...
+              </div>
+            ) : aiContent ? (
+              <div className="whitespace-pre-wrap font-mono text-xs leading-5"
+                dangerouslySetInnerHTML={{ __html: aiContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Members list */}
+      {members.length === 0 ? (
+        <div className="text-center py-12 text-slate-400 text-sm">
+          <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          <p>Nenhum colaborador ativo com carteira de empresas.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {members.map(m => {
+            const c = DIM_BAND[m.band] ?? DIM_BAND.green
+            const isExp = expanded[m.id]
+            const barW = Math.min((m.capacityPct / (config.bandOrange * 1.1)) * 100, 100)
+            return (
+              <div key={m.id} className={cn("rounded-xl border bg-white overflow-hidden", c.border)}>
+                <button className="w-full text-left px-4 py-3 flex items-center gap-4"
+                  onClick={() => setExpanded(p => ({ ...p, [m.id]: !p[m.id] }))}>
+                  {/* Avatar */}
+                  <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                    {m.name.charAt(0)}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{m.name}</p>
+                      <span className={cn("text-sm font-bold shrink-0", c.text)}>{m.capacityPct}%</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-1.5">{m.role}{m.sector ? ` · ${m.sector}` : ''}</p>
+                    {/* Bar */}
+                    <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className={cn("h-1.5 rounded-full transition-all", c.bar)} style={{ width: `${barW}%` }} />
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
+                      <span className={cn("font-medium", c.text)}>{m.bandLabel}</span>
+                      <span>{m.companyCount} empresa(s)</span>
+                      <span>{m.totalHeadcount} empregado(s)</span>
+                      {m.totalProcesses > 0 && <span>{m.totalProcesses} processo(s)</span>}
+                    </div>
+                  </div>
+                  <ChevronDown className={cn("w-4 h-4 text-slate-300 shrink-0 transition-transform", isExp && "rotate-180")} />
+                </button>
+
+                {isExp && m.linkBreakdown.length > 0 && (
+                  <div className={cn("px-4 pb-3 pt-1 border-t", c.border, c.bg)}>
+                    <p className="text-xs font-medium text-slate-400 mb-2">Contribuição por empresa (score)</p>
+                    <div className="space-y-1.5">
+                      {m.linkBreakdown.map(l => {
+                        const pct = m.totalScore > 0 ? (l.score / m.totalScore) * 100 : 0
+                        return (
+                          <div key={l.companyId} className="flex items-center gap-2 text-xs">
+                            <span className="truncate flex-1 text-slate-600">{l.companyName}</span>
+                            <div className="w-24 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                              <div className={cn("h-1.5 rounded-full", c.bar)} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-slate-500 w-12 text-right shrink-0">{l.score} pts</span>
+                          </div>
+                        )
+                      })}
+                      <div className="flex items-center gap-2 text-xs pt-1 border-t border-slate-200 mt-1">
+                        <span className="font-medium text-slate-500 flex-1">Total</span>
+                        <span className={cn("font-bold", c.text)}>{m.totalScore} pts</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <p className="text-xs text-slate-400 text-center pt-2">
+        Análise indicativa. A decisão final deve considerar calendário, complexidade qualitativa e organização interna.
+      </p>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "visao-geral",    label: "Visão Geral",   icon: LayoutDashboard },
-  { id: "equipe",         label: "Equipe",         icon: Users },
-  { id: "feedbacks",      label: "Feedbacks",      icon: MessageSquare },
-  { id: "direcionamento", label: "Direcionamento", icon: Navigation },
-  { id: "ferias",         label: "Férias",         icon: Umbrella },
-  { id: "treinamentos",   label: "Treinamentos",   icon: BookOpen },
-  { id: "atividades",     label: "Atividades",     icon: Activity },
-  { id: "diretrizes",     label: "Diretrizes",     icon: BookMarked },
-  { id: "cargos",         label: "Descrição de Cargos", icon: Briefcase },
+  { id: "visao-geral",       label: "Visão Geral",         icon: LayoutDashboard },
+  { id: "equipe",            label: "Equipe",              icon: Users           },
+  { id: "feedbacks",         label: "Feedbacks",           icon: MessageSquare   },
+  { id: "direcionamento",    label: "Direcionamento",      icon: Navigation      },
+  { id: "ferias",            label: "Férias",              icon: Umbrella        },
+  { id: "treinamentos",      label: "Treinamentos",        icon: BookOpen        },
+  { id: "atividades",        label: "Atividades",          icon: Activity        },
+  { id: "diretrizes",        label: "Diretrizes",          icon: BookMarked      },
+  { id: "cargos",            label: "Descrição de Cargos", icon: Briefcase       },
+  { id: "empresas",          label: "Empresas",            icon: Building2       },
+  { id: "dimensionamento",   label: "Dimensionamento",     icon: BarChart2       },
 ]
 
 export function GestaoEquipeClient() {
@@ -1836,6 +2333,8 @@ export function GestaoEquipeClient() {
         {activeTab === "atividades"     && <TabAtividades members={members} />}
         {activeTab === "diretrizes"     && <TabDiretrizes />}
         {activeTab === "cargos"         && <TabCargos />}
+        {activeTab === "empresas"        && <TabEmpresas />}
+        {activeTab === "dimensionamento" && <TabDimensionamento />}
       </div>
     </div>
   )

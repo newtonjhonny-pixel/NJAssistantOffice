@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client-sqlite"
 }
 
 datasource db {
@@ -583,6 +584,128 @@ model TeamMember {
   activities          TeamActivity[]
   history             TeamHistory[]
   memberActivityLinks MemberActivityLink[]
+  companyLinks        MemberCompanyLink[]
+  salary              MemberSalary?
+  hourBankEntries     HourBankEntry[]
+  hourBankConfig      HourBankConfig?
+}
+
+// ─── CARTEIRA DE EMPRESAS E REMUNERAÇÃO ──────────────────────────────────────
+
+model ClientCompany {
+  id             String   @id @default(cuid())
+  name           String
+  cnpj           String?
+  segment        String?
+  observations   String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  memberLinks MemberCompanyLink[]
+
+  @@index([active])
+}
+
+model MemberCompanyLink {
+  id                   String        @id @default(cuid())
+  memberId             String
+  member               TeamMember    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  companyId            String
+  company              ClientCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  // Papel do colaborador nesta empresa
+  memberRole           String?       // RESPONSAVEL | APOIO | CONFERENCIA | APROVACAO | ADMISSAO | PONTO | FOLHA | FERIAS | RESCISAO | BENEFICIOS | ENCARGOS | ATENDIMENTO | OUTRO
+  // Headcount
+  headcountActive      Int?          // empregados ativos
+  headcountApprentice  Int?          // aprendizes
+  headcountIntern      Int?          // estagiários
+  headcountOnLeave     Int?          // afastados
+  headcountUpdatedAt   DateTime?     // data da atualização do headcount
+  // Volumes mensais
+  avgAdmissions        Float?        // admissões médias/mês
+  avgTerminations      Float?        // rescisões médias/mês
+  avgVacations         Float?        // férias médias/mês
+  folhasProcessadas    Int?          // folhas processadas
+  unions               Int?          // quantidade de sindicatos/CCTs
+  establishments       Int?          @default(1) // estabelecimentos
+  // Perfil da empresa
+  systemUsed           String?       // sistema utilizado
+  automationLevel      String?       // ALTO | MEDIO | BAIXO | MANUAL
+  complexity           String?       // BAIXA | MEDIA | ALTA | MUITO_ALTA
+  // Gestão
+  startDate            DateTime?     // início da responsabilidade
+  substitute           String?
+  observations         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  processes MemberCompanyProcess[]
+
+  @@unique([memberId, companyId])
+  @@index([memberId])
+  @@index([companyId])
+}
+
+model MemberCompanyProcess {
+  id             String            @id @default(cuid())
+  linkId         String
+  link           MemberCompanyLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  processType    String            // FOLHA | ADMISSAO | RESCISAO | FERIAS | BENEFICIOS | ENCARGOS | PONTO | ESOCIAL | FGTS | DCTFWEB | OUTROS
+  volume         Float?            // movimentações/mês
+  complexity     String?           // BAIXA | MEDIA | ALTA | MUITO_ALTA
+  automationLevel String?          // ALTO | MEDIO | BAIXO | MANUAL
+  avgTimeMinutes Float?            // tempo médio de execução em minutos
+  isCritical     Boolean           @default(false) // sem substituto/backup
+  observations   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([linkId, processType])
+  @@index([linkId])
+}
+
+model MemberSalary {
+  id               String     @id @default(cuid())
+  memberId         String     @unique
+  member           TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  baseSalary       Float?     // salário-base
+  fixedAdditions   Float?     // adicionais fixos
+  gratification    Float?     // gratificação
+  trustFunction    Float?     // função de confiança
+  commission       Float?     // comissão média
+  otherFixed       Float?     // outros valores fixos
+  estimatedMonthly Float?     // remuneração mensal estimada (calculada)
+  estimatedCharges Float?     // encargos estimados
+  estimatedCost    Float?     // custo mensal estimado
+  validFrom        DateTime?  // data de vigência salarial
+  lastAdjustment   DateTime?  // último reajuste
+  adjustmentReason String?    // motivo do reajuste
+  observations     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CapacityConfig {
+  id               String   @id @default(cuid())
+  name             String   @default("padrão")
+  // Pesos da fórmula (configuráveis)
+  weightEmployee   Float    @default(1.0)   // por empregado ativo
+  weightCompany    Float    @default(5.0)   // por empresa
+  weightProcess    Float    @default(2.0)   // por processo/atividade
+  weightVolume     Float    @default(0.5)   // por movimentação mensal
+  weightComplexity Float    @default(3.0)   // por nível de complexidade
+  weightManual     Float    @default(2.0)   // bônus por empresa com automação manual
+  weightCritical   Float    @default(3.0)   // bônus por processo crítico sem backup
+  capacityRef      Float    @default(100.0) // carga de referência (100%)
+  // Faixas de capacidade (%)
+  bandGreen        Float    @default(70.0)  // até aqui: disponível
+  bandBlue         Float    @default(85.0)  // até aqui: equilibrado
+  bandYellow       Float    @default(100.0) // até aqui: atenção
+  bandOrange       Float    @default(120.0) // até aqui: sobrecarga
+  // acima de bandOrange: sobrecarga crítica
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model TeamFeedback {
@@ -791,6 +914,40 @@ model TeamGuideline {
   updatedAt    DateTime @updatedAt
 }
 
+// ─── BANCO DE HORAS ──────────────────────────────────────────────────────────
+
+model HourBankEntry {
+  id            String     @id @default(cuid())
+  memberId      String
+  member        TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  entryDate     DateTime   // data do evento
+  competence    String     // YYYY-MM (competência de referência)
+  type          String     // LANCAMENTO | COMPENSACAO | AJUSTE | VENCIMENTO | IMPORTACAO
+  creditMinutes Int        @default(0)  // minutos creditados (horas extras)
+  debitMinutes  Int        @default(0)  // minutos debitados (compensação/vencimento)
+  responsible   String?
+  observations  String?
+  status        String     @default("ATIVO") // ATIVO | ESTORNADO
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([memberId])
+  @@index([memberId, competence])
+}
+
+model HourBankConfig {
+  id                 String     @id @default(cuid())
+  memberId           String     @unique
+  member             TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  compensationDays   Int        @default(180)  // prazo de compensação em dias após fim da competência
+  alertDaysBeforeExp Int        @default(30)   // alertar X dias antes do vencimento
+  maxCreditHours     Int?                      // limite máximo de crédito (null = sem limite)
+  negativeBalance    Boolean    @default(false) // permite saldo negativo
+  observations       String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
 model TeamAiSuggestion {
   id          String   @id @default(cuid())
   type        String   // FEEDBACK | DIRECTION | TRAINING | GUIDELINE
@@ -808,6 +965,78 @@ model TeamHistory {
   title       String
   description String?
   createdAt   DateTime    @default(now())
+}
+
+// ─── TAREFA DIÁRIA ────────────────────────────────────────────────────────────
+
+model DailyTask {
+  id            String   @id @default(cuid())
+  date          String   // YYYY-MM-DD — sem TZ para evitar drift de fuso
+  responsible   String?
+  title         String?
+  objective     String?
+  status        String   @default("ABERTO") // ABERTO | EM_ANDAMENTO | CONCLUIDO | ENCERRADO
+  initialNotes  String?
+  finalNotes    String?
+  summary       String?
+  completionPct Float    @default(0)
+  userId        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items       DailyTaskItem[]
+  history     DailyTaskHistory[]
+  attachments DailyTaskAttachment[]
+
+  @@index([date])
+  @@index([responsible])
+}
+
+model DailyTaskItem {
+  id          String    @id @default(cuid())
+  dailyTaskId String
+  dailyTask   DailyTask @relation(fields: [dailyTaskId], references: [id], onDelete: Cascade)
+  order       Int       @default(0)
+  title       String
+  description String?
+  category    String?
+  priority    String    @default("MEDIA")   // BAIXA | MEDIA | ALTA | URGENTE
+  status      String    @default("PENDENTE")// PENDENTE | EM_ANDAMENTO | CONCLUIDO | NAO_REALIZADO | ADIADO | CANCELADO
+  plannedTime String?   // "HH:MM"
+  startedAt   DateTime?
+  completedAt DateTime?
+  responsible String?
+  notes       String?
+  required    Boolean   @default(false)
+  taskId      String?
+  processId   String?
+  origin      String?   @default("MANUAL") // MANUAL | MODELO | COPIADO | CONVERTIDO
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([dailyTaskId])
+  @@index([status])
+}
+
+model DailyTaskHistory {
+  id          String    @id @default(cuid())
+  dailyTaskId String
+  dailyTask   DailyTask @relation(fields: [dailyTaskId], references: [id], onDelete: Cascade)
+  action      String
+  description String?
+  createdAt   DateTime  @default(now())
+}
+
+model DailyTaskAttachment {
+  id          String    @id @default(cuid())
+  dailyTaskId String?
+  dailyTask   DailyTask? @relation(fields: [dailyTaskId], references: [id], onDelete: Cascade)
+  itemId      String?
+  fileName    String
+  fileType    String
+  fileSize    Int       @default(0)
+  filePath    String
+  createdAt   DateTime  @default(now())
 }
 
 // ─── Descrição de Cargos ──────────────────────────────────────────────────────
@@ -912,14 +1141,48 @@ model ProcedureDocument {
   risks            String?
   expectedResult   String?
   notes            String?
-  // Fase 3 — versionamento e governança
-  processId        String?   // FK → Process.id (opcional)
-  code             String?   // ex: POP-001
+  // Vinculação e versionamento básico
+  processId        String?
+  code             String?
   version          String?   @default("1.0")
-  docStatus        String?   @default("RASCUNHO") // RASCUNHO | VIGENTE | REVISAO | OBSOLETO
-  nextReview       String?   // data ISO da próxima revisão
+  status           String    @default("VIGENTE")  // coluna canônica (docStatus é legado)
+  nextReview       String?
   reviewer         String?
   approver         String?
+  // ── Fase 1: Identificação ──────────────────────────────────────────────────
+  subtitle              String?
+  category              String?
+  macroprocess          String?
+  unit                  String?
+  company               String?
+  targetAudience        String?
+  scope                 String?
+  infoClassification    String?  @default("USO_INTERNO")
+  legalBasis            String?
+  retentionPeriod       String?
+  revisionNumber        Int?     @default(0)
+  elaborationDate       String?
+  approvalDate          String?
+  effectiveDate         String?
+  reviewPeriodicity     String?
+  creationReason        String?
+  revisionReason        String?
+  replacedDocument      String?
+  successorDocument     String?
+  tags                  String?
+  keywords              String?
+  // ── Fase 1: Governança ────────────────────────────────────────────────────
+  elaboratedBy            String?
+  technicalReviewer       String?
+  qualityReviewer         String?
+  legalReviewer           String?
+  processOwner            String?
+  publicationResponsible  String?
+  substitute              String?
+  approvalCommittee       String?
+  approvalLevel           String?
+  approvalDeadline        String?
+  workflowStatus          String   @default("RASCUNHO")
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -927,6 +1190,54 @@ model ProcedureDocument {
   checklistItems ProcedureChecklistItem[]
   attachments    ProcedureAttachment[]
   flows          ProcedureFlow[]
+  history        ProcedureHistory[]
+  versions       ProcedureVersion[]
+  approvals      ProcedureApproval[]
+}
+
+model ProcedureHistory {
+  id                 String            @id @default(cuid())
+  documentId         String
+  document           ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId             String?
+  userName           String?
+  action             String
+  field              String?
+  oldValue           String?
+  newValue           String?
+  comment            String?
+  oldWorkflowStatus  String?
+  newWorkflowStatus  String?
+  version            String?
+  createdAt          DateTime          @default(now())
+}
+
+model ProcedureVersion {
+  id         String            @id @default(cuid())
+  documentId String
+  document   ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    String
+  snapshot   String
+  changedBy  String?
+  changeNote String?
+  approvedBy String?
+  approvedAt DateTime?
+  createdAt  DateTime          @default(now())
+}
+
+model ProcedureApproval {
+  id           String            @id @default(cuid())
+  documentId   String
+  document     ProcedureDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  step         Int               @default(0)
+  role         String
+  approverName String?
+  status       String            @default("PENDENTE")
+  decision     String?
+  comment      String?
+  decidedAt    DateTime?
+  deadline     DateTime?
+  createdAt    DateTime          @default(now())
 }
 
 // ─── PROCESSOS ────────────────────────────────────────────────────────────────

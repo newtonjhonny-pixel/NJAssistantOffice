@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Search, Bell, FileText, Mail, Clock, CheckCheck,
   Loader2, AlertCircle, Sparkles, X, Menu,
+  BookOpen, AlertTriangle, FileX, ShieldAlert,
 } from "lucide-react"
 import { cn, formatDate, PRIORITY_COLORS, PRIORITY_LABELS, STATUS_COLORS, STATUS_LABELS, isOverdue } from "@/lib/utils"
 
@@ -58,12 +59,24 @@ const PAGE_LABELS: Record<string, string> = {
 }
 
 const NOTIF_ICONS: Record<string, React.ReactNode> = {
-  TASK_CREATED:  <FileText   className="w-3.5 h-3.5 text-blue-500"   />,
-  TASK_URGENT:   <AlertCircle className="w-3.5 h-3.5 text-red-500"   />,
-  TASK_OVERDUE:  <Clock      className="w-3.5 h-3.5 text-orange-500" />,
-  TASK_WAITING:  <Clock      className="w-3.5 h-3.5 text-purple-500" />,
-  EMAIL_RECEIVED:<Mail       className="w-3.5 h-3.5 text-green-500"  />,
-  AI_SUGGESTION: <Sparkles   className="w-3.5 h-3.5 text-violet-500" />,
+  TASK_CREATED:       <FileText      className="w-3.5 h-3.5 text-blue-500"   />,
+  TASK_URGENT:        <AlertCircle   className="w-3.5 h-3.5 text-red-500"    />,
+  TASK_OVERDUE:       <Clock         className="w-3.5 h-3.5 text-orange-500" />,
+  TASK_WAITING:       <Clock         className="w-3.5 h-3.5 text-purple-500" />,
+  EMAIL_RECEIVED:     <Mail          className="w-3.5 h-3.5 text-green-500"  />,
+  AI_SUGGESTION:      <Sparkles      className="w-3.5 h-3.5 text-violet-500" />,
+  // Procedimentos
+  PROC_SEM_LEITURA:      <BookOpen      className="w-3.5 h-3.5 text-amber-500"  />,
+  PROC_REVISAO_VENCIDA:  <Clock         className="w-3.5 h-3.5 text-orange-600" />,
+  PROC_RISCO_CRITICO:    <ShieldAlert   className="w-3.5 h-3.5 text-red-600"    />,
+  PROC_ABANDONADO:       <FileX         className="w-3.5 h-3.5 text-slate-400"  />,
+}
+
+const NOTIF_GROUP: Record<string, string> = {
+  PROC_SEM_LEITURA:     'Procedimentos',
+  PROC_REVISAO_VENCIDA: 'Procedimentos',
+  PROC_RISCO_CRITICO:   'Procedimentos',
+  PROC_ABANDONADO:      'Procedimentos',
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -179,8 +192,9 @@ export function TopBar({ onMenuClick }: TopBarProps) {
   }
 
   function notifLink(n: Notification) {
-    if (n.relatedType === "task" && n.relatedId) return `/tasks/${n.relatedId}`
-    if (n.relatedType === "inbox") return "/inbox"
+    if (n.relatedType === "task"      && n.relatedId) return `/tasks/${n.relatedId}`
+    if (n.relatedType === "inbox")                    return "/inbox"
+    if (n.relatedType === "procedure")                return "/processos"
     return null
   }
 
@@ -381,6 +395,11 @@ export function TopBar({ onMenuClick }: TopBarProps) {
                         {NOTIF_ICONS[n.type] ?? <Bell className="w-3.5 h-3.5 text-slate-400" />}
                       </div>
                       <div className="flex-1 min-w-0">
+                        {NOTIF_GROUP[n.type] && (
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">
+                            {NOTIF_GROUP[n.type]}
+                          </p>
+                        )}
                         <p className="text-xs font-semibold text-slate-700">{n.title}</p>
                         <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
                         <p className="text-xs text-slate-300 mt-1">

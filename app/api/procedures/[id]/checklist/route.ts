@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma-sqlite'
 
 export const dynamic = 'force-dynamic'
+
+
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const items = await prisma.procedureChecklistItem.findMany({

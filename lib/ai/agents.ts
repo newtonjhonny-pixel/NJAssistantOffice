@@ -296,8 +296,9 @@ export async function getDailySummary(): Promise<AgentResponse> {
     }
   }
 
+  const ctx = await buildSystemContext()
+
   try {
-    const ctx = await buildSystemContext()
     const systemPrompt = buildCoordinatorSystem(ctx)
     const userPrompt = `Gere o Resumo Inteligente do Dia para Newton.
 
@@ -318,15 +319,24 @@ Use ESSES dados reais. Não seja genérico. Estruture assim:
 4. **Alertas críticos** — pendências que representam risco real de atraso ou prejuízo
 5. **Recomendação do dia** — orientação estratégica específica para hoje`
 
-    const content = await askAgentMessages([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ], { temperature: 0.6, maxTokens: 1200 })
+    const content = await askAgentAI({
+      module: 'dashboard.daily-summary',
+      specialist: 'COORDENADOR',
+      systemPrompt,
+      userPrompt,
+    })
+
+    if (!content || !content.trim()) {
+      console.warn('[getDailySummary] IA retornou conteúdo vazio, usando fallback')
+      return {
+        agent: 'COORDENADOR', agentName: meta.name, icon: meta.icon, aiPowered: false,
+        content: getFallbackDailySummary(ctx),
+      }
+    }
 
     return { agent: 'COORDENADOR', agentName: meta.name, icon: meta.icon, aiPowered: true, content }
   } catch (err) {
     console.error('[getDailySummary] falha na IA, usando fallback:', err instanceof Error ? err.message : err)
-    const ctx = await buildSystemContext()
     return {
       agent: 'COORDENADOR', agentName: meta.name, icon: meta.icon, aiPowered: false,
       content: getFallbackDailySummary(ctx),
