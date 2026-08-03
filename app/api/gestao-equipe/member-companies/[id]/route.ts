@@ -3,37 +3,66 @@ import { prisma } from '@/lib/prisma-sqlite'
 
 export const dynamic = 'force-dynamic'
 
+function hasOwn(body: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(body, key)
+}
+
+function nullableInt(value: unknown) {
+  if (value == null || value === '') return null
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function nullableFloat(value: unknown) {
+  if (value == null || value === '') return null
+  const parsed = Number.parseFloat(String(value).replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function nullableText(value: unknown) {
+  if (value == null) return null
+  const text = String(value).trim()
+  return text || null
+}
 
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    const body = await req.json()
-    const now = new Date().toISOString()
-    const headcountUpdatedAt =
-      body.headcountActive != null || body.headcountApprentice != null ? now : undefined
-
-    await prisma.$executeRaw`
-      UPDATE "MemberCompanyLink" SET
-        "memberRole"          = COALESCE(${body.memberRole ?? null},        "memberRole"),
-        "headcountActive"     = COALESCE(${body.headcountActive ?? null},   "headcountActive"),
-        "headcountApprentice" = COALESCE(${body.headcountApprentice ?? null},"headcountApprentice"),
-        "headcountIntern"     = COALESCE(${body.headcountIntern ?? null},   "headcountIntern"),
-        "headcountOnLeave"    = COALESCE(${body.headcountOnLeave ?? null},  "headcountOnLeave"),
-        "headcountUpdatedAt"  = COALESCE(${headcountUpdatedAt ?? null},     "headcountUpdatedAt"),
-        "avgAdmissions"       = COALESCE(${body.avgAdmissions ?? null},     "avgAdmissions"),
-        "avgTerminations"     = COALESCE(${body.avgTerminations ?? null},   "avgTerminations"),
-        "avgVacations"        = COALESCE(${body.avgVacations ?? null},      "avgVacations"),
-        "folhasProcessadas"   = COALESCE(${body.folhasProcessadas ?? null}, "folhasProcessadas"),
-        "unions"              = COALESCE(${body.unions ?? null},            "unions"),
-        "establishments"      = COALESCE(${body.establishments ?? null},   "establishments"),
-        "systemUsed"          = COALESCE(${body.systemUsed ?? null},        "systemUsed"),
-        "automationLevel"     = COALESCE(${body.automationLevel ?? null},   "automationLevel"),
-        "complexity"          = COALESCE(${body.complexity ?? null},        "complexity"),
-        "substitute"          = COALESCE(${body.substitute ?? null},        "substitute"),
-        "observations"        = COALESCE(${body.observations ?? null},      "observations"),
-        "updatedAt"           = ${now}
-      WHERE "id" = ${params.id}
+    const body = await req.json() as Record<string, unknown>
+    const now = new Date()
+    const currentRows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "MemberCompanyLink" WHERE "id" = ${params.id}
     `
+    if (!currentRows.length) return NextResponse.json({ error: 'Vínculo não encontrado' }, { status: 404 })
+
+    const headcountUpdatedAt =
+      hasOwn(body, 'headcountActive') || hasOwn(body, 'headcountApprentice') || hasOwn(body, 'headcountIntern') || hasOwn(body, 'headcountOnLeave')
+        ? now
+        : undefined
+
+    const data: Record<string, unknown> = { updatedAt: now }
+    if (hasOwn(body, 'memberRole')) data.memberRole = nullableText(body.memberRole)
+    if (hasOwn(body, 'headcountActive')) data.headcountActive = nullableInt(body.headcountActive)
+    if (hasOwn(body, 'headcountApprentice')) data.headcountApprentice = nullableInt(body.headcountApprentice)
+    if (hasOwn(body, 'headcountIntern')) data.headcountIntern = nullableInt(body.headcountIntern)
+    if (hasOwn(body, 'headcountOnLeave')) data.headcountOnLeave = nullableInt(body.headcountOnLeave)
+    if (headcountUpdatedAt) data.headcountUpdatedAt = headcountUpdatedAt
+    if (hasOwn(body, 'avgAdmissions')) data.avgAdmissions = nullableFloat(body.avgAdmissions)
+    if (hasOwn(body, 'avgTerminations')) data.avgTerminations = nullableFloat(body.avgTerminations)
+    if (hasOwn(body, 'avgVacations')) data.avgVacations = nullableFloat(body.avgVacations)
+    if (hasOwn(body, 'folhasProcessadas')) data.folhasProcessadas = nullableInt(body.folhasProcessadas)
+    if (hasOwn(body, 'unions')) data.unions = nullableInt(body.unions)
+    if (hasOwn(body, 'establishments')) data.establishments = nullableInt(body.establishments) ?? 1
+    if (hasOwn(body, 'systemUsed')) data.systemUsed = nullableText(body.systemUsed)
+    if (hasOwn(body, 'automationLevel')) data.automationLevel = nullableText(body.automationLevel)
+    if (hasOwn(body, 'complexity')) data.complexity = nullableText(body.complexity)
+    if (hasOwn(body, 'substitute')) data.substitute = nullableText(body.substitute)
+    if (hasOwn(body, 'observations')) data.observations = nullableText(body.observations)
+
+    await (prisma as any).memberCompanyLink.update({
+      where: { id: params.id },
+      data,
+    })
     const rows = await prisma.$queryRaw<any[]>`
       SELECT l.*, c."name" as "companyName", c."cnpj", c."segment"
       FROM "MemberCompanyLink" l

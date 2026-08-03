@@ -1296,11 +1296,12 @@ function CapacityIndicator({ memberId }: { memberId: string }) {
 
 function TabCarteira({ memberId }: { memberId: string }) {
   const [links, setLinks] = useState<MemberCompanyLink[]>([])
-  const [companies, setCompanies] = useState<{ id: string; name: string; segment: string | null }[]>([])
+  const [companies, setCompanies] = useState<{ id: string; name: string; segment: string | null; active?: boolean }[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [capKey, setCapKey] = useState(0)
 
@@ -1314,13 +1315,21 @@ function TabCarteira({ memberId }: { memberId: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [linksRes, companiesRes] = await Promise.all([
-      fetch(`/api/gestao-equipe/member-companies?memberId=${memberId}`),
-      fetch('/api/gestao-equipe/companies'),
-    ])
-    if (linksRes.ok) setLinks(await linksRes.json())
-    if (companiesRes.ok) setCompanies(await companiesRes.json())
-    setLoading(false)
+    setError(null)
+    try {
+      const [linksRes, companiesRes] = await Promise.all([
+        fetch(`/api/gestao-equipe/member-companies?memberId=${memberId}`),
+        fetch('/api/gestao-equipe/companies'),
+      ])
+      if (!linksRes.ok) throw new Error('Não foi possível carregar a carteira do colaborador.')
+      if (!companiesRes.ok) throw new Error('Não foi possível carregar as empresas.')
+      setLinks(await linksRes.json())
+      setCompanies(await companiesRes.json())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível carregar a carteira.')
+    } finally {
+      setLoading(false)
+    }
   }, [memberId])
 
   useEffect(() => { load() }, [load])
@@ -1328,11 +1337,13 @@ function TabCarteira({ memberId }: { memberId: string }) {
   function openNew() {
     setEditId(null)
     setForm(emptyForm)
+    setError(null)
     setShowForm(true)
   }
 
   function openEdit(l: MemberCompanyLink) {
     setEditId(l.id)
+    setError(null)
     setForm({
       companyId: l.companyId, memberRole: l.memberRole ?? '',
       headcountActive: l.headcountActive?.toString() ?? '',
@@ -1357,6 +1368,7 @@ function TabCarteira({ memberId }: { memberId: string }) {
 
   async function save() {
     setSaving(true)
+    setError(null)
     try {
       const payload = {
         companyId: form.companyId, memberRole: form.memberRole || null,
@@ -1374,26 +1386,39 @@ function TabCarteira({ memberId }: { memberId: string }) {
         complexity: form.complexity || null, substitute: form.substitute || null,
         observations: form.observations || null,
       }
+      let res: Response
       if (editId) {
-        await fetch(`/api/gestao-equipe/member-companies/${editId}`, {
+        res = await fetch(`/api/gestao-equipe/member-companies/${editId}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
       } else {
-        await fetch('/api/gestao-equipe/member-companies', {
+        res = await fetch('/api/gestao-equipe/member-companies', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ memberId, ...payload }),
         })
       }
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Erro ao salvar empresa na carteira.')
+      }
       setShowForm(false)
       await load()
       setCapKey(k => k + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar empresa na carteira.')
     } finally { setSaving(false) }
   }
 
   async function remove(id: string) {
     if (!confirm('Remover esta empresa da carteira?')) return
-    await fetch(`/api/gestao-equipe/member-companies/${id}`, { method: 'DELETE' })
+    setError(null)
+    const res = await fetch(`/api/gestao-equipe/member-companies/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      setError(data?.error || 'Erro ao remover empresa da carteira.')
+      return
+    }
     await load()
     setCapKey(k => k + 1)
   }
@@ -1442,6 +1467,12 @@ function TabCarteira({ memberId }: { memberId: string }) {
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* Form */}
       {showForm && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-4">
@@ -1453,7 +1484,7 @@ function TabCarteira({ memberId }: { memberId: string }) {
                 <label className="text-xs font-medium text-slate-500 block mb-1">Empresa *</label>
                 <select value={form.companyId} onChange={e => setForm(p => ({ ...p, companyId: e.target.value }))} className={selectClass}>
                   <option value="">Selecionar empresa...</option>
-                  {companies.filter(c => !links.some(l => l.companyId === c.id)).map(c => (
+                  {companies.filter(c => c.active !== false && !links.some(l => l.companyId === c.id)).map(c => (
                     <option key={c.id} value={c.id}>{c.name}{c.segment ? ` — ${c.segment}` : ''}</option>
                   ))}
                 </select>
