@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "DailyTask" WHERE "id" = ${params.id}`
-    if (!rows[0]) return NextResponse.json({ error: 'NÃ£o encontrado' }, { status: 404 })
+    if (!rows[0]) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
 
     const items = await prisma.$queryRaw<any[]>`
       SELECT * FROM "DailyTaskItem" WHERE "dailyTaskId" = ${params.id} ORDER BY "order" ASC, "createdAt" ASC
@@ -39,14 +39,14 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     })
   } catch (e) {
     console.error('[daily-tasks GET id]', e)
-    return NextResponse.json({ error: 'Erro ao carregar tarefa diÃ¡ria' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao carregar tarefa diária' }, { status: 500 })
   }
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
-    const now  = new Date().toISOString()
+    const now  = new Date()
 
     await prisma.$executeRaw`
       UPDATE "DailyTask" SET
@@ -72,7 +72,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json(rows[0])
   } catch (e) {
     console.error('[daily-tasks PATCH id]', e)
-    return NextResponse.json({ error: 'Erro ao atualizar tarefa diÃ¡ria' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao atualizar tarefa diária' }, { status: 500 })
   }
 }
 
@@ -82,6 +82,6 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[daily-tasks DELETE id]', e)
-    return NextResponse.json({ error: 'Erro ao excluir tarefa diÃ¡ria' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao excluir tarefa diária' }, { status: 500 })
   }
 }

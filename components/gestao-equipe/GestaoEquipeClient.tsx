@@ -1762,7 +1762,25 @@ function TabDiretrizes() {
 
 // ─── Tab: Empresas ────────────────────────────────────────────────────────────
 
-interface Company { id: string; name: string; cnpj?: string | null; segment?: string | null; observations?: string | null; active: number }
+interface Company { id: string; name: string; cnpj?: string | null; segment?: string | null; observations?: string | null; active: boolean }
+
+function onlyCnpjDigits(value: string) {
+  return value.replace(/\D/g, '').slice(0, 14)
+}
+
+function formatCnpj(value: string) {
+  const digits = onlyCnpjDigits(value)
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
+function isValidOptionalCnpj(value: string) {
+  const digits = onlyCnpjDigits(value)
+  return digits.length === 0 || digits.length === 14
+}
 
 function TabEmpresas() {
   const [companies, setCompanies] = useState<Company[]>([])
@@ -1770,6 +1788,7 @@ function TabEmpresas() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Company | null>(null)
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
   const [form, setForm] = useState({ name: '', cnpj: '', segment: '', observations: '' })
 
   async function load() {
@@ -1780,32 +1799,45 @@ function TabEmpresas() {
   }
   useEffect(() => { load() }, [])
 
-  function openNew() { setEditing(null); setForm({ name: '', cnpj: '', segment: '', observations: '' }); setShowForm(true) }
-  function openEdit(c: Company) { setEditing(c); setForm({ name: c.name, cnpj: c.cnpj ?? '', segment: c.segment ?? '', observations: c.observations ?? '' }); setShowForm(true) }
+  function openNew() { setEditing(null); setFormError(''); setForm({ name: '', cnpj: '', segment: '', observations: '' }); setShowForm(true) }
+  function openEdit(c: Company) { setEditing(c); setFormError(''); setForm({ name: c.name, cnpj: formatCnpj(c.cnpj ?? ''), segment: c.segment ?? '', observations: c.observations ?? '' }); setShowForm(true) }
 
   async function save() {
     if (!form.name.trim()) return
+    if (!isValidOptionalCnpj(form.cnpj)) {
+      setFormError('Informe um CNPJ válido com 14 dígitos.')
+      return
+    }
     setSaving(true)
+    setFormError('')
     try {
+      const payload = { ...form, cnpj: onlyCnpjDigits(form.cnpj) || null }
+      let res: Response
       if (editing) {
-        await fetch(`/api/gestao-equipe/companies/${editing.id}`, {
+        res = await fetch(`/api/gestao-equipe/companies/${editing.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         })
       } else {
-        await fetch('/api/gestao-equipe/companies', {
+        res = await fetch('/api/gestao-equipe/companies', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         })
       }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? 'Erro ao salvar empresa')
+      }
       setShowForm(false); await load()
+    } catch (e: any) {
+      setFormError(e.message ?? 'Erro ao salvar empresa')
     } finally { setSaving(false) }
   }
 
   async function toggleActive(c: Company) {
     await fetch(`/api/gestao-equipe/companies/${c.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: c.active ? 0 : 1 }),
+      body: JSON.stringify({ active: !c.active }),
     })
     await load()
   }
@@ -1823,6 +1855,11 @@ function TabEmpresas() {
       {showForm && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
           <p className="text-sm font-semibold text-slate-700">{editing ? 'Editar empresa' : 'Nova empresa'}</p>
+          {formError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {formError}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="text-xs font-medium text-slate-500 block mb-1">Nome *</label>
@@ -1831,8 +1868,14 @@ function TabEmpresas() {
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1">CNPJ</label>
-              <input value={form.cnpj} onChange={e => setForm(p => ({ ...p, cnpj: e.target.value }))}
-                className={inputClass} placeholder="00.000.000/0000-00" />
+              <input
+                value={form.cnpj}
+                onChange={e => { setFormError(''); setForm(p => ({ ...p, cnpj: formatCnpj(e.target.value) })) }}
+                className={inputClass}
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                maxLength={18}
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1">Segmento</label>
@@ -1847,7 +1890,7 @@ function TabEmpresas() {
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
-            <button onClick={save} disabled={saving || !form.name.trim()}
+            <button onClick={save} disabled={saving || !form.name.trim() || !isValidOptionalCnpj(form.cnpj)}
               className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               {editing ? 'Salvar' : 'Adicionar'}
@@ -1878,7 +1921,7 @@ function TabEmpresas() {
                   <button onClick={() => openEdit(c)} className="text-slate-400 hover:text-blue-600 p-1 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
-              {c.cnpj && <p className="text-xs text-slate-400 mb-1">CNPJ: {c.cnpj}</p>}
+              {c.cnpj && <p className="text-xs text-slate-400 mb-1">CNPJ: {formatCnpj(c.cnpj)}</p>}
               {c.segment && <span className="inline-block text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{c.segment}</span>}
               <button onClick={() => toggleActive(c)}
                 className={cn("mt-3 text-xs px-2 py-1 rounded-full border transition-colors",

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 
 
-async function recalcPct(dailyTaskId: string, now: string) {
+async function recalcPct(dailyTaskId: string, now: Date) {
   const items = await prisma.$queryRaw<any[]>`
     SELECT "status" FROM "DailyTaskItem" WHERE "dailyTaskId" = ${dailyTaskId}
   `
@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const body = await req.json()
     const { title, description, category, priority = 'MEDIA', plannedTime, responsible, required = false, origin = 'MANUAL' } = body
 
-    if (!title) return NextResponse.json({ error: 'title Ã© obrigatÃ³rio' }, { status: 400 })
+    if (!title) return NextResponse.json({ error: 'title é obrigatório' }, { status: 400 })
 
     // Next order
     const orderRows = await prisma.$queryRaw<any[]>`
@@ -47,7 +47,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const nextOrder = Number(orderRows[0]?.next ?? 0)
 
     const id  = randomUUID()
-    const now = new Date().toISOString()
+    const now = new Date()
 
     await prisma.$executeRaw`
       INSERT INTO "DailyTaskItem"

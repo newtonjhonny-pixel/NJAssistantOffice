@@ -6,6 +6,10 @@ export const dynamic = 'force-dynamic'
 
 
 
+function createDate() {
+  return new Date()
+}
+
 // GET /api/daily-tasks?date=YYYY-MM-DD&responsible=...
 export async function GET(req: Request) {
   try {
@@ -44,7 +48,7 @@ export async function GET(req: Request) {
     return NextResponse.json(result)
   } catch (e) {
     console.error('[daily-tasks GET]', e)
-    return NextResponse.json({ error: 'Erro ao listar tarefas diÃ¡rias' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao listar tarefas diárias' }, { status: 500 })
   }
 }
 
@@ -54,10 +58,10 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { date, responsible, title, objective, status = 'ABERTO', initialNotes } = body
 
-    if (!date) return NextResponse.json({ error: 'date Ã© obrigatÃ³rio' }, { status: 400 })
+    if (!date) return NextResponse.json({ error: 'date é obrigatório' }, { status: 400 })
 
     const id  = randomUUID()
-    const now = new Date().toISOString()
+    const now = createDate()
 
     await prisma.$executeRaw`
       INSERT INTO "DailyTask" ("id","date","responsible","title","objective","status","initialNotes","completionPct","createdAt","updatedAt")
@@ -67,13 +71,13 @@ export async function POST(req: Request) {
 
     await prisma.$executeRaw`
       INSERT INTO "DailyTaskHistory" ("id","dailyTaskId","action","description","createdAt")
-      VALUES (${randomUUID()}, ${id}, 'CRIACAO', ${'Tarefa diÃ¡ria criada para ' + date}, ${now})
+      VALUES (${randomUUID()}, ${id}, 'CRIACAO', ${'Tarefa diária criada para ' + date}, ${now})
     `
 
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "DailyTask" WHERE "id" = ${id}`
     return NextResponse.json(rows[0], { status: 201 })
   } catch (e) {
     console.error('[daily-tasks POST]', e)
-    return NextResponse.json({ error: 'Erro ao criar tarefa diÃ¡ria' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao criar tarefa diária' }, { status: 500 })
   }
 }

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 
 
-async function recalcPct(dailyTaskId: string, now: string) {
+async function recalcPct(dailyTaskId: string, now: Date) {
   const items = await prisma.$queryRaw<any[]>`
     SELECT "status" FROM "DailyTaskItem" WHERE "dailyTaskId" = ${dailyTaskId}
   `
@@ -24,11 +24,11 @@ async function recalcPct(dailyTaskId: string, now: string) {
 export async function PATCH(req: Request, { params }: { params: { id: string; itemId: string } }) {
   try {
     const body = await req.json()
-    const now  = new Date().toISOString()
+    const now  = new Date()
 
     // Auto timestamps on status change
-    let startedAt:   string | null = body.startedAt   ?? null
-    let completedAt: string | null = body.completedAt ?? null
+    let startedAt:   Date | string | null = body.startedAt   ?? null
+    let completedAt: Date | string | null = body.completedAt ?? null
 
     if (body.status === 'EM_ANDAMENTO' && !startedAt) startedAt = now
     if (body.status === 'CONCLUIDO'    && !completedAt) completedAt = now
@@ -57,7 +57,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string; it
       await prisma.$executeRaw`
         INSERT INTO "DailyTaskHistory" ("id","dailyTaskId","action","description","createdAt")
         VALUES (${randomUUID()}, ${params.id}, 'ITEM_STATUS',
-          ${'Item ' + params.itemId + ' â†’ ' + body.status}, ${now})
+          ${'Item ' + params.itemId + ' -> ' + body.status}, ${now})
       `
     }
 
@@ -71,14 +71,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string; it
 
 export async function DELETE(_: Request, { params }: { params: { id: string; itemId: string } }) {
   try {
-    const now = new Date().toISOString()
+    const now = new Date()
     // Get title for history
     const rows = await prisma.$queryRaw<any[]>`SELECT "title" FROM "DailyTaskItem" WHERE "id" = ${params.itemId}`
     await prisma.$executeRaw`DELETE FROM "DailyTaskItem" WHERE "id" = ${params.itemId} AND "dailyTaskId" = ${params.id}`
     await recalcPct(params.id, now)
     await prisma.$executeRaw`
       INSERT INTO "DailyTaskHistory" ("id","dailyTaskId","action","description","createdAt")
-      VALUES (${randomUUID()}, ${params.id}, 'ITEM_EXCLUIDO', ${'Item excluÃ­do: ' + (rows[0]?.title ?? '')}, ${now})
+      VALUES (${randomUUID()}, ${params.id}, 'ITEM_EXCLUIDO', ${'Item excluído: ' + (rows[0]?.title ?? '')}, ${now})
     `
     return NextResponse.json({ ok: true })
   } catch (e) {
