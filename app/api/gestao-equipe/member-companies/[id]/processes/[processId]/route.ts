@@ -9,7 +9,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string; pr
   try {
     const body = await req.json()
     const now = new Date().toISOString()
-    const critical = body.isCritical != null ? (body.isCritical ? 1 : 0) : null
+    const critical = body.isCritical != null ? Boolean(body.isCritical) : null
 
     await prisma.$executeRaw`
       UPDATE "MemberCompanyProcess" SET

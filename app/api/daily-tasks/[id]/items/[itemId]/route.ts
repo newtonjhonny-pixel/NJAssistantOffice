@@ -45,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string; it
         "completedAt" = COALESCE(${completedAt},             "completedAt"),
         "responsible" = COALESCE(${body.responsible ?? null}, "responsible"),
         "notes"       = COALESCE(${body.notes       ?? null}, "notes"),
-        "required"    = COALESCE(${body.required != null ? (body.required ? 1 : 0) : null}, "required"),
+        "required"    = COALESCE(${body.required != null ? Boolean(body.required) : null}, "required"),
         "order"       = COALESCE(${body.order       ?? null}, "order"),
         "updatedAt"   = ${now}
       WHERE "id" = ${params.itemId} AND "dailyTaskId" = ${params.id}

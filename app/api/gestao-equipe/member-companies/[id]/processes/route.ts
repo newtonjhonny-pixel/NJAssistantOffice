@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const id = randomUUID()
     const now = new Date().toISOString()
-    const critical = isCritical ? 1 : 0
+    const critical = Boolean(isCritical)
 
     await prisma.$executeRaw`
       INSERT INTO "MemberCompanyProcess" (

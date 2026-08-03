@@ -55,7 +55,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       VALUES
         (${id}, ${params.id}, ${nextOrder}, ${title}, ${description ?? null}, ${category ?? null},
          ${priority}, 'PENDENTE', ${plannedTime ?? null}, ${responsible ?? null},
-         ${required ? 1 : 0}, ${origin}, ${now}, ${now})
+         ${Boolean(required)}, ${origin}, ${now}, ${now})
     `
 
     await recalcPct(params.id, now)

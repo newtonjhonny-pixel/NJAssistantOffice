@@ -66,7 +66,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
     // Load config
     const cfgRows = await prisma.$queryRaw<Config[]>`
-      SELECT * FROM "CapacityConfig" WHERE "active" = 1 LIMIT 1
+      SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1
     `
     const cfg: Config = cfgRows[0] ?? {
       weightEmployee: 1, weightCompany: 5, weightProcess: 2, weightVolume: 0.5,

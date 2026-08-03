@@ -21,7 +21,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           "compensationDays"   = ${body.compensationDays   ?? 180},
           "alertDaysBeforeExp" = ${body.alertDaysBeforeExp ?? 30},
           "maxCreditHours"     = ${body.maxCreditHours     ?? null},
-          "negativeBalance"    = ${body.negativeBalance    ? 1 : 0},
+          "negativeBalance"    = ${Boolean(body.negativeBalance)},
           "observations"       = ${body.observations       ?? null},
           "updatedAt"          = ${now}
         WHERE "memberId" = ${memberId}
@@ -32,7 +32,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           ("id","memberId","compensationDays","alertDaysBeforeExp","maxCreditHours","negativeBalance","observations","createdAt","updatedAt")
         VALUES
           (${randomUUID()}, ${memberId}, ${body.compensationDays ?? 180}, ${body.alertDaysBeforeExp ?? 30},
-           ${body.maxCreditHours ?? null}, ${body.negativeBalance ? 1 : 0}, ${body.observations ?? null}, ${now}, ${now})
+           ${body.maxCreditHours ?? null}, ${Boolean(body.negativeBalance)}, ${body.observations ?? null}, ${now}, ${now})
       `
     }
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "HourBankConfig" WHERE "memberId" = ${memberId}`
