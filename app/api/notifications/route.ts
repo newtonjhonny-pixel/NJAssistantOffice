@@ -14,11 +14,11 @@ async function syncProcedureAlerts() {
 
   try {
     const docs = await prismaSqlite.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT id, title, type, status, risks, nextReview, updatedAt FROM "ProcedureDocument"`
+      `SELECT "id", "title", "type", "status", "risks", "nextReview", "updatedAt" FROM "ProcedureDocument"`
     )
 
     const leituras = await prismaSqlite.$queryRawUnsafe<Record<string, unknown>[]>(
-      `SELECT "documentId", MAX("createdAt") as ultimaLeitura
+      `SELECT "documentId", MAX("createdAt") as "ultimaLeitura"
        FROM "ProcedureHistory" WHERE action = 'LEITURA'
        GROUP BY "documentId"`
     )
