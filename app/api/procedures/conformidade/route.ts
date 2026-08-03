@@ -11,7 +11,7 @@ export async function GET() {
 
   // â”€â”€ Docs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const docs = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT id, type, status, risks, description, title, createdAt, updatedAt FROM "ProcedureDocument"`
+    `SELECT id, type, status, risks, description, title, "createdAt", "updatedAt" FROM "ProcedureDocument"`
   )
 
   const total   = docs.length
@@ -72,7 +72,7 @@ export async function GET() {
 
   // â”€â”€ Documentos vigentes sem leitura nos Ãºltimos 90 dias â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const leituras = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT "documentId", MAX("createdAt") as ultimaLeitura FROM "ProcedureHistory"
+    `SELECT "documentId", MAX("createdAt") as "ultimaLeitura" FROM "ProcedureHistory"
      WHERE action = 'LEITURA'
      GROUP BY "documentId"`
   )
