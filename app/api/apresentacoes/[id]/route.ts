@@ -18,6 +18,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
+    const content = body.content === undefined
+      ? undefined
+      : typeof body.content === "string"
+        ? body.content
+        : JSON.stringify(body.content)
+
     const item = await prisma.presentation.update({
       where: { id: params.id },
       data: {
@@ -25,7 +31,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         ...(body.description !== undefined && { description: body.description }),
         ...(body.type        !== undefined && { type:        body.type }),
         ...(body.status      !== undefined && { status:      body.status }),
-        ...(body.content     !== undefined && { content:     body.content }),
+        ...(content          !== undefined && { content }),
         ...(body.thumbnail   !== undefined && { thumbnail:   body.thumbnail }),
         ...(body.favorite    !== undefined && { favorite:    body.favorite }),
         ...(body.tags        !== undefined && { tags:        body.tags }),
