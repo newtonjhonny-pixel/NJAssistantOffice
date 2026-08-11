@@ -7,22 +7,24 @@ export const dynamic = 'force-dynamic'
 // â??â??â?? Auto-migração: adiciona colunas sem migration â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
 async function ensureSchema() {
+  const isPostgres = (process.env.DATABASE_URL ?? '').startsWith('postgres')
+  const addColumn = isPostgres ? 'ADD COLUMN IF NOT EXISTS' : 'ADD COLUMN'
   const companyCols = [
-    `ALTER TABLE "ClientCompany" ADD COLUMN "code"              TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "tradeName"         TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "establishmentType" TEXT DEFAULT 'MATRIZ'`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "parentCompanyId"   TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "zipCode"           TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "street"            TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "number"            TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "complement"        TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "neighborhood"      TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "city"              TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "state"             TEXT`,
-    `ALTER TABLE "ClientCompany" ADD COLUMN "country"           TEXT DEFAULT 'Brasil'`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "code"              TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "tradeName"         TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "establishmentType" TEXT DEFAULT 'MATRIZ'`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "parentCompanyId"   TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "zipCode"           TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "street"            TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "number"            TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "complement"        TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "neighborhood"      TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "city"              TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "state"             TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "country"           TEXT DEFAULT 'Brasil'`,
   ]
   const memberCols = [
-    `ALTER TABLE "TeamMember" ADD COLUMN "companyId" TEXT`,
+    `ALTER TABLE "TeamMember" ${addColumn} "companyId" TEXT`,
   ]
   for (const sql of [...companyCols, ...memberCols]) {
     try { await prisma.$executeRawUnsafe(sql) } catch { /* já existe */ }
