@@ -36,7 +36,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   // Snap do documento atual para o histÃ³rico
   const before = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT workflowStatus, status, version FROM "ProcedureDocument" WHERE id = ?`, params.id
+    `SELECT "workflowStatus", status, version FROM "ProcedureDocument" WHERE id = ?`, params.id
   )
   const prev = before[0] ?? {}
 
@@ -154,7 +154,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const now  = new Date()
 
   const before = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-    `SELECT workflowStatus, status, version, title, objective, description, risks, responsibilities
+    `SELECT "workflowStatus", status, version, title, objective, description, risks, responsibilities
      FROM "ProcedureDocument" WHERE id = ?`, params.id
   )
   if (!before.length) return NextResponse.json({ error: 'Not found' }, { status: 404 })
