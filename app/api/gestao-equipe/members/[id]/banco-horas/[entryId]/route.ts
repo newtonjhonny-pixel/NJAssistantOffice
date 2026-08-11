@@ -9,10 +9,13 @@ export const dynamic = 'force-dynamic'
 export async function PATCH(req: Request, { params }: { params: { id: string; entryId: string } }) {
   try {
     const body = await req.json()
-    const now = new Date().toISOString()
+    const now = new Date()
+    const entryDateValue = body.entryDate
+      ? new Date(String(body.entryDate).includes('T') ? body.entryDate : body.entryDate + 'T00:00:00.000Z')
+      : null
     await prisma.$executeRaw`
       UPDATE "HourBankEntry" SET
-        "entryDate"     = COALESCE(${body.entryDate    ?? null}, "entryDate"),
+        "entryDate"     = COALESCE(${entryDateValue}, "entryDate"),
         "competence"    = COALESCE(${body.competence   ?? null}, "competence"),
         "type"          = COALESCE(${body.type         ?? null}, "type"),
         "creditMinutes" = COALESCE(${body.creditMinutes != null ? body.creditMinutes : null}, "creditMinutes"),
@@ -33,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string; en
 
 export async function DELETE(_: Request, { params }: { params: { id: string; entryId: string } }) {
   try {
-    const now = new Date().toISOString()
+    const now = new Date()
     // Soft delete (estorno)
     await prisma.$executeRaw`
       UPDATE "HourBankEntry" SET "status" = 'ESTORNADO', "updatedAt" = ${now}

@@ -152,15 +152,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const id = randomUUID()
-    const now = new Date().toISOString()
-    // Ensure entryDate is stored as full ISO datetime (SQLite DATETIME requires it for Prisma deserialization)
-    const entryDateISO = entryDate.includes('T') ? entryDate : entryDate + 'T00:00:00.000Z'
+    const now = new Date()
+    const entryDateValue = new Date(entryDate.includes('T') ? entryDate : entryDate + 'T00:00:00.000Z')
 
     await prisma.$executeRaw`
       INSERT INTO "HourBankEntry"
         ("id","memberId","entryDate","competence","type","creditMinutes","debitMinutes","responsible","observations","status","createdAt","updatedAt")
       VALUES
-        (${id}, ${memberId}, ${entryDateISO}, ${competence}, ${type},
+        (${id}, ${memberId}, ${entryDateValue}, ${competence}, ${type},
          ${creditMinutes}, ${debitMinutes}, ${responsible ?? null}, ${observations ?? null},
          'ATIVO', ${now}, ${now})
     `
