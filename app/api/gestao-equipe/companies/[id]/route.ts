@@ -122,7 +122,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (cnpjRaw        !== undefined) push('cnpj',              cnpjRaw || null)
     if (segment        !== undefined) push('segment',           segment?.trim() || null)
     if (observations   !== undefined) push('observations',      observations?.trim() || null)
-    if (active         !== undefined) push('active',            active ? 1 : 0)
+    if (active         !== undefined) push('active',            Boolean(active))
     if (establishmentType !== undefined) push('establishmentType', establishmentType)
     if (parentCompanyId !== undefined) push('parentCompanyId',  parentCompanyId || null)
     if (zipCode        !== undefined) push('zipCode',           onlyDigits(zipCode?.trim() || '').slice(0, 8) || null)
@@ -137,7 +137,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (sets.length === 0)
       return NextResponse.json({ error: 'Nenhum campo para atualizar.' }, { status: 400 })
 
-    push('updatedAt', new Date().toISOString())
+    push('updatedAt', new Date())
     vals.push(params.id)
 
     await prisma.$executeRawUnsafe(

@@ -146,14 +146,14 @@ export async function POST(req: Request) {
     }
 
     const id = randomUUID()
-    const now = new Date().toISOString()
+    const now = new Date()
     await prisma.$executeRawUnsafe(`
       INSERT INTO "ClientCompany" (
         "id","code","name","tradeName","cnpj","segment","observations",
         "establishmentType","parentCompanyId","active",
         "zipCode","street","number","complement","neighborhood","city","state","country",
         "createdAt","updatedAt"
-      ) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `,
       id,
       code.trim(),
@@ -164,6 +164,7 @@ export async function POST(req: Request) {
       observations?.trim() || null,
       establishmentType,
       parentCompanyId || null,
+      true,
       onlyDigits(zipCode?.trim() || '').slice(0, 8) || null,
       street?.trim() || null,
       number?.trim() || null,
