@@ -24,7 +24,7 @@ model TaskOrigin {
   name        String   @unique
   description String?
   color       String   @default("#6B7280")
-  icon        String   @default("📌")
+  icon        String   @default("ðŸ“Œ")
   active      Boolean  @default(true)
   order       Int      @default(0)
   createdBy   String?
@@ -108,7 +108,7 @@ model TaskStatusHistory {
   createdAt      DateTime @default(now())
 }
 
-// ─── INBOX ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ INBOX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model InboxItem {
   id         String   @id @default(cuid())
@@ -117,11 +117,11 @@ model InboxItem {
   // Origem: SIMULATED | OUTLOOK | GMAIL
   provider   String   @default("SIMULATED")
 
-  // Vínculo com conta de e-mail real (nullable → dados simulados não têm)
+  // VÃ­nculo com conta de e-mail real (nullable â†’ dados simulados nÃ£o tÃªm)
   accountId  String?
   account    EmailAccount? @relation(fields: [accountId], references: [id])
 
-  // ID externo único do provedor (para deduplicação)
+  // ID externo Ãºnico do provedor (para deduplicaÃ§Ã£o)
   externalId String?
 
   // Pasta/label de origem
@@ -132,7 +132,7 @@ model InboxItem {
   sender      String
   senderEmail String?
 
-  // Conteúdo
+  // ConteÃºdo
   subject     String
   bodyPreview String?
   body        String
@@ -144,14 +144,14 @@ model InboxItem {
   taskCreated Boolean  @default(false)
   hasAttachments Boolean @default(false)
 
-  // Análise IA
+  // AnÃ¡lise IA
   summary              String?
   aiSuggestedTaskTitle String?
   aiSuggestedPriority  String?
   aiSuggestedDueDate   String?
   aiSuggestedResponse  String?
 
-  // Campos legados — mantidos para dados simulados existentes
+  // Campos legados â€” mantidos para dados simulados existentes
   suggestedTask  String?
   suggestedReply String?
 
@@ -160,14 +160,14 @@ model InboxItem {
   @@unique([provider, externalId])
 }
 
-// ─── EMAIL ACCOUNTS ──────────────────────────────────────────────────────────
+// â”€â”€â”€ EMAIL ACCOUNTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model EmailAccount {
   id           String   @id @default(cuid())
   provider     String   // OUTLOOK | GMAIL
   email        String
   displayName  String?
-  accessToken  String   // criptografado em produção
+  accessToken  String   // criptografado em produÃ§Ã£o
   refreshToken String?
   expiresAt    DateTime?
   connectedAt  DateTime @default(now())
@@ -199,7 +199,7 @@ model EmailFolder {
   @@unique([accountId, providerFolderId])
 }
 
-// ─── IA / AGENTES ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ IA / AGENTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model AiSuggestion {
   id        String   @id @default(cuid())
@@ -229,7 +229,7 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
-// ─── ESPECIALISTAS ────────────────────────────────────────────────────────────
+// â”€â”€â”€ ESPECIALISTAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model EspecialistaConversation {
   id           String   @id @default(cuid())
@@ -299,8 +299,8 @@ model EspecialistaDocument {
   source     String?
   version    String?
   tags       String?
-  embedding  String?  // JSON float[] — text-embedding-3-small (1536d)
-  checksum   String?  // SHA-256 do conteúdo para detectar alterações
+  embedding  String?  // JSON float[] â€” text-embedding-3-small (1536d)
+  checksum   String?  // SHA-256 do conteÃºdo para detectar alteraÃ§Ãµes
   isRevoked  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -309,11 +309,11 @@ model EspecialistaDocument {
   @@index([specialist, isRevoked])
 }
 
-// Memória contextual por especialista + usuário (curto, médio e longo prazo)
+// MemÃ³ria contextual por especialista + usuÃ¡rio (curto, mÃ©dio e longo prazo)
 model EspecialistaMemory {
   id             String   @id @default(cuid())
   specialist     String
-  conversationId String?  // null = memória global do especialista
+  conversationId String?  // null = memÃ³ria global do especialista
   type           String   @default("topic") // topic | entity | preference | summary
   key            String
   value          String
@@ -334,7 +334,7 @@ model EspecialistaSource {
   url         String
   description String?
   lastFetched DateTime?
-  lastHash    String?   // hash do conteúdo para detectar mudanças
+  lastHash    String?   // hash do conteÃºdo para detectar mudanÃ§as
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -342,7 +342,7 @@ model EspecialistaSource {
   @@index([specialist, active])
 }
 
-// Log de execuções de ferramentas
+// Log de execuÃ§Ãµes de ferramentas
 model EspecialistaToolExecution {
   id             String   @id @default(cuid())
   specialist     String
@@ -369,7 +369,7 @@ model Notification {
   updatedAt   DateTime @updatedAt
 }
 
-// ─── PROJETOS ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ PROJETOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Project {
   id          String   @id @default(cuid())
@@ -452,7 +452,7 @@ model ProjectHistory {
   createdAt   DateTime @default(now())
 }
 
-// ─── CONFERÊNCIA ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ CONFERÃŠNCIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Conference {
   id                 String    @id @default(cuid())
@@ -559,7 +559,7 @@ model ConferenceHistory {
   createdAt    DateTime  @default(now())
 }
 
-// ─── GESTÃO DE EQUIPE ─────────────────────────────────────────────────────────
+// â”€â”€â”€ GESTÃƒO DE EQUIPE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model TeamMember {
   id           String    @id @default(cuid())
@@ -579,6 +579,7 @@ model TeamMember {
   directions          TeamActivityDirection[]
   vacations           TeamVacation[]
   trainings           TeamTraining[]
+  trainingParticipations TrainingParticipant[]
   activities          TeamActivity[]
   history             TeamHistory[]
   memberActivityLinks MemberActivityLink[]
@@ -588,7 +589,7 @@ model TeamMember {
   hourBankConfig      HourBankConfig?
 }
 
-// ─── CARTEIRA DE EMPRESAS E REMUNERAÇÃO ──────────────────────────────────────
+// â”€â”€â”€ CARTEIRA DE EMPRESAS E REMUNERAÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model ClientCompany {
   id             String   @id @default(cuid())
@@ -616,13 +617,13 @@ model MemberCompanyLink {
   // Headcount
   headcountActive      Int?          // empregados ativos
   headcountApprentice  Int?          // aprendizes
-  headcountIntern      Int?          // estagiários
+  headcountIntern      Int?          // estagiÃ¡rios
   headcountOnLeave     Int?          // afastados
-  headcountUpdatedAt   DateTime?     // data da atualização do headcount
+  headcountUpdatedAt   DateTime?     // data da atualizaÃ§Ã£o do headcount
   // Volumes mensais
-  avgAdmissions        Float?        // admissões médias/mês
-  avgTerminations      Float?        // rescisões médias/mês
-  avgVacations         Float?        // férias médias/mês
+  avgAdmissions        Float?        // admissÃµes mÃ©dias/mÃªs
+  avgTerminations      Float?        // rescisÃµes mÃ©dias/mÃªs
+  avgVacations         Float?        // fÃ©rias mÃ©dias/mÃªs
   folhasProcessadas    Int?          // folhas processadas
   unions               Int?          // quantidade de sindicatos/CCTs
   establishments       Int?          @default(1) // estabelecimentos
@@ -630,8 +631,8 @@ model MemberCompanyLink {
   systemUsed           String?       // sistema utilizado
   automationLevel      String?       // ALTO | MEDIO | BAIXO | MANUAL
   complexity           String?       // BAIXA | MEDIA | ALTA | MUITO_ALTA
-  // Gestão
-  startDate            DateTime?     // início da responsabilidade
+  // GestÃ£o
+  startDate            DateTime?     // inÃ­cio da responsabilidade
   substitute           String?
   observations         String?
   createdAt            DateTime @default(now())
@@ -649,10 +650,10 @@ model MemberCompanyProcess {
   linkId         String
   link           MemberCompanyLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
   processType    String            // FOLHA | ADMISSAO | RESCISAO | FERIAS | BENEFICIOS | ENCARGOS | PONTO | ESOCIAL | FGTS | DCTFWEB | OUTROS
-  volume         Float?            // movimentações/mês
+  volume         Float?            // movimentaÃ§Ãµes/mÃªs
   complexity     String?           // BAIXA | MEDIA | ALTA | MUITO_ALTA
   automationLevel String?          // ALTO | MEDIO | BAIXO | MANUAL
-  avgTimeMinutes Float?            // tempo médio de execução em minutos
+  avgTimeMinutes Float?            // tempo mÃ©dio de execuÃ§Ã£o em minutos
   isCritical     Boolean           @default(false) // sem substituto/backup
   observations   String?
   createdAt      DateTime @default(now())
@@ -666,17 +667,17 @@ model MemberSalary {
   id               String     @id @default(cuid())
   memberId         String     @unique
   member           TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  baseSalary       Float?     // salário-base
+  baseSalary       Float?     // salÃ¡rio-base
   fixedAdditions   Float?     // adicionais fixos
-  gratification    Float?     // gratificação
-  trustFunction    Float?     // função de confiança
-  commission       Float?     // comissão média
+  gratification    Float?     // gratificaÃ§Ã£o
+  trustFunction    Float?     // funÃ§Ã£o de confianÃ§a
+  commission       Float?     // comissÃ£o mÃ©dia
   otherFixed       Float?     // outros valores fixos
-  estimatedMonthly Float?     // remuneração mensal estimada (calculada)
+  estimatedMonthly Float?     // remuneraÃ§Ã£o mensal estimada (calculada)
   estimatedCharges Float?     // encargos estimados
   estimatedCost    Float?     // custo mensal estimado
-  validFrom        DateTime?  // data de vigência salarial
-  lastAdjustment   DateTime?  // último reajuste
+  validFrom        DateTime?  // data de vigÃªncia salarial
+  lastAdjustment   DateTime?  // Ãºltimo reajuste
   adjustmentReason String?    // motivo do reajuste
   observations     String?
   createdAt        DateTime @default(now())
@@ -685,22 +686,22 @@ model MemberSalary {
 
 model CapacityConfig {
   id               String   @id @default(cuid())
-  name             String   @default("padrão")
-  // Pesos da fórmula (configuráveis)
+  name             String   @default("padrÃ£o")
+  // Pesos da fÃ³rmula (configurÃ¡veis)
   weightEmployee   Float    @default(1.0)   // por empregado ativo
   weightCompany    Float    @default(5.0)   // por empresa
   weightProcess    Float    @default(2.0)   // por processo/atividade
-  weightVolume     Float    @default(0.5)   // por movimentação mensal
-  weightComplexity Float    @default(3.0)   // por nível de complexidade
-  weightManual     Float    @default(2.0)   // bônus por empresa com automação manual
-  weightCritical   Float    @default(3.0)   // bônus por processo crítico sem backup
-  capacityRef      Float    @default(100.0) // carga de referência (100%)
+  weightVolume     Float    @default(0.5)   // por movimentaÃ§Ã£o mensal
+  weightComplexity Float    @default(3.0)   // por nÃ­vel de complexidade
+  weightManual     Float    @default(2.0)   // bÃ´nus por empresa com automaÃ§Ã£o manual
+  weightCritical   Float    @default(3.0)   // bÃ´nus por processo crÃ­tico sem backup
+  capacityRef      Float    @default(100.0) // carga de referÃªncia (100%)
   // Faixas de capacidade (%)
-  bandGreen        Float    @default(70.0)  // até aqui: disponível
-  bandBlue         Float    @default(85.0)  // até aqui: equilibrado
-  bandYellow       Float    @default(100.0) // até aqui: atenção
-  bandOrange       Float    @default(120.0) // até aqui: sobrecarga
-  // acima de bandOrange: sobrecarga crítica
+  bandGreen        Float    @default(70.0)  // atÃ© aqui: disponÃ­vel
+  bandBlue         Float    @default(85.0)  // atÃ© aqui: equilibrado
+  bandYellow       Float    @default(100.0) // atÃ© aqui: atenÃ§Ã£o
+  bandOrange       Float    @default(120.0) // atÃ© aqui: sobrecarga
+  // acima de bandOrange: sobrecarga crÃ­tica
   active           Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -750,16 +751,16 @@ model TeamVacation {
   acquisitivePeriod    String?
   // new fields
   companyName          String?    // empresa (texto livre)
-  acquisitionStartDate DateTime?  // início do período aquisitivo
-  acquisitionEndDate   DateTime?  // fim do período aquisitivo
-  concessionStartDate  DateTime?  // início do período concessivo
-  concessionEndDate    DateTime?  // fim do período concessivo
+  acquisitionStartDate DateTime?  // inÃ­cio do perÃ­odo aquisitivo
+  acquisitionEndDate   DateTime?  // fim do perÃ­odo aquisitivo
+  concessionStartDate  DateTime?  // inÃ­cio do perÃ­odo concessivo
+  concessionEndDate    DateTime?  // fim do perÃ­odo concessivo
   availableDays        Int?       // dias de direito
-  vacationDays         Int?       // dias de férias gozadas
+  vacationDays         Int?       // dias de fÃ©rias gozadas
   hasBonus             Boolean    @default(false)
-  bonusDays            Int?       // dias de abono (padrão 10)
-  startDate            DateTime?  // início das férias
-  endDate              DateTime?  // fim das férias
+  bonusDays            Int?       // dias de abono (padrÃ£o 10)
+  startDate            DateTime?  // inÃ­cio das fÃ©rias
+  endDate              DateTime?  // fim das fÃ©rias
   returnDate           DateTime?  // retorno ao trabalho
   status               String     @default("A_PROGRAMAR") // A_PROGRAMAR | PROGRAMADA | EM_FERIAS | RETORNOU | CANCELADA
   substitute           String?
@@ -804,7 +805,7 @@ model TeamActivity {
   updatedAt         DateTime   @updatedAt
 }
 
-// ─── BIBLIOTECA DE ATIVIDADES ─────────────────────────────────────────────────
+// â”€â”€â”€ BIBLIOTECA DE ATIVIDADES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model ActivityCategory {
   id          String   @id @default(cuid())
@@ -812,7 +813,7 @@ model ActivityCategory {
   description String?
   department  String?
   color       String   @default("#6B7280")
-  icon        String   @default("📋")
+  icon        String   @default("ðŸ“‹")
   active      Boolean  @default(true)
   order       Int      @default(0)
   createdAt   DateTime @default(now())
@@ -827,7 +828,7 @@ model ActivityTemplate {
   id           String            @id @default(cuid())
   name         String
   description  String?
-  category     String?           // legado — mantido para compatibilidade
+  category     String?           // legado â€” mantido para compatibilidade
   categoryId   String?
   actCategory  ActivityCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   department   String?
@@ -871,7 +872,7 @@ model MemberActivityLink {
   activityTemplateId String
   activityTemplate   ActivityTemplate @relation(fields: [activityTemplateId], references: [id], onDelete: Restrict)
   observation        String?
-  includedAt         String           // YYYY-MM-DD — sem conversão UTC para evitar off-by-one
+  includedAt         String           // YYYY-MM-DD â€” sem conversÃ£o UTC para evitar off-by-one
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -912,17 +913,17 @@ model TeamGuideline {
   updatedAt    DateTime @updatedAt
 }
 
-// ─── BANCO DE HORAS ──────────────────────────────────────────────────────────
+// â”€â”€â”€ BANCO DE HORAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model HourBankEntry {
   id            String     @id @default(cuid())
   memberId      String
   member        TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   entryDate     DateTime   // data do evento
-  competence    String     // YYYY-MM (competência de referência)
+  competence    String     // YYYY-MM (competÃªncia de referÃªncia)
   type          String     // LANCAMENTO | COMPENSACAO | AJUSTE | VENCIMENTO | IMPORTACAO
   creditMinutes Int        @default(0)  // minutos creditados (horas extras)
-  debitMinutes  Int        @default(0)  // minutos debitados (compensação/vencimento)
+  debitMinutes  Int        @default(0)  // minutos debitados (compensaÃ§Ã£o/vencimento)
   responsible   String?
   observations  String?
   status        String     @default("ATIVO") // ATIVO | ESTORNADO
@@ -937,9 +938,9 @@ model HourBankConfig {
   id                 String     @id @default(cuid())
   memberId           String     @unique
   member             TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  compensationDays   Int        @default(180)  // prazo de compensação em dias após fim da competência
+  compensationDays   Int        @default(180)  // prazo de compensaÃ§Ã£o em dias apÃ³s fim da competÃªncia
   alertDaysBeforeExp Int        @default(30)   // alertar X dias antes do vencimento
-  maxCreditHours     Int?                      // limite máximo de crédito (null = sem limite)
+  maxCreditHours     Int?                      // limite mÃ¡ximo de crÃ©dito (null = sem limite)
   negativeBalance    Boolean    @default(false) // permite saldo negativo
   observations       String?
   createdAt          DateTime   @default(now())
@@ -965,11 +966,11 @@ model TeamHistory {
   createdAt   DateTime    @default(now())
 }
 
-// ─── TAREFA DIÁRIA ────────────────────────────────────────────────────────────
+// â”€â”€â”€ TAREFA DIÃRIA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model DailyTask {
   id            String   @id @default(cuid())
-  date          String   // YYYY-MM-DD — sem TZ para evitar drift de fuso
+  date          String   // YYYY-MM-DD â€” sem TZ para evitar drift de fuso
   responsible   String?
   title         String?
   objective     String?
@@ -1037,7 +1038,7 @@ model DailyTaskAttachment {
   createdAt   DateTime  @default(now())
 }
 
-// ─── Descrição de Cargos ──────────────────────────────────────────────────────
+// â”€â”€â”€ DescriÃ§Ã£o de Cargos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model JobRole {
   id                 String   @id @default(cuid())
@@ -1139,15 +1140,15 @@ model ProcedureDocument {
   risks            String?
   expectedResult   String?
   notes            String?
-  // Vinculação e versionamento básico
+  // VinculaÃ§Ã£o e versionamento bÃ¡sico
   processId        String?
   code             String?
   version          String?   @default("1.0")
-  status           String    @default("VIGENTE")  // coluna canônica (docStatus é legado)
+  status           String    @default("VIGENTE")  // coluna canÃ´nica (docStatus Ã© legado)
   nextReview       String?
   reviewer         String?
   approver         String?
-  // ── Fase 1: Identificação ──────────────────────────────────────────────────
+  // â”€â”€ Fase 1: IdentificaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   subtitle              String?
   category              String?
   macroprocess          String?
@@ -1169,7 +1170,7 @@ model ProcedureDocument {
   successorDocument     String?
   tags                  String?
   keywords              String?
-  // ── Fase 1: Governança ────────────────────────────────────────────────────
+  // â”€â”€ Fase 1: GovernanÃ§a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   elaboratedBy            String?
   technicalReviewer       String?
   qualityReviewer         String?
@@ -1238,7 +1239,7 @@ model ProcedureApproval {
   createdAt    DateTime          @default(now())
 }
 
-// ─── PROCESSOS ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ PROCESSOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Process {
   id          String   @id @default(cuid())
@@ -1250,10 +1251,10 @@ model Process {
   department  String?
   category    String?  // OPERACIONAL | GESTAO | APOIO | ESTRATEGICO
   status      String   @default("ATIVO") // ATIVO | EM_REVISAO | INATIVO
-  sla         String?  // tempo médio do ciclo
+  sla         String?  // tempo mÃ©dio do ciclo
   frequency   String?  // DIARIO | SEMANAL | MENSAL | SOB_DEMANDA
   inputs      String?  // JSON: entradas do processo
-  outputs     String?  // JSON: saídas do processo
+  outputs     String?  // JSON: saÃ­das do processo
   tools       String?  // sistemas utilizados
   risks       String?
   notes       String?
@@ -1394,11 +1395,11 @@ model CentralConfig {
   updatedAt           DateTime @default(now()) @updatedAt
 }
 
-// ─── ANOTAÇÕES ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ ANOTAÃ‡Ã•ES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Note {
   id           String    @id @default(cuid())
-  title        String    @default("Nova anotação")
+  title        String    @default("Nova anotaÃ§Ã£o")
   content      String    @default("")
   category     String    @default("Outros")
   priority     String    @default("MEDIA")
@@ -1453,7 +1454,7 @@ model NoteHistory {
   createdAt   DateTime @default(now())
 }
 
-// ─── APRESENTAÇÕES ────────────────────────────────────────────────────────────
+// â”€â”€â”€ APRESENTAÃ‡Ã•ES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Presentation {
   id          String   @id @default(cuid())
@@ -1504,4 +1505,224 @@ model PresentationTemplate {
   thumbnail   String?
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+// Ã© compartilhado entre os dois via `presentationId`.
+
+model Training {
+  id            String   @id @default(cuid())
+  /// TREINAMENTO | AMBIENTACAO
+  tipo          String   @default("TREINAMENTO")
+  /// COMPLETO | SIMPLIFICADO
+  modalidade    String   @default("COMPLETO")
+  titulo        String
+  subtitulo     String?
+  objetivo      String?
+  /// Processo vinculado (reutiliza dados reais â€” sem duplicaÃ§Ã£o)
+  processId     String?
+  /// ApresentaÃ§Ã£o de slides vinculada (Presentation jÃ¡ existente)
+  presentationId String?
+  /// Departamento/Ã¡rea
+  departamento  String?
+  /// PÃºblico-alvo
+  publicoAlvo   String?
+  /// Instrutor/responsÃ¡vel
+  responsavel   String?
+  /// Tags para busca
+  tags          String?
+  /// DuraÃ§Ã£o estimada em minutos
+  duracaoMin    Int?
+  /// RASCUNHO | ATIVO | ARQUIVADO
+  status        String   @default("RASCUNHO")
+  /// ObrigatÃ³rio para onboarding
+  obrigatorio   Boolean  @default(false)
+  /// ConfiguraÃ§Ãµes de avaliaÃ§Ã£o e prontidÃ£o em JSON
+  config        String?
+  /// ConteÃºdo livre em JSON (mÃ³dulos, aulas, passo a passo)
+  conteudo      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  modules      TrainingModule[]
+  materials    TrainingMaterial[]
+  participants TrainingParticipant[]
+  history      TrainingHistory[]
+  trailItems   TrainingTrailItem[]
+
+  @@index([tipo])
+  @@index([status])
+  @@index([processId])
+}
+
+model TrainingModule {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  ordem      Int      @default(0)
+  titulo     String
+  descricao  String?
+  /// ConteÃºdo rico em JSON (aulas, passos, prints, links)
+  conteudo   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  lessons TrainingLesson[]
+
+  @@index([trainingId, ordem])
+}
+
+model TrainingLesson {
+  id       String         @id @default(cuid())
+  moduleId String
+  module   TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  ordem    Int            @default(0)
+  titulo   String
+  tipo     String         @default("TEXTO") // TEXTO | VIDEO | PRINT | CHECKLIST | EXERCICIO | PRATICA
+  conteudo String?
+  duracao  Int?           // minutos
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([moduleId, ordem])
+}
+
+model TrainingMaterial {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  titulo     String
+  tipo       String   @default("LINK") // LINK | PDF | IMAGEM | VIDEO | ARQUIVO
+  url        String?
+  descricao  String?
+  createdAt  DateTime @default(now())
+
+  @@index([trainingId])
+}
+
+model TrainingParticipant {
+  id              String    @id @default(cuid())
+  trainingId      String
+  training        Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  memberId        String
+  member          TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// PENDENTE | EM_ANDAMENTO | CONCLUIDO | CANCELADO
+  status          String    @default("PENDENTE")
+  progresso       Int       @default(0) // 0-100
+  nota            Float?
+  dataInicio      DateTime?
+  dataConclusao   DateTime?
+  instrutorNome   String?
+  duracaoReal     Int?      // minutos reais
+  cienciaConfirmada Boolean @default(false)
+  dataCiencia     DateTime?
+  observacoes     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([trainingId, memberId])
+  @@index([memberId])
+  @@index([trainingId])
+}
+
+model TrainingHistory {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  acao       String   // CRIACAO | EDICAO | PUBLICACAO | PARTICIPANTE_ADICIONADO | CONCLUIDO | ARQUIVADO
+  descricao  String?
+  memberId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([trainingId])
+}
+
+// â”€â”€â”€ TRILHAS DE TREINAMENTO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model TrainingTrail {
+  id          String   @id @default(cuid())
+  titulo      String
+  descricao   String?
+  /// Cargo recomendado (ex: "Assistente DP", "Analista DP")
+  cargo       String?
+  /// ATIVA | ARQUIVADA
+  status      String   @default("ATIVA")
+  obrigatorio Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items TrainingTrailItem[]
+
+  @@index([status])
+}
+
+model TrainingTrailItem {
+  id         String        @id @default(cuid())
+  trilhaId   String
+  trilha     TrainingTrail @relation(fields: [trilhaId], references: [id], onDelete: Cascade)
+  trainingId String
+  training   Training      @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  ordem      Int           @default(0)
+  obrigatorio Boolean      @default(true)
+  createdAt  DateTime      @default(now())
+
+  @@unique([trilhaId, trainingId])
+  @@index([trilhaId, ordem])
+}
+
+// â”€â”€â”€ SISTEMAS PARA AMBIENTAÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model AmbientacaoSystem {
+  id               String   @id @default(cuid())
+  nome             String
+  finalidade       String?
+  responsavel      String?
+  url              String?
+  nivelAcesso      String?
+  observacoes      String?
+  logoUrl          String?
+  /// IDs de Process vinculados (JSON array de strings)
+  processosIds     String?
+  /// Prints/capturas de tela em JSON
+  prints           String?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// â”€â”€â”€ CONFIGURAÃ‡ÃƒO DE PRONTIDÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Pesos configurÃ¡veis â€” nunca hardcoded no cÃ³digo.
+
+model TrainingReadinessConfig {
+  id                     String   @id @default(cuid())
+  /// Cargo ou "global"
+  cargo                  String   @unique @default("global")
+  pesoAmbientacao        Int      @default(20)  // %
+  pesoTreinamento        Int      @default(40)  // %
+  pesoPratica            Int      @default(20)  // %
+  pesoAvaliacao          Int      @default(20)  // %
+  /// IDs de trainings obrigatÃ³rios (JSON array)
+  trainingsObrigatorios  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// â”€â”€â”€ TURMAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model TrainingClass {
+  id          String    @id @default(cuid())
+  trainingId  String
+  titulo      String
+  dataInicio  DateTime?
+  dataFim     DateTime?
+  local       String?   // Online | Presencial | HÃ­brido
+  instrutorNome String?
+  vagas       Int?
+  /// PLANEJADA | EM_ANDAMENTO | CONCLUIDA | CANCELADA
+  status      String    @default("PLANEJADA")
+  observacoes String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([trainingId])
+  @@index([status])
 }

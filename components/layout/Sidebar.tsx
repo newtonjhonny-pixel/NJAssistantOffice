@@ -15,6 +15,7 @@ import {
   PenLine,
   Presentation,
   Workflow,
+  GraduationCap,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/conferencia",  label: "Conferência",        icon: ShieldCheck },
   { href: "/processos",    label: "Processos",          icon: Workflow },
   { href: "/gestao-equipe",   label: "Gestão de Equipe",  icon: Users },
+  { href: "/treinamentos",    label: "Treinamentos",       icon: GraduationCap },
   { href: "/apresentacoes",   label: "Apresentações",     icon: Presentation },
 ]
 
@@ -81,6 +83,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             ? pathname.startsWith("/anotacoes")
             : href === "/especialistas"
             ? pathname.startsWith("/especialistas")
+            : href === "/treinamentos"
+            ? pathname.startsWith("/treinamentos")
             : href === "/apresentacoes"
             ? pathname.startsWith("/apresentacoes")
             : href === "/processos"

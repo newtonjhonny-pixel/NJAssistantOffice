@@ -45,6 +45,7 @@ export class AIService {
         modelConfig,
         tools: input.tools,
         toolChoice: input.toolChoice,
+        responseFormat: input.responseFormat,
       })
 
       this.logger.log({

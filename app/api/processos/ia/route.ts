@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma-sqlite'
 import { aiService } from '@/lib/ai/gateway'
 
 export const dynamic = 'force-dynamic'

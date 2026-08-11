@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 
 // PATCH /api/procedures/[id]/link — atualiza processId (vinculação)
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

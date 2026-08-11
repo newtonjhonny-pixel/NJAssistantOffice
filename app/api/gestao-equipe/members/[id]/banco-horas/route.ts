@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â??â??â?? Helpers â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
 function minutesToHHMM(min: number): string {
   const sign = min < 0 ? '-' : '+'
@@ -37,7 +37,7 @@ function calcSituation(days: number, alertDays: number): string {
   return 'REGULAR'
 }
 
-// â”€â”€â”€ GET: summary + competences + entries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â??â??â?? GET: summary + competences + entries â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -139,7 +139,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 }
 
-// â”€â”€â”€ POST: new entry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â??â??â?? POST: new entry â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -148,7 +148,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const { entryDate, competence, type, creditMinutes = 0, debitMinutes = 0, responsible, observations } = body
 
     if (!entryDate || !competence || !type) {
-      return NextResponse.json({ error: 'entryDate, competence e type sÃ£o obrigatÃ³rios' }, { status: 400 })
+      return NextResponse.json({ error: 'entryDate, competence e type são obrigatórios' }, { status: 400 })
     }
 
     const id = randomUUID()
@@ -169,8 +169,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     await prisma.$executeRaw`
       INSERT INTO "TeamHistory" ("id","memberId","type","title","description","createdAt")
       VALUES (${randomUUID()}, ${memberId}, 'BANCO_HORAS',
-        ${'LanÃ§amento: ' + type},
-        ${`CompetÃªncia ${competence} | CrÃ©dito: ${creditMinutes}min | DÃ©bito: ${debitMinutes}min${responsible ? ' | Resp: ' + responsible : ''}`},
+        ${'Lançamento: ' + type},
+        ${`Competência ${competence} | Crédito: ${creditMinutes}min | Débito: ${debitMinutes}min${responsible ? ' | Resp: ' + responsible : ''}`},
         ${now})
     `
 
@@ -178,6 +178,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json(rows[0], { status: 201 })
   } catch (e) {
     console.error('[banco-horas POST]', e)
-    return NextResponse.json({ error: 'Erro ao registrar lanÃ§amento' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao registrar lançamento' }, { status: 500 })
   }
 }

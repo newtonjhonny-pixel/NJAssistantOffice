@@ -17,13 +17,13 @@ const TRANSITIONS: Record<string, string> = {
 }
 
 const TRANSITION_LABELS: Record<string, string> = {
-  RASCUNHO:              'Iniciar ElaboraÃ§Ã£o',
-  EM_ELABORACAO:         'Enviar para RevisÃ£o TÃ©cnica',
-  EM_REVISAO_TECNICA:    'Enviar para RevisÃ£o de Qualidade',
-  EM_REVISAO_QUALIDADE:  'Enviar para AprovaÃ§Ã£o',
+  RASCUNHO:              'Iniciar Elaboração',
+  EM_ELABORACAO:         'Enviar para Revisão Técnica',
+  EM_REVISAO_TECNICA:    'Enviar para Revisão de Qualidade',
+  EM_REVISAO_QUALIDADE:  'Enviar para Aprovação',
   EM_APROVACAO:          'Publicar (Vigente)',
-  VIGENTE:               'Abrir RevisÃ£o',
-  EM_REVISAO:            'Enviar para RevisÃ£o TÃ©cnica',
+  VIGENTE:               'Abrir Revisão',
+  EM_REVISAO:            'Enviar para Revisão Técnica',
 }
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } else if (body.action === 'OBSOLETO') {
     newStatus = 'OBSOLETO'
   } else {
-    // AvanÃ§ar para o prÃ³ximo estado
+    // Avançar para o próximo estado
     newStatus = TRANSITIONS[current] ?? current
   }
 
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     newStatus, now, params.id
   )
 
-  // Se publicando (VIGENTE), atualizar status tambÃ©m
+  // Se publicando (VIGENTE), atualizar status também
   if (newStatus === 'VIGENTE') {
     await prisma.$executeRawUnsafe(
       `UPDATE "ProcedureDocument" SET status = 'VIGENTE', "updatedAt" = ? WHERE id = ?`,
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     )
   }
 
-  // Registrar no histÃ³rico
+  // Registrar no histórico
   const hid = randomUUID()
   await prisma.$executeRawUnsafe(
     `INSERT INTO "ProcedureHistory"

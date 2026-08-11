@@ -6,9 +6,17 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { summary, members, config } = body
-    if (!summary || !members || !config) {
-      return NextResponse.json({ error: 'summary, members e config são obrigatórios' }, { status: 400 })
+    const { summary, members } = body
+    // Aceita tanto `config` (formato antigo) quanto `bandConfig`+`capacityRef` (formato novo)
+    const config = body.config ?? {
+      bandGreen:   body.bandConfig?.bandGreen   ?? 60,
+      bandBlue:    body.bandConfig?.bandBlue    ?? 75,
+      bandYellow:  body.bandConfig?.bandYellow  ?? 85,
+      bandOrange:  body.bandConfig?.bandOrange  ?? 95,
+      capacityRef: body.capacityRef             ?? 100,
+    }
+    if (!summary || !members) {
+return NextResponse.json({ error: 'summary e members são obrigatórios' }, { status: 400 })
     }
     const result = await generateDimensionamentoAnalysisAI(summary, members, config)
     return NextResponse.json(result)

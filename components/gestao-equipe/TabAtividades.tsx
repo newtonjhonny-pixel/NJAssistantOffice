@@ -7,7 +7,8 @@ import {
   Plus, Edit2, Trash2, X, Search, ChevronDown, ChevronUp,
   CheckSquare, Square, Printer, FileSpreadsheet, FileText,
   ToggleLeft, ToggleRight, BookOpen, Users, FileDown, Copy,
-  GripVertical, Tag, ListChecks, Layers,
+  GripVertical, Tag, ListChecks, Layers, Sparkles, Loader2,
+  AlertCircle, Eye, RefreshCw, ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { generateMemberPDF, generateAllMembersPDF, safeFilename } from "@/lib/pdf/actividadesPDF"
@@ -94,6 +95,431 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const IC = "w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+
+// ─── AI Activity Generator Types ──────────────────────────────────────────────
+
+interface AIGeneratedItem {
+  order: number
+  title: string
+  description: string
+  required: boolean
+  defaultResponsible: string
+  deadlineDays: number | null
+  active: boolean
+}
+
+interface AIGeneratedActivity {
+  name: string
+  category: string
+  department: string
+  generalDescription: string
+  notes: string
+  status: string
+  items: AIGeneratedItem[]
+}
+
+// ─── Progress steps ───────────────────────────────────────────────────────────
+
+const PROGRESS_STEPS = [
+  "Interpretando o prompt",
+  "Gerando atividade",
+  "Criando etapas",
+  "Validando estrutura",
+  "Aplicando ao formulário",
+] as const
+
+// ─── AI Activity Modal ────────────────────────────────────────────────────────
+
+type AIPhase = 'prompt' | 'loading' | 'preview' | 'error'
+type ApplyMode = 'replace' | 'fill_empty'
+
+interface AIActivityModalProps {
+  categories: ActivityCategory[]
+  hasExistingData: boolean
+  onApply: (data: AIGeneratedActivity, mode: ApplyMode) => void
+  onClose: () => void
+}
+
+function AIActivityModal({ categories, hasExistingData, onApply, onClose }: AIActivityModalProps) {
+  const [phase, setPhase]           = useState<AIPhase>('prompt')
+  const [prompt, setPrompt]         = useState('')
+  const [detailLevel, setDetailLevel] = useState<'RESUMIDO' | 'INTERMEDIARIO' | 'COMPLETO'>('COMPLETO')
+  const [stepsCountOption, setStepsCountOption] = useState<'AUTO' | '5' | '10' | '15' | 'CUSTOM'>('AUTO')
+  const [customSteps, setCustomSteps]   = useState(8)
+  const [includeResponsible, setIncludeResponsible] = useState(true)
+  const [includeDeadlines, setIncludeDeadlines]     = useState(true)
+  const [result, setResult]         = useState<AIGeneratedActivity | null>(null)
+  const [error, setError]           = useState('')
+  const [showApplyDialog, setShowApplyDialog] = useState(false)
+  const [progressStep, setProgressStep] = useState(0)
+  const [generationMs, setGenerationMs] = useState<number | null>(null)
+  const progressTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const stepsCount = stepsCountOption === 'AUTO' ? 0
+    : stepsCountOption === 'CUSTOM' ? customSteps
+    : parseInt(stepsCountOption)
+
+  function clearProgressTimers() {
+    progressTimers.current.forEach(clearTimeout)
+    progressTimers.current = []
+  }
+
+  function startProgressSimulation() {
+    clearProgressTimers()
+    setProgressStep(0)
+    // Fase 1: "Gerando atividade" → 1.5s
+    progressTimers.current.push(setTimeout(() => setProgressStep(1), 1500))
+    // Fase 2: "Criando etapas" → 12s (ocorre durante maior parte do tempo de geração)
+    progressTimers.current.push(setTimeout(() => setProgressStep(2), 12000))
+  }
+
+  async function generate() {
+    if (!prompt.trim()) return
+    setPhase('loading')
+    setError('')
+    setGenerationMs(null)
+    startProgressSimulation()
+
+    try {
+      const res = await fetch('/api/gestao-equipe/activity-templates/generate-with-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: prompt.trim(), detailLevel, stepsCount, includeResponsible, includeDeadlines }),
+      })
+      const body = await res.json()
+      if (!res.ok || !body.success) throw new Error(body.error ?? `Erro HTTP ${res.status}`)
+
+      clearProgressTimers()
+      setProgressStep(3) // Validando estrutura
+      await new Promise(r => setTimeout(r, 300))
+      setProgressStep(4) // Aplicando ao formulário
+      await new Promise(r => setTimeout(r, 300))
+
+      setGenerationMs(body.generationMs ?? null)
+      setResult(body.data)
+      setPhase('preview')
+    } catch (e: unknown) {
+      clearProgressTimers()
+      setError(e instanceof Error ? e.message : 'Erro ao gerar atividade.')
+      setPhase('error')
+    }
+  }
+
+  function handleApplyClick() {
+    if (hasExistingData) { setShowApplyDialog(true); return }
+    onApply(result!, 'replace')
+    onClose()
+  }
+
+  const PLACEHOLDER_PROMPTS = [
+    'Crie um processo de admissão para o Departamento Pessoal com 10 etapas detalhadas.',
+    'Monte o processo de férias com todas as etapas, desde a solicitação até o pagamento.',
+    'Crie uma atividade de rescisão com conferência, cálculo, homologação e pagamento.',
+    'Monte uma rotina de controle de ponto mensal.',
+    'Crie uma atividade de eSocial para envio do S-2200 com etapas de validação.',
+    'Crie um processo de fechamento de folha de pagamento mensal.',
+  ]
+
+  const ICS = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/30 focus:border-violet-400 bg-white"
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4 sm:p-8"
+      onClick={e => { if (e.target === e.currentTarget && phase !== 'loading') onClose() }}>
+      <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Preencher com IA</h3>
+              <p className="text-xs text-slate-400">Gera nome, categoria, descrição e etapas automaticamente</p>
+            </div>
+          </div>
+          {phase !== 'loading' && (
+            <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+
+          {/* ── PHASE: PROMPT ── */}
+          {(phase === 'prompt' || phase === 'error') && (
+            <>
+              {phase === 'error' && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Não foi possível gerar a atividade.</p>
+                    <p className="text-xs mt-0.5">{error}</p>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Descreva a atividade que deseja criar <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  rows={4}
+                  className={ICS}
+                  placeholder="Descreva a atividade que deseja criar. Exemplo: Crie um processo de admissão para o Departamento Pessoal, com etapas desde o recebimento dos documentos até o envio do S-2200."
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {PLACEHOLDER_PROMPTS.map((p, i) => (
+                    <button key={i} type="button" onClick={() => setPrompt(p)}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-500 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 transition-colors">
+                      {p.slice(0, 40)}…
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Nível de detalhamento</label>
+                  <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                    {(['RESUMIDO', 'INTERMEDIARIO', 'COMPLETO'] as const).map(lvl => (
+                      <button key={lvl} type="button" onClick={() => setDetailLevel(lvl)}
+                        className={cn("flex-1 py-2 text-xs font-medium transition-colors",
+                          detailLevel === lvl
+                            ? "bg-violet-600 text-white"
+                            : "bg-white text-slate-500 hover:bg-slate-50")}>
+                        {lvl === 'RESUMIDO' ? 'Resumido' : lvl === 'INTERMEDIARIO' ? 'Médio' : 'Completo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Quantidade de etapas</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['AUTO', '5', '10', '15', 'CUSTOM'] as const).map(opt => (
+                      <button key={opt} type="button" onClick={() => setStepsCountOption(opt)}
+                        className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                          stepsCountOption === opt
+                            ? "border-violet-400 bg-violet-50 text-violet-700"
+                            : "border-slate-200 text-slate-500 hover:border-slate-300")}>
+                        {opt === 'AUTO' ? 'Auto' : opt === 'CUSTOM' ? 'Outro' : opt}
+                      </button>
+                    ))}
+                  </div>
+                  {stepsCountOption === 'CUSTOM' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input type="number" value={customSteps} onChange={e => setCustomSteps(Math.max(1, Math.min(30, Number(e.target.value))))}
+                        className="w-20 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-center" min={1} max={30} />
+                      <span className="text-xs text-slate-400">etapas</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input type="checkbox" checked={includeResponsible} onChange={e => setIncludeResponsible(e.target.checked)}
+                    className="rounded border-slate-300 text-violet-600 focus:ring-violet-400" />
+                  Incluir responsável sugerido
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input type="checkbox" checked={includeDeadlines} onChange={e => setIncludeDeadlines(e.target.checked)}
+                    className="rounded border-slate-300 text-violet-600 focus:ring-violet-400" />
+                  Incluir prazo estimado
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={onClose}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                  Cancelar
+                </button>
+                <button type="button" onClick={generate} disabled={!prompt.trim()}
+                  className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:from-violet-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
+                  <Sparkles className="w-4 h-4" />
+                  {phase === 'error' ? 'Tentar novamente' : 'Gerar com IA'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── PHASE: LOADING ── */}
+          {phase === 'loading' && (
+            <div className="flex flex-col items-center justify-center py-10 gap-6">
+              {/* Ícone animado */}
+              <div className="relative">
+                <div className="h-14 w-14 rounded-full border-4 border-violet-100" />
+                <div className="absolute inset-0 h-14 w-14 rounded-full border-4 border-t-violet-600 animate-spin" />
+                <Sparkles className="absolute inset-0 m-auto w-6 h-6 text-violet-500" />
+              </div>
+
+              {/* Label da fase atual */}
+              <div className="text-center">
+                <p className="text-sm font-semibold text-slate-700">
+                  {PROGRESS_STEPS[progressStep]}...
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">Isso pode levar alguns segundos</p>
+              </div>
+
+              {/* Barra de progresso com etapas */}
+              <div className="w-full max-w-sm space-y-2.5">
+                {/* Barra contínua */}
+                <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-500 transition-all duration-700 ease-out"
+                    style={{ width: `${Math.round(((progressStep + 1) / PROGRESS_STEPS.length) * 100)}%` }}
+                  />
+                </div>
+
+                {/* Etapas individuais */}
+                <div className="flex justify-between">
+                  {PROGRESS_STEPS.map((label, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1" style={{ width: `${100 / PROGRESS_STEPS.length}%` }}>
+                      <div className={cn(
+                        "h-2 w-2 rounded-full transition-all duration-500",
+                        i < progressStep  ? "bg-violet-500 scale-110" :
+                        i === progressStep ? "bg-violet-600 scale-125 ring-2 ring-violet-200" :
+                        "bg-slate-200"
+                      )} />
+                      <span className={cn(
+                        "text-center leading-tight transition-colors duration-300",
+                        "text-[9px]",
+                        i <= progressStep ? "text-violet-600 font-medium" : "text-slate-300"
+                      )} style={{ fontSize: 8 }}>
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PHASE: PREVIEW ── */}
+          {phase === 'preview' && result && (
+            <>
+              <div className="rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50 to-purple-50 p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Eye className="w-4 h-4 text-violet-500" />
+                  <p className="text-sm font-semibold text-slate-700">Pré-visualização gerada pela IA</p>
+                  <div className="ml-auto flex items-center gap-2">
+                    {generationMs != null && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                        ⚡ {(generationMs / 1000).toFixed(1)}s
+                      </span>
+                    )}
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                      ✓ {result.items.length} etapa{result.items.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
+                  <div className="bg-white rounded-lg p-3 border border-slate-100">
+                    <p className="text-slate-400 font-medium uppercase tracking-wide mb-1" style={{ fontSize: 10 }}>Nome</p>
+                    <p className="font-semibold text-slate-800">{result.name}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-slate-100">
+                    <p className="text-slate-400 font-medium uppercase tracking-wide mb-1" style={{ fontSize: 10 }}>Categoria sugerida</p>
+                    <p className="font-medium text-slate-700">{result.category || '—'}</p>
+                    {result.category && !categories.find(c => c.name.toLowerCase() === result.category.toLowerCase()) && (
+                      <p className="text-[10px] text-amber-600 mt-0.5">⚠ Categoria não encontrada — você poderá criar ou escolher outra</p>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-slate-100">
+                    <p className="text-slate-400 font-medium uppercase tracking-wide mb-1" style={{ fontSize: 10 }}>Departamento</p>
+                    <p className="font-medium text-slate-700">{result.department || '—'}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-slate-100">
+                    <p className="text-slate-400 font-medium uppercase tracking-wide mb-1" style={{ fontSize: 10 }}>Observações</p>
+                    <p className="text-slate-600">{result.notes || '—'}</p>
+                  </div>
+                  <div className="sm:col-span-2 bg-white rounded-lg p-3 border border-slate-100">
+                    <p className="text-slate-400 font-medium uppercase tracking-wide mb-1" style={{ fontSize: 10 }}>Descrição geral</p>
+                    <p className="text-slate-700">{result.generalDescription || '—'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Etapas */}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Etapas ({result.items.length})
+                </p>
+                {result.items.map((it, i) => (
+                  <div key={i} className="flex gap-3 rounded-lg border border-slate-100 bg-white p-3">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[10px] font-bold text-violet-700">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-slate-800">{it.title}</p>
+                        {it.required && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">Obrigatório</span>}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{it.description}</p>
+                      <div className="flex flex-wrap gap-3 mt-1 text-[10px] text-slate-400">
+                        {it.defaultResponsible && <span>👤 {it.defaultResponsible}</span>}
+                        {it.deadlineDays != null && <span>⏱ {it.deadlineDays}d</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Apply dialog inline */}
+              {showApplyDialog && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <p className="text-sm font-semibold text-amber-800">O formulário já possui dados. Como deseja aplicar?</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { onApply(result, 'replace'); setShowApplyDialog(false); onClose() }}
+                      className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">
+                      Substituir tudo
+                    </button>
+                    <button type="button" onClick={() => { onApply(result, 'fill_empty'); setShowApplyDialog(false); onClose() }}
+                      className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50">
+                      Preencher apenas campos vazios
+                    </button>
+                    <button type="button" onClick={() => setShowApplyDialog(false)}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!showApplyDialog && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button type="button" onClick={onClose}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={() => { setPhase('prompt'); setResult(null) }}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                    <RefreshCw className="w-3.5 h-3.5" /> Gerar novamente
+                  </button>
+                  <button type="button" onClick={() => { setPhase('prompt') }}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                    <Edit2 className="w-3.5 h-3.5" /> Editar prompt
+                  </button>
+                  <button type="button" onClick={handleApplyClick}
+                    className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:from-violet-700 hover:to-purple-700 shadow-sm">
+                    <ChevronRight className="w-4 h-4" /> Aplicar ao formulário
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Sub-aba: Categorias ──────────────────────────────────────────────────────
 
@@ -279,6 +705,7 @@ function TabCadastroAtividades() {
   const [filterCat, setFilterCat] = useState("")
   const [filterActive, setFilterActive] = useState("")
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [showQuickCat, setShowQuickCat] = useState(false)
 
   // Form state
@@ -289,6 +716,41 @@ function TabCadastroAtividades() {
   // Items dentro da atividade
   const [formItems, setFormItems] = useState<Partial<ActivityItem>[]>([])
   const [dragIdx, setDragIdx] = useState<number | null>(null)
+  // AI modal
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [aiApplied, setAiApplied] = useState(false)
+  // Refs para submit programático
+  const formRef = useRef<HTMLFormElement>(null)
+  const shouldOpenNewAfterSave = useRef(false)
+
+  const hasExistingFormData = !!(form.name || form.description || form.department || formItems.length > 0)
+
+  function applyAIResult(data: AIGeneratedActivity, mode: 'replace' | 'fill_empty') {
+    const matchedCat = categories.find(c => c.name.toLowerCase() === data.category.toLowerCase())
+    setForm(prev => ({
+      name:         mode === 'replace' || !prev.name         ? data.name                : prev.name,
+      description:  mode === 'replace' || !prev.description  ? data.generalDescription  : prev.description,
+      categoryId:   mode === 'replace' || !prev.categoryId   ? (matchedCat?.id ?? "")   : prev.categoryId,
+      department:   mode === 'replace' || !prev.department   ? (data.department ?? "")  : prev.department,
+      observations: mode === 'replace' || !prev.observations ? (data.notes ?? "")       : prev.observations,
+      active:       prev.active,
+      order:        prev.order,
+    }))
+    if (mode === 'replace' || formItems.length === 0) {
+      setFormItems(data.items.map((item, i) => ({
+        title:              item.title,
+        description:        item.description,
+        order:              i,
+        required:           item.required,
+        defaultResponsible: item.defaultResponsible,
+        defaultDays:        item.deadlineDays ?? undefined,
+        observation:        "",
+        active:             item.active,
+      })))
+    }
+    setAiApplied(true)
+    setShowAIModal(false)
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -308,14 +770,14 @@ function TabCadastroAtividades() {
   useEffect(() => { const t = setTimeout(fetchData, 300); return () => clearTimeout(t) }, [fetchData])
 
   function openNew() {
-    setEditing(null); setError("")
+    setEditing(null); setError(""); setSuccess(""); setAiApplied(false)
     setForm({ name: "", description: "", categoryId: "", department: "", active: true, order: 0, observations: "" })
     setFormItems([])
     setShowForm(true)
   }
 
   function openEdit(t: ActivityTemplate) {
-    setEditing(t); setError("")
+    setEditing(t); setError(""); setSuccess(""); setAiApplied(false)
     setForm({
       name: t.name, description: t.description || "", categoryId: t.categoryId || "",
       department: t.department || "", active: t.active, order: t.order, observations: t.observations || "",
@@ -357,7 +819,13 @@ function TabCadastroAtividades() {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setError("")
+    e.preventDefault()
+
+    // Validação client-side
+    if (!form.name.trim()) { setError("O nome da atividade é obrigatório."); return }
+    if (formItems.some(it => !it.title?.trim())) { setError("Todos os itens precisam ter um título preenchido."); return }
+
+    setSaving(true); setError("")
     try {
       const payload = {
         ...form,
@@ -409,8 +877,24 @@ function TabCadastroAtividades() {
         if (!r.ok) { setError(data.error || "Erro ao salvar"); return }
       }
 
-      setShowForm(false); fetchData()
+      // Sucesso
+      fetchData()
+      if (shouldOpenNewAfterSave.current) {
+        shouldOpenNewAfterSave.current = false
+        openNew()
+      } else {
+        setShowForm(false)
+        setSuccess(editing ? `Atividade "${form.name}" atualizada com sucesso.` : `Atividade "${form.name}" criada com sucesso.`)
+        setTimeout(() => setSuccess(""), 5000)
+      }
     } finally { setSaving(false) }
+  }
+
+  function handleCancelClick() {
+    if (hasExistingFormData || aiApplied) {
+      if (!confirm("Deseja descartar as alterações?")) return
+    }
+    setShowForm(false)
   }
 
   async function handleDuplicate(id: string) {
@@ -572,6 +1056,14 @@ ${t.items.length > 0 ? `
         <Button onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Nova atividade</Button>
       </div>
 
+      {/* Banner de sucesso */}
+      {success && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <CheckSquare className="w-4 h-4 shrink-0" />
+          {success}
+        </div>
+      )}
+
       {loading ? <div className="text-center py-8 text-slate-400 text-sm">Carregando...</div>
         : items.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-sm">
@@ -646,15 +1138,43 @@ ${t.items.length > 0 ? `
           </div>
         )}
 
+      {/* AI Modal */}
+      {showAIModal && (
+        <AIActivityModal
+          categories={categories}
+          hasExistingData={hasExistingFormData}
+          onApply={applyAIResult}
+          onClose={() => setShowAIModal(false)}
+        />
+      )}
+
       {/* Formulário de atividade */}
       {showForm && (
-        <Modal title={editing ? "Editar Atividade" : "Nova Atividade"} onClose={() => setShowForm(false)} extraWide>
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <Modal title={editing ? "Editar Atividade" : "Nova Atividade"} onClose={handleCancelClick} extraWide>
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
             {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+
+            {/* Banner IA aplicada */}
+            {aiApplied && (
+              <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-700">
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span><strong>Gerado com IA.</strong> Revise o conteúdo e clique em <strong>Criar atividade</strong> para salvar.</span>
+              </div>
+            )}
 
             {/* Dados principais */}
             <div className="p-4 bg-slate-50 rounded-lg space-y-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Dados da atividade</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Dados da atividade</p>
+                <button
+                  type="button"
+                  onClick={() => setShowAIModal(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:from-violet-600 hover:to-purple-700 shadow-sm transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Preencher com IA
+                </button>
+              </div>
               <Field label="Nome da atividade" required>
                 <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={IC} placeholder="Ex: Processo de Admissão" />
               </Field>
@@ -762,9 +1282,18 @@ ${t.items.length > 0 ? `
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editing ? "Salvar" : "Criar atividade"}</Button>
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); openNew() }}>Salvar e criar outra</Button>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Salvando..." : editing ? "Salvar alterações" : "Criar atividade"}
+              </Button>
+              {!editing && (
+                <Button type="button" variant="outline" disabled={saving} onClick={() => {
+                  shouldOpenNewAfterSave.current = true
+                  formRef.current?.requestSubmit()
+                }}>
+                  Salvar e criar outra
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={handleCancelClick}>Cancelar</Button>
             </div>
           </form>
         </Modal>

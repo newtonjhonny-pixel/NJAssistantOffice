@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -81,8 +81,8 @@ export async function POST(req: NextRequest) {
     data: {
       conferenceId: conf.id,
       type:         'CRIACAO',
-      title:        'Conferência criada',
-      description:  `Conferência "${conf.title}" criada.`,
+      title:        'ConferÃªncia criada',
+      description:  `ConferÃªncia "${conf.title}" criada.`,
     },
   })
 

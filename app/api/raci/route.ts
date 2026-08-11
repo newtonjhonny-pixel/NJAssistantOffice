@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 import { randomUUID } from "crypto"
 
 export async function GET(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
   const id  = randomUUID()
-  const now = new Date()
+  const now = new Date().toISOString()
   await prisma.$executeRawUnsafe(
     `INSERT INTO "RaciMatrix" (id, "processId", name, description, activities, roles, entries, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

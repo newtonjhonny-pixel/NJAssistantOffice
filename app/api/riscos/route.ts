@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 import { calcLevel } from './utils'
 
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id   = randomUUID()
-  const now  = new Date()
+  const now  = new Date().toISOString()
   const prob = Number(body.probability) || 3
   const imp  = Number(body.impact)      || 3
   const level = calcLevel(prob, imp)

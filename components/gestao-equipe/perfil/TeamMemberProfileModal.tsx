@@ -968,11 +968,35 @@ interface MemberCompanyLink {
 
 interface MemberSalaryData {
   id: string; memberId: string
-  baseSalary: number | null; fixedAdditions: number | null; gratification: number | null
+  baseSalary: number | null
+  salaryType: string | null
+  fixedAdditions: number | null; gratification: number | null
   trustFunction: number | null; commission: number | null; otherFixed: number | null
   estimatedMonthly: number | null; estimatedCharges: number | null; estimatedCost: number | null
-  validFrom: string | null; lastAdjustment: string | null
-  adjustmentReason: string | null; observations: string | null
+  previousSalary: number | null
+  adjustmentPercentage: number | null
+  validFrom: string | null
+  adjustmentReason: string | null
+  cargo: string | null
+  observations: string | null
+}
+
+interface SalaryHistoryEntry {
+  id: string; memberId: string
+  previousSalary: number | null; newSalary: number
+  salaryType: string | null; adjustmentPercentage: number | null
+  adjustmentReason: string | null; cargo: string | null
+  observations: string | null; validFrom: string | null
+  recordedBy: string | null; recordedAt: string
+}
+
+const SALARY_TYPES: Record<string, string> = {
+  MENSAL: 'Mensal', HORA: 'Por hora', DIA: 'Por dia',
+  COMISSAO: 'Comissão', OUTRO: 'Outro',
+}
+const ADJUSTMENT_REASONS: Record<string, string> = {
+  ADMISSAO: 'Admissão', PROMOCAO: 'Promoção', REAJUSTE: 'Reajuste salarial',
+  DISSIDIO: 'Dissídio coletivo', MERITO: 'Mérito', ENQUADRAMENTO: 'Enquadramento', OUTRO: 'Outro',
 }
 
 // ─── TAB: REMUNERAÇÃO ────────────────────────────────────────────────────────
@@ -1005,60 +1029,131 @@ function fmtCurrency(v: number | null | undefined): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 }
 
-function TabRemuneracao({ memberId, showSalary }: { memberId: string; showSalary: boolean }) {
+function fmtDateTime(d: string | null | undefined): string {
+  if (!d) return '—'
+  try {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(d))
+  } catch { return d }
+}
+
+function TabRemuneracao({
+  memberId, memberName, showSalary, canEdit, canCreate,
+}: {
+  memberId: string; memberName: string
+  showSalary: boolean; canEdit: boolean; canCreate: boolean
+}) {
   const [salary, setSalary] = useState<MemberSalaryData | null>(null)
+  const [history, setHistory] = useState<SalaryHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [form, setForm] = useState({
-    baseSalary: '', fixedAdditions: '', gratification: '', trustFunction: '',
-    commission: '', otherFixed: '', estimatedCharges: '', estimatedCost: '',
-    validFrom: '', lastAdjustment: '', adjustmentReason: '', observations: '',
+    baseSalary: '',
+    salaryType: 'MENSAL',
+    validFrom: '',
+    adjustmentReason: '',
+    cargo: '',
+    observations: '',
+    fixedAdditions: '', gratification: '', trustFunction: '',
+    commission: '', otherFixed: '',
+    estimatedCharges: '', estimatedCost: '',
   })
 
-  useEffect(() => {
+  // Percentual calculado em tempo real
+  const previousSalary = salary?.baseSalary ?? null
+  const newSalaryNum = parseFloat(form.baseSalary.replace(',', '.')) || 0
+  const calcPct = previousSalary && previousSalary > 0 && newSalaryNum > 0 && newSalaryNum !== previousSalary
+    ? (((newSalaryNum - previousSalary) / previousSalary) * 100)
+    : null
+
+  function loadSalary() {
     setLoading(true)
-    fetch(`/api/gestao-equipe/members/${memberId}/salary`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        setSalary(d)
-        if (d) {
-          setForm({
-            baseSalary: d.baseSalary ?? '', fixedAdditions: d.fixedAdditions ?? '',
-            gratification: d.gratification ?? '', trustFunction: d.trustFunction ?? '',
-            commission: d.commission ?? '', otherFixed: d.otherFixed ?? '',
-            estimatedCharges: d.estimatedCharges ?? '', estimatedCost: d.estimatedCost ?? '',
-            validFrom: d.validFrom ? d.validFrom.slice(0, 10) : '',
-            lastAdjustment: d.lastAdjustment ? d.lastAdjustment.slice(0, 10) : '',
-            adjustmentReason: d.adjustmentReason ?? '',
-            observations: d.observations ?? '',
-          })
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [memberId])
+    Promise.all([
+      fetch(`/api/gestao-equipe/members/${memberId}/salary`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`/api/gestao-equipe/members/${memberId}/salary/history`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([sal, hist]) => {
+      setSalary(sal)
+      setHistory(Array.isArray(hist) ? hist : [])
+      if (sal) {
+        setForm(prev => ({
+          ...prev,
+          baseSalary:        sal.baseSalary != null ? String(sal.baseSalary) : '',
+          salaryType:        sal.salaryType ?? 'MENSAL',
+          validFrom:         sal.validFrom ? sal.validFrom.slice(0, 10) : '',
+          adjustmentReason:  sal.adjustmentReason ?? '',
+          cargo:             sal.cargo ?? '',
+          observations:      sal.observations ?? '',
+          fixedAdditions:    sal.fixedAdditions != null ? String(sal.fixedAdditions) : '',
+          gratification:     sal.gratification != null ? String(sal.gratification) : '',
+          trustFunction:     sal.trustFunction != null ? String(sal.trustFunction) : '',
+          commission:        sal.commission != null ? String(sal.commission) : '',
+          otherFixed:        sal.otherFixed != null ? String(sal.otherFixed) : '',
+          estimatedCharges:  sal.estimatedCharges != null ? String(sal.estimatedCharges) : '',
+          estimatedCost:     sal.estimatedCost != null ? String(sal.estimatedCost) : '',
+        }))
+      }
+    }).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadSalary() }, [memberId]) // eslint-disable-line
 
   const num = (s: string) => s === '' ? null : parseFloat(s.replace(',', '.'))
 
   async function save() {
+    setSaveError('')
+    const base = num(form.baseSalary)
+    if (!base || base <= 0) {
+      setSaveError('Salário-base é obrigatório e deve ser maior que zero.')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/gestao-equipe/members/${memberId}/salary`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          baseSalary: num(form.baseSalary), fixedAdditions: num(form.fixedAdditions),
-          gratification: num(form.gratification), trustFunction: num(form.trustFunction),
-          commission: num(form.commission), otherFixed: num(form.otherFixed),
-          estimatedCharges: num(form.estimatedCharges), estimatedCost: num(form.estimatedCost),
-          validFrom: form.validFrom || null, lastAdjustment: form.lastAdjustment || null,
-          adjustmentReason: form.adjustmentReason || null, observations: form.observations || null,
+          baseSalary:        base,
+          salaryType:        form.salaryType || 'MENSAL',
+          validFrom:         form.validFrom || null,
+          adjustmentReason:  form.adjustmentReason || null,
+          cargo:             form.cargo || null,
+          observations:      form.observations || null,
+          previousSalary:    previousSalary,
+          adjustmentPercentage: calcPct,
+          fixedAdditions:    num(form.fixedAdditions),
+          gratification:     num(form.gratification),
+          trustFunction:     num(form.trustFunction),
+          commission:        num(form.commission),
+          otherFixed:        num(form.otherFixed),
+          estimatedCharges:  num(form.estimatedCharges),
+          estimatedCost:     num(form.estimatedCost),
         }),
       })
-      if (res.ok) { setSalary(await res.json()); setEditing(false) }
-    } finally { setSaving(false) }
+      const body = await res.json()
+      if (!res.ok) { setSaveError(body.error ?? 'Erro ao salvar remuneração'); return }
+      setSalary(body)
+      setEditing(false)
+      // Recarrega histórico
+      fetch(`/api/gestao-equipe/members/${memberId}/salary/history`)
+        .then(r => r.ok ? r.json() : []).then(h => setHistory(Array.isArray(h) ? h : []))
+    } catch { setSaveError('Erro de conexão ao salvar.') }
+    finally { setSaving(false) }
   }
+
+  // ── Acesso restrito ────────────────────────────────────────────────────────
+  if (!showSalary) return (
+    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+      <Lock className="w-10 h-10 mb-3 opacity-40" />
+      <p className="text-sm font-medium">Acesso restrito</p>
+      <p className="text-xs mt-1 text-center max-w-xs">
+        Os dados de remuneração são confidenciais. Solicite ao administrador o acesso à remuneração.
+      </p>
+    </div>
+  )
 
   if (loading) return (
     <div className="flex items-center justify-center py-12">
@@ -1066,19 +1161,13 @@ function TabRemuneracao({ memberId, showSalary }: { memberId: string; showSalary
     </div>
   )
 
-  if (!showSalary) return (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-      <Lock className="w-10 h-10 mb-3 opacity-40" />
-      <p className="text-sm font-medium">Acesso restrito</p>
-      <p className="text-xs mt-1">Os dados de remuneração são restritos e não estão visíveis para este perfil.</p>
-    </div>
-  )
-
-  const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  const IC = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  const canAct = salary ? canEdit : canCreate
 
   return (
     <div className="space-y-5">
-      {/* Aviso restrito */}
+
+      {/* Banner confidencial */}
       <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700">
@@ -1086,16 +1175,19 @@ function TabRemuneracao({ memberId, showSalary }: { memberId: string; showSalary
         </p>
       </div>
 
+      {/* Cabeçalho + botão */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-700">Remuneração e Custo</p>
-        {!editing ? (
-          <button onClick={() => setEditing(true)}
+        <p className="text-sm font-semibold text-slate-700">Remuneração — {memberName}</p>
+        {canAct && !editing && (
+          <button onClick={() => { setSaveError(''); setEditing(true) }}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
             <Edit2 className="w-3.5 h-3.5" /> {salary ? 'Editar' : 'Cadastrar'}
           </button>
-        ) : (
+        )}
+        {editing && (
           <div className="flex gap-2">
-            <button onClick={() => setEditing(false)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg border border-slate-200">Cancelar</button>
+            <button onClick={() => { setEditing(false); setSaveError('') }}
+              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg border border-slate-200">Cancelar</button>
             <button onClick={save} disabled={saving}
               className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
               {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Salvar
@@ -1104,115 +1196,234 @@ function TabRemuneracao({ memberId, showSalary }: { memberId: string; showSalary
         )}
       </div>
 
-      {editing ? (
-        <div className="space-y-4">
-          <SectionTitle>Componentes da Remuneração</SectionTitle>
+      {/* Erro de salvamento */}
+      {saveError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
+      )}
+
+      {/* ── FORMULÁRIO ──────────────────────────────────────────────────── */}
+      {editing && (
+        <div className="space-y-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+          <SectionTitle>Dados Salariais</SectionTitle>
+
+          {/* Salário atual + anterior + percentual */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Salário-base (R$)', key: 'baseSalary' },
-              { label: 'Adicionais fixos (R$)', key: 'fixedAdditions' },
-              { label: 'Gratificação (R$)', key: 'gratification' },
-              { label: 'Função de confiança (R$)', key: 'trustFunction' },
-              { label: 'Comissão média (R$)', key: 'commission' },
-              { label: 'Outros fixos (R$)', key: 'otherFixed' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label}</label>
-                <input type="number" step="0.01" min="0"
-                  value={(form as any)[f.key]}
-                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={inputClass} placeholder="0,00" />
-              </div>
-            ))}
+            <div className="sm:col-span-1">
+              <label className="text-xs font-semibold text-slate-600 block mb-1">
+                Salário-base atual (R$) <span className="text-red-500">*</span>
+              </label>
+              <input type="number" step="0.01" min="0.01"
+                value={form.baseSalary}
+                onChange={e => setForm(p => ({ ...p, baseSalary: e.target.value }))}
+                className={IC} placeholder="0,00" required />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Salário anterior (R$)</label>
+              <input type="text" readOnly
+                value={previousSalary != null ? fmtCurrency(previousSalary) : '—'}
+                className={IC + ' bg-slate-100 text-slate-500 cursor-not-allowed'} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Percentual de reajuste</label>
+              <input type="text" readOnly
+                value={calcPct != null ? `${calcPct >= 0 ? '+' : ''}${calcPct.toFixed(2)}%` : '—'}
+                className={IC + (calcPct != null && calcPct > 0 ? ' text-green-600' : calcPct != null && calcPct < 0 ? ' text-red-600' : ' text-slate-500') + ' bg-slate-100 cursor-not-allowed'} />
+            </div>
           </div>
-          <SectionTitle>Custo Total</SectionTitle>
+
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Encargos estimados (R$)', key: 'estimatedCharges' },
-              { label: 'Custo mensal estimado (R$)', key: 'estimatedCost' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label}</label>
-                <input type="number" step="0.01" min="0"
-                  value={(form as any)[f.key]}
-                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={inputClass} placeholder="0,00" />
-              </div>
-            ))}
-          </div>
-          <SectionTitle>Histórico Salarial</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Tipo de salário</label>
+              <select value={form.salaryType} onChange={e => setForm(p => ({ ...p, salaryType: e.target.value }))} className={IC}>
+                {Object.entries(SALARY_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1">Data de vigência</label>
-              <input type="date" value={form.validFrom} onChange={e => setForm(p => ({ ...p, validFrom: e.target.value }))} className={inputClass} />
+              <input type="date" value={form.validFrom} onChange={e => setForm(p => ({ ...p, validFrom: e.target.value }))} className={IC} />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Último reajuste</label>
-              <input type="date" value={form.lastAdjustment} onChange={e => setForm(p => ({ ...p, lastAdjustment: e.target.value }))} className={inputClass} />
+              <label className="text-xs font-medium text-slate-500 block mb-1">Motivo da alteração</label>
+              <select value={form.adjustmentReason} onChange={e => setForm(p => ({ ...p, adjustmentReason: e.target.value }))} className={IC}>
+                <option value="">Selecione...</option>
+                {Object.entries(ADJUSTMENT_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
             </div>
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-slate-500 block mb-1">Motivo do reajuste</label>
-              <input value={form.adjustmentReason} onChange={e => setForm(p => ({ ...p, adjustmentReason: e.target.value }))} className={inputClass} placeholder="Ex: Dissídio anual, promoção..." />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-slate-500 block mb-1">Observações</label>
-              <textarea rows={2} value={form.observations} onChange={e => setForm(p => ({ ...p, observations: e.target.value }))} className={inputClass} />
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Cargo</label>
+              <input value={form.cargo} onChange={e => setForm(p => ({ ...p, cargo: e.target.value }))} className={IC} placeholder="Ex: Analista de DP" />
             </div>
           </div>
-        </div>
-      ) : salary ? (
-        <div className="space-y-4">
-          {/* Remuneração calculada */}
-          {salary.estimatedMonthly != null && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-              <p className="text-xs text-blue-600 font-medium uppercase tracking-wide mb-1">Remuneração Mensal Estimada</p>
-              <p className="text-3xl font-bold text-blue-700">{fmtCurrency(salary.estimatedMonthly)}</p>
-              {salary.estimatedCost && (
-                <p className="text-xs text-blue-500 mt-1">Custo total estimado: {fmtCurrency(salary.estimatedCost)}</p>
-              )}
-            </div>
-          )}
-          <SectionTitle>Composição</SectionTitle>
+
+          <SectionTitle>Outros Componentes (opcional)</SectionTitle>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {[
-              { label: 'Salário-base', v: salary.baseSalary },
-              { label: 'Adicionais fixos', v: salary.fixedAdditions },
-              { label: 'Gratificação', v: salary.gratification },
-              { label: 'Função de confiança', v: salary.trustFunction },
-              { label: 'Comissão média', v: salary.commission },
-              { label: 'Outros fixos', v: salary.otherFixed },
+              { label: 'Adicionais fixos', key: 'fixedAdditions' },
+              { label: 'Gratificação', key: 'gratification' },
+              { label: 'Função de confiança', key: 'trustFunction' },
+              { label: 'Comissão média', key: 'commission' },
+              { label: 'Outros fixos', key: 'otherFixed' },
             ].map(f => (
-              <div key={f.label} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                <p className="text-xs text-slate-400">{f.label}</p>
-                <p className="text-sm font-semibold text-slate-700">{fmtCurrency(f.v)}</p>
+              <div key={f.key}>
+                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label} (R$)</label>
+                <input type="number" step="0.01" min="0"
+                  value={(form as any)[f.key]}
+                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={IC} placeholder="0,00" />
               </div>
             ))}
           </div>
-          {(salary.estimatedCharges != null) && (
+
+          <SectionTitle>Custo Total (opcional)</SectionTitle>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Encargos estimados', key: 'estimatedCharges' },
+              { label: 'Custo mensal estimado', key: 'estimatedCost' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label} (R$)</label>
+                <input type="number" step="0.01" min="0"
+                  value={(form as any)[f.key]}
+                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={IC} placeholder="0,00" />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1">Observações</label>
+            <textarea rows={2} value={form.observations}
+              onChange={e => setForm(p => ({ ...p, observations: e.target.value }))}
+              className={IC} placeholder="Observações sobre esta remuneração..." />
+          </div>
+        </div>
+      )}
+
+      {/* ── VISUALIZAÇÃO DO SALÁRIO ATUAL ────────────────────────────────── */}
+      {!editing && salary && (
+        <div className="space-y-4">
+          {/* Card principal */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-xs text-emerald-600 font-semibold uppercase tracking-wide mb-1">Salário-base atual</p>
+            <p className="text-3xl font-bold text-emerald-700">{fmtCurrency(salary.baseSalary)}</p>
+            <div className="flex flex-wrap gap-3 mt-2 text-xs text-emerald-600">
+              {salary.salaryType && <span>Tipo: {SALARY_TYPES[salary.salaryType] ?? salary.salaryType}</span>}
+              {salary.validFrom && <span>Vigência: {fmtDate(salary.validFrom)}</span>}
+              {salary.cargo && <span>Cargo: {salary.cargo}</span>}
+            </div>
+            {salary.estimatedMonthly != null && salary.estimatedMonthly !== salary.baseSalary && (
+              <p className="text-xs text-emerald-500 mt-1">Remuneração total estimada: {fmtCurrency(salary.estimatedMonthly)}</p>
+            )}
+            {salary.estimatedCost && (
+              <p className="text-xs text-emerald-500">Custo total estimado: {fmtCurrency(salary.estimatedCost)}</p>
+            )}
+          </div>
+
+          {/* Detalhes de composição */}
+          {[salary.fixedAdditions, salary.gratification, salary.trustFunction, salary.commission, salary.otherFixed].some(v => v != null) && (
             <>
-              <SectionTitle>Custo</SectionTitle>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Encargos estimados</p>
-                  <p className="text-sm font-semibold text-slate-700">{fmtCurrency(salary.estimatedCharges)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Custo mensal estimado</p>
-                  <p className="text-sm font-semibold text-slate-700">{fmtCurrency(salary.estimatedCost)}</p>
-                </div>
+              <SectionTitle>Composição</SectionTitle>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {[
+                  { label: 'Adicionais fixos', v: salary.fixedAdditions },
+                  { label: 'Gratificação', v: salary.gratification },
+                  { label: 'Função de confiança', v: salary.trustFunction },
+                  { label: 'Comissão média', v: salary.commission },
+                  { label: 'Outros fixos', v: salary.otherFixed },
+                ].filter(f => f.v != null).map(f => (
+                  <div key={f.label} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-400">{f.label}</p>
+                    <p className="text-sm font-semibold text-slate-700">{fmtCurrency(f.v)}</p>
+                  </div>
+                ))}
               </div>
             </>
           )}
-          <SectionTitle>Vigência</SectionTitle>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Data de vigência" value={fmtDate(salary.validFrom)} />
-            <Field label="Último reajuste" value={fmtDate(salary.lastAdjustment)} />
-            {salary.adjustmentReason && <div className="col-span-2"><Field label="Motivo" value={salary.adjustmentReason} /></div>}
-            {salary.observations && <div className="col-span-2"><Field label="Observações" value={salary.observations} /></div>}
-          </div>
+
+          {/* Reajuste info */}
+          {(salary.previousSalary != null || salary.adjustmentReason) && (
+            <>
+              <SectionTitle>Último Reajuste</SectionTitle>
+              <div className="grid grid-cols-2 gap-2">
+                {salary.previousSalary != null && (
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-400">Salário anterior</p>
+                    <p className="text-sm font-semibold text-slate-700">{fmtCurrency(salary.previousSalary)}</p>
+                  </div>
+                )}
+                {salary.adjustmentPercentage != null && (
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-400">Percentual de reajuste</p>
+                    <p className={cn('text-sm font-semibold', salary.adjustmentPercentage >= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {salary.adjustmentPercentage >= 0 ? '+' : ''}{salary.adjustmentPercentage.toFixed(2)}%
+                    </p>
+                  </div>
+                )}
+                {salary.adjustmentReason && (
+                  <div className="col-span-2 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs text-slate-400">Motivo</p>
+                    <p className="text-sm font-semibold text-slate-700">
+                      {ADJUSTMENT_REASONS[salary.adjustmentReason] ?? salary.adjustmentReason}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          {salary.observations && (
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs text-slate-400 mb-0.5">Observações</p>
+              <p className="text-sm text-slate-700">{salary.observations}</p>
+            </div>
+          )}
         </div>
-      ) : (
-        <EmptyState icon={DollarSign} label="Nenhuma remuneração cadastrada. Clique em Cadastrar para adicionar." />
+      )}
+
+      {!editing && !salary && (
+        <EmptyState icon={DollarSign} label={canCreate ? "Nenhuma remuneração cadastrada. Clique em Cadastrar para adicionar." : "Nenhuma remuneração cadastrada."} />
+      )}
+
+      {/* ── HISTÓRICO SALARIAL ───────────────────────────────────────────── */}
+      {!editing && history.length > 0 && (
+        <div className="space-y-2">
+          <SectionTitle>Histórico Salarial</SectionTitle>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Data</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-600">Anterior</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-600">Novo salário</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-600">Reajuste</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Motivo</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Cargo</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Por</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((h, i) => (
+                  <tr key={h.id} className={cn('border-b border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
+                    <td className="px-3 py-2 text-slate-600">{fmtDateTime(h.recordedAt)}</td>
+                    <td className="px-3 py-2 text-right text-slate-500">{h.previousSalary != null ? fmtCurrency(h.previousSalary) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-800">{fmtCurrency(h.newSalary)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {h.adjustmentPercentage != null
+                        ? <span className={h.adjustmentPercentage >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                            {h.adjustmentPercentage >= 0 ? '+' : ''}{h.adjustmentPercentage.toFixed(2)}%
+                          </span>
+                        : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{h.adjustmentReason ? (ADJUSTMENT_REASONS[h.adjustmentReason] ?? h.adjustmentReason) : '—'}</td>
+                    <td className="px-3 py-2 text-slate-600">{h.cargo ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-500">{h.recordedBy ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-400 pl-1">{history.length} registro(s) no histórico</p>
+        </div>
       )}
     </div>
   )
@@ -1220,9 +1431,37 @@ function TabRemuneracao({ memberId, showSalary }: { memberId: string; showSalary
 
 // ─── TAB: CARTEIRA DE EMPRESAS ────────────────────────────────────────────────
 
+// Tipos atualizados para nova API
+interface CapacityBreakdownItem {
+  companyId: string; companyName: string; segment: string | null; memberRole: string | null
+  score: number; cargaBase: number; headcount: number
+  fatorPapel: number; fatorComplexidade: number; fatorAutomacao: number
+  complexity: string | null; automationLevel: string | null
+  memoria?: {
+    componentes: { label: string; valor: number; coeficiente: number; subtotal: number }[]
+    cargaBase: number; fatorPapel: number; fatorComplexidade: number; fatorAutomacao: number
+    papelLabel: string; complexidadeLabel: string; automacaoLabel: string; scoreEmpresa: number
+  }
+}
+
+interface CapacityResult {
+  memberId: string; totalScore: number; capacityRef: number; capacityPct: number
+  band: string; bandLabel: string
+  breakdown: CapacityBreakdownItem[]
+}
+
+const BAND_COLORS: Record<string, { bar: string; text: string; bg: string; border: string }> = {
+  green:    { bar: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200' },
+  blue:     { bar: 'bg-blue-500',   text: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200'  },
+  yellow:   { bar: 'bg-amber-400',  text: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' },
+  orange:   { bar: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200'},
+  critical: { bar: 'bg-red-600',    text: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'   },
+}
+
 function CapacityIndicator({ memberId }: { memberId: string }) {
-  const [cap, setCap] = useState<CapacityResult | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [cap, setCap]           = useState<CapacityResult | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [showCalc, setShowCalc] = useState<string | null>(null) // companyId expandido
 
   useEffect(() => {
     fetch(`/api/gestao-equipe/members/${memberId}/capacity`)
@@ -1240,54 +1479,104 @@ function CapacityIndicator({ memberId }: { memberId: string }) {
   if (!cap) return null
 
   const colors = BAND_COLORS[cap.band] ?? BAND_COLORS.green
-  const barPct = Math.min(cap.capacityPct, 130)
+  const barPct = Math.min(cap.capacityPct, 150)
 
   return (
-    <div className={cn("rounded-xl border p-4", colors.bg, colors.border)}>
-      <div className="flex items-start justify-between mb-3">
+    <div className={cn("rounded-xl border p-4 space-y-3", colors.bg, colors.border)}>
+      {/* Cabeçalho ICO */}
+      <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Indicador de Capacidade</p>
-          <p className={cn("text-2xl font-bold mt-0.5", colors.text)}>{cap.capacityPct.toFixed(1)}%</p>
-          <p className={cn("text-xs font-medium", colors.text)}>{cap.bandLabel}</p>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <p className={cn("text-3xl font-bold", colors.text)}>{cap.totalScore.toFixed(1)}</p>
+            <p className="text-sm text-slate-400 font-normal">pts</p>
+            <p className={cn("text-sm font-medium", colors.text)}>/ {cap.capacityPct.toFixed(1)}%</p>
+          </div>
+          <p className={cn("text-xs font-medium mt-0.5", colors.text)}>{cap.bandLabel}</p>
         </div>
         <div className="text-right text-xs text-slate-400">
-          <p>Score: {cap.totalScore} pts</p>
-          <p>Ref: {cap.capacityRef} pts</p>
+          <p>Ref: {cap.capacityRef} pts = 100%</p>
+          <p>{cap.breakdown.length} empresa(s)</p>
         </div>
       </div>
 
       {/* Barra de progresso */}
-      <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden mb-3">
-        <div
-          className={cn("h-2 rounded-full transition-all", colors.bar)}
-          style={{ width: `${Math.min(barPct / 130 * 100, 100)}%` }}
-        />
+      <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+        <div className={cn("h-2 rounded-full transition-all", colors.bar)}
+          style={{ width: `${Math.min(barPct / 150 * 100, 100)}%` }} />
       </div>
 
-      {/* Legenda das faixas */}
-      <div className="flex gap-1 text-[10px] text-slate-400 mb-3">
-        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />≤{cap.config.bandGreen}% Disp.</span>
-        <span className="flex items-center gap-0.5 ml-2"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />≤{cap.config.bandBlue}% Eq.</span>
-        <span className="flex items-center gap-0.5 ml-2"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />≤{cap.config.bandYellow}% Aten.</span>
-        <span className="flex items-center gap-0.5 ml-2"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />≤{cap.config.bandOrange}% Sob.</span>
-        <span className="flex items-center gap-0.5 ml-2"><span className="w-2 h-2 rounded-full bg-red-600 inline-block" />&gt;{cap.config.bandOrange}% Crit.</span>
+      {/* Faixas */}
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" />≤70% Disponível</span>
+        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />≤85% Adequado</span>
+        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />≤100% Atenção</span>
+        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />≤120% Sobrecarga</span>
+        <span className="flex items-center gap-0.5"><span className="w-2 h-2 rounded-full bg-red-600 inline-block" />&gt;120% Crítico</span>
       </div>
 
-      {/* Breakdown por empresa */}
+      {/* Breakdown por empresa com "Ver cálculo" */}
       {cap.breakdown.length > 0 && (
-        <div className="space-y-1">
+        <div className="space-y-2 pt-1">
+          <p className="text-xs font-semibold text-slate-500">Composição por empresa</p>
           {cap.breakdown.map(b => {
-            const bPct = cap.totalScore > 0 ? (b.score / cap.totalScore) * 100 : 0
+            const bPct     = cap.totalScore > 0 ? (b.score / cap.totalScore) * 100 : 0
+            const isExpand = showCalc === b.companyId
+            const m        = b.memoria
             return (
-              <div key={b.companyId} className="flex items-center gap-2 text-xs">
-                <span className="truncate flex-1 text-slate-600">{b.companyName}</span>
-                <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                  <div className={cn("h-1.5 rounded-full", colors.bar)} style={{ width: `${bPct}%` }} />
+              <div key={b.companyId} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                {/* Linha da empresa */}
+                <div className="flex items-center gap-2 px-3 py-2 text-xs">
+                  <span className="truncate flex-1 text-slate-700 font-medium">{b.companyName}</span>
+                  <div className="w-20 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                    <div className={cn("h-1.5 rounded-full", colors.bar)} style={{ width: `${bPct}%` }} />
+                  </div>
+                  <span className={cn("font-bold w-14 text-right shrink-0", colors.text)}>{b.score.toFixed(1)} pts</span>
+                  {m && (
+                    <button onClick={() => setShowCalc(isExpand ? null : b.companyId)}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline shrink-0 ml-1">
+                      {isExpand ? 'Fechar' : 'Ver cálculo'}
+                    </button>
+                  )}
                 </div>
-                <span className="text-slate-400 w-10 text-right shrink-0">{b.score}pts</span>
+
+                {/* Memória de cálculo expandida */}
+                {isExpand && m && (
+                  <div className="border-t border-slate-100 bg-slate-50 px-3 py-3 text-xs space-y-2">
+                    <p className="font-semibold text-slate-600">📋 Memória de Cálculo — {b.companyName}</p>
+                    {/* Componentes */}
+                    <div className="font-mono space-y-0.5 text-slate-600">
+                      {m.componentes.map(c => (
+                        <div key={c.label} className="flex justify-between gap-4">
+                          <span className="text-slate-500">{c.label} ({c.valor} × {c.coeficiente})</span>
+                          <span className="font-semibold text-right shrink-0">{c.subtotal.toFixed(1)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between gap-4 border-t border-slate-200 pt-1 mt-1">
+                        <span className="font-semibold">Carga-base</span>
+                        <span className="font-bold">{m.cargaBase.toFixed(1)}</span>
+                      </div>
+                    </div>
+                    {/* Fatores */}
+                    <div className="font-mono space-y-0.5 text-slate-600 border-t border-slate-200 pt-2 mt-1">
+                      <div className="flex justify-between"><span>Papel: {m.papelLabel}</span><span>× {m.fatorPapel.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Complexidade: {m.complexidadeLabel}</span><span>× {m.fatorComplexidade.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Automação: {m.automacaoLabel}</span><span>× {m.fatorAutomacao.toFixed(2)}</span></div>
+                    </div>
+                    <div className={cn("flex justify-between font-bold border-t border-slate-200 pt-2 mt-1 text-sm", colors.text)}>
+                      <span>Score final</span>
+                      <span>{m.scoreEmpresa.toFixed(2)} pts</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
+          {/* Total */}
+          <div className={cn("flex items-center justify-between px-3 py-2 rounded-lg border font-bold text-sm", colors.bg, colors.border, colors.text)}>
+            <span>ICO Total</span>
+            <span>{cap.totalScore.toFixed(2)} pts / {cap.capacityPct.toFixed(1)}%</span>
+          </div>
         </div>
       )}
     </div>
@@ -1655,6 +1944,7 @@ function TabCarteira({ memberId }: { memberId: string }) {
                       </div>
                     )}
                     <ProcessesPanel linkId={l.id} />
+                    <DpActivitiesPanel linkId={l.id} memberId={memberId} />
                   </div>
                 )}
               </div>
@@ -1664,33 +1954,6 @@ function TabCarteira({ memberId }: { memberId: string }) {
       )}
     </div>
   )
-}
-
-// ─── TYPES: FASE 3 ───────────────────────────────────────────────────────────
-
-interface CapacityResult {
-  memberId: string
-  totalScore: number
-  capacityRef: number
-  capacityPct: number
-  band: 'green' | 'blue' | 'yellow' | 'orange' | 'critical'
-  bandLabel: string
-  config: {
-    bandGreen: number; bandBlue: number; bandYellow: number; bandOrange: number
-  }
-  breakdown: {
-    companyId: string; companyName: string; segment: string | null
-    score: number; headcount: number; processCount: number
-    complexity: string | null; automationLevel: string | null
-  }[]
-}
-
-const BAND_COLORS: Record<string, { bar: string; text: string; bg: string; border: string }> = {
-  green:    { bar: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200' },
-  blue:     { bar: 'bg-blue-500',   text: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200'  },
-  yellow:   { bar: 'bg-amber-400',  text: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' },
-  orange:   { bar: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200'},
-  critical: { bar: 'bg-red-600',    text: 'text-red-700',    bg: 'bg-red-50',    border: 'border-red-200'   },
 }
 
 // ─── TYPES: FASE 2 ───────────────────────────────────────────────────────────
@@ -1903,6 +2166,470 @@ function ProcessesPanel({ linkId }: { linkId: string }) {
   )
 }
 
+// ─── DP ACTIVITIES PANEL ─────────────────────────────────────────────────────
+// Mensuração granular: Processo → Atividade → Execução → Volume → Tempo → Carga Humana
+
+const EXECUTION_TYPE_OPTS = [
+  { value: 'MANUAL',              label: 'Manual',                  pct: 100, color: 'bg-red-100 text-red-700'    },
+  { value: 'ASSISTIDA',           label: 'Assistida',               pct: 70,  color: 'bg-amber-100 text-amber-700'},
+  { value: 'AUTOMATIZADA',        label: 'Automatizada',            pct: 30,  color: 'bg-blue-100 text-blue-700'  },
+  { value: 'AUTOMATICA_EXCECOES', label: 'Automática c/ exceções',  pct: 10,  color: 'bg-green-100 text-green-700'},
+]
+
+const REQUIRED_LEVEL_OPTS = [
+  { value: 'ASSISTENTE',    label: 'Assistente'   },
+  { value: 'ANALISTA',      label: 'Analista'     },
+  { value: 'COORDENACAO',   label: 'Coordenação'  },
+  { value: 'COMPARTILHADO', label: 'Compartilhado'},
+]
+
+interface DpActivity {
+  id: string; linkId: string; processCode: string; catalogId: string | null
+  activityName: string; executionType: string; volume: number
+  avgTimeMinutes: number; requiredLevel: string; observations: string | null
+}
+
+interface DpCatalogActivity {
+  id: string; processCode: string; name: string
+  defaultExecution: string; defaultTimeMin: number; suggestedLevel: string
+}
+
+interface DpCatalogProcess { code: string; name: string; activities: DpCatalogActivity[] }
+
+// Processo vindo do MemberActivityLink
+interface MemberActivityTemplate {
+  id: string           // MemberActivityLink.id
+  activityTemplateId: string
+  activityTemplate: {
+    id: string; name: string; category: string | null
+    actCategory: { id: string; name: string } | null
+  }
+}
+
+function DpActivitiesPanel({ linkId, memberId }: { linkId: string; memberId: string }) {
+  const [activities,  setActivities]  = useState<DpActivity[]>([])
+  // processos vinculados ao colaborador na aba Atividades
+  const [memberProcs, setMemberProcs] = useState<MemberActivityTemplate[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const [deleting,    setDeleting]    = useState<string | null>(null)
+  const [editId,      setEditId]      = useState<string | null>(null)
+  const [showCalc,    setShowCalc]    = useState(false)
+  const [expanded,    setExpanded]    = useState<Record<string, boolean>>({})
+
+  const emptyForm = {
+    processCode: '', catalogId: '', activityName: '',
+    executionType: 'MANUAL', volume: '1', avgTimeMinutes: '0',
+    requiredLevel: 'ASSISTENTE', observations: '',
+  }
+  const [form, setForm] = useState(emptyForm)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [actRes, procRes] = await Promise.all([
+      fetch(`/api/gestao-equipe/dp-activities?linkId=${linkId}`),
+      // busca processos vinculados ao colaborador (aba Atividades)
+      fetch(`/api/gestao-equipe/member-activities?memberId=${memberId}`),
+    ])
+    if (actRes.ok)  { const d = await actRes.json();  setActivities(d.activities ?? []) }
+    if (procRes.ok) { const d = await procRes.json(); setMemberProcs(Array.isArray(d) ? d : []) }
+    setLoading(false)
+  }, [linkId, memberId])
+
+  useEffect(() => { load() }, [load])
+
+  function openNew() {
+    setEditId(null); setForm(emptyForm); setShowForm(true)
+  }
+  function openEdit(a: DpActivity) {
+    setEditId(a.id)
+    setForm({
+      processCode: a.processCode, catalogId: a.catalogId ?? '',
+      activityName: a.activityName, executionType: a.executionType,
+      volume: a.volume.toString(), avgTimeMinutes: a.avgTimeMinutes.toString(),
+      requiredLevel: a.requiredLevel, observations: a.observations ?? '',
+    })
+    setShowForm(true)
+  }
+
+  // Preenche processCode ao selecionar processo do colaborador
+  function applyFromMemberProc(templateId: string) {
+    const mp = memberProcs.find(p => p.activityTemplateId === templateId)
+    if (!mp) return
+    const procName = mp.activityTemplate.actCategory?.name
+                  ?? mp.activityTemplate.category
+                  ?? mp.activityTemplate.name
+    setForm(f => ({ ...f, processCode: templateId, catalogId: templateId,
+                    activityName: f.activityName || '' }))
+    // Mantém nome de processo para exibição
+    void procName
+  }
+
+  async function save() {
+    setSaving(true)
+    try {
+      const payload = {
+        linkId, processCode: form.processCode, activityName: form.activityName,
+        executionType: form.executionType,
+        volume: parseFloat(form.volume) || 1,
+        avgTimeMinutes: parseFloat(form.avgTimeMinutes) || 0,
+        requiredLevel: form.requiredLevel,
+        catalogId: form.catalogId || null,
+        observations: form.observations || null,
+      }
+      if (editId) {
+        await fetch(`/api/gestao-equipe/dp-activities/${editId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        await fetch('/api/gestao-equipe/dp-activities', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      }
+      setShowForm(false); setEditId(null)
+      await load()
+    } finally { setSaving(false) }
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Remover esta atividade?')) return
+    setDeleting(id)
+    await fetch(`/api/gestao-equipe/dp-activities/${id}`, { method: 'DELETE' })
+    setDeleting(null)
+    await load()
+  }
+
+  // ── Cálculo de memória local (para exibição instantânea) ──────────────────
+  const interventionPcts: Record<string, number> = {
+    MANUAL: 100, ASSISTIDA: 70, AUTOMATIZADA: 30, AUTOMATICA_EXCECOES: 10,
+  }
+
+  interface CalcRow {
+    id: string; activityName: string; processCode: string
+    executionType: string; volume: number; avgTimeMinutes: number
+    grossMinutes: number; humanMinutes: number; requiredLevel: string
+  }
+
+  const calcRows: CalcRow[] = activities.map(a => {
+    const pct   = interventionPcts[a.executionType] ?? 100
+    const gross = a.volume * a.avgTimeMinutes
+    return {
+      id: a.id, activityName: a.activityName, processCode: a.processCode,
+      executionType: a.executionType, volume: a.volume,
+      avgTimeMinutes: a.avgTimeMinutes,
+      grossMinutes: gross,
+      humanMinutes: gross * (pct / 100),
+      requiredLevel: a.requiredLevel,
+    }
+  })
+
+  const totalGross  = calcRows.reduce((s, r) => s + r.grossMinutes, 0)
+  const totalHuman  = calcRows.reduce((s, r) => s + r.humanMinutes, 0)
+  const manualHuman = calcRows.filter(r => r.executionType === 'MANUAL').reduce((s, r) => s + r.humanMinutes, 0)
+  const manualityPct = totalHuman > 0 ? Math.round((manualHuman / totalHuman) * 100) : 0
+
+  function fmt(min: number): string {
+    const h = Math.floor(Math.abs(min) / 60)
+    const m = Math.round(Math.abs(min) % 60)
+    return `${h}h${String(m).padStart(2, '0')}`
+  }
+
+  // Agrupar por processo
+  const byProcess: Record<string, CalcRow[]> = {}
+  for (const r of calcRows) {
+    if (!byProcess[r.processCode]) byProcess[r.processCode] = []
+    byProcess[r.processCode].push(r)
+  }
+
+  // Mapa templateId → nome legível do processo
+  const procCatalogMap: Record<string, string> = {}
+  for (const mp of memberProcs) {
+    procCatalogMap[mp.activityTemplateId] =
+      mp.activityTemplate.actCategory?.name
+      ?? mp.activityTemplate.category
+      ?? mp.activityTemplate.name
+  }
+  // Também mapeia nomes livres usados em atividades já cadastradas sem vínculo de template
+  for (const a of activities) {
+    if (!procCatalogMap[a.processCode]) procCatalogMap[a.processCode] = a.processCode
+  }
+
+  const inputClass  = "w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+  const selectClass = `${inputClass} bg-white`
+
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Atividades DP</p>
+          {activities.length > 0 && (
+            <span className="text-[10px] bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">
+              {activities.length} atividade{activities.length > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {activities.length > 0 && (
+            <button onClick={() => setShowCalc(!showCalc)}
+              className="text-[10px] text-blue-600 hover:text-blue-800 underline underline-offset-2">
+              {showCalc ? 'Ocultar cálculo' : 'Ver memória de cálculo'}
+            </button>
+          )}
+          {!showForm && (
+            <button onClick={openNew}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+              <Plus className="w-3 h-3" /> Adicionar atividade
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Indicadores rápidos */}
+      {activities.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="rounded-lg bg-white border border-slate-100 px-3 py-2 text-center">
+            <p className="text-sm font-bold text-slate-700">{fmt(totalHuman)}</p>
+            <p className="text-[10px] text-slate-400">Carga humana</p>
+          </div>
+          <div className="rounded-lg bg-white border border-slate-100 px-3 py-2 text-center">
+            <p className={`text-sm font-bold ${manualityPct > 70 ? 'text-red-600' : manualityPct > 40 ? 'text-amber-600' : 'text-green-600'}`}>
+              {manualityPct}%
+            </p>
+            <p className="text-[10px] text-slate-400">Manualidade</p>
+          </div>
+          <div className="rounded-lg bg-white border border-slate-100 px-3 py-2 text-center">
+            <p className="text-sm font-bold text-slate-600">{100 - manualityPct}%</p>
+            <p className="text-[10px] text-slate-400">Automação</p>
+          </div>
+        </div>
+      )}
+
+      {/* Memória de cálculo */}
+      {showCalc && activities.length > 0 && (
+        <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/40 overflow-hidden">
+          <div className="px-3 py-2 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+            <span className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide">
+              Memória de Cálculo — Carga Bruta = volume × tempo · Carga Humana = Bruta × % intervenção
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[10px]">
+              <thead>
+                <tr className="bg-blue-50/60">
+                  <th className="px-2 py-1.5 text-left font-medium text-slate-500">Atividade</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-slate-500">Processo</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-slate-500">Vol.</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-slate-500">Tempo</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-slate-500">Execução</th>
+                  <th className="px-2 py-1.5 text-center font-medium text-slate-500">Interv.</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-slate-500">C.Bruta</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-slate-500">C.Humana</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calcRows.map(r => {
+                  const pct = interventionPcts[r.executionType] ?? 100
+                  const execOpt = EXECUTION_TYPE_OPTS.find(o => o.value === r.executionType)
+                  return (
+                    <tr key={r.id} className="border-t border-blue-50 hover:bg-white/50">
+                      <td className="px-2 py-1.5 text-slate-700 font-medium">{r.activityName}</td>
+                      <td className="px-2 py-1.5 text-center text-slate-500">
+                        {procCatalogMap[r.processCode] ?? r.processCode}
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-slate-600">{r.volume}</td>
+                      <td className="px-2 py-1.5 text-center text-slate-600">{r.avgTimeMinutes}min</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${execOpt?.color ?? ''}`}>
+                          {execOpt?.label ?? r.executionType}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-slate-600">{pct}%</td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">{fmt(r.grossMinutes)}</td>
+                      <td className="px-2 py-1.5 text-right font-medium text-slate-700">{fmt(r.humanMinutes)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-blue-200 bg-blue-50">
+                  <td colSpan={6} className="px-2 py-1.5 text-right font-semibold text-slate-600 text-[10px]">TOTAL</td>
+                  <td className="px-2 py-1.5 text-right font-semibold text-slate-700">{fmt(totalGross)}</td>
+                  <td className="px-2 py-1.5 text-right font-bold text-blue-700">{fmt(totalHuman)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Formulário */}
+      {showForm && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 mb-3 space-y-3">
+          <p className="text-xs font-semibold text-slate-700">{editId ? 'Editar atividade' : 'Nova atividade DP'}</p>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">
+                Processo *
+                {memberProcs.length === 0 && (
+                  <span className="ml-1 text-amber-500">(vincule processos na aba Atividades)</span>
+                )}
+              </label>
+              <select
+                value={form.processCode}
+                onChange={e => { applyFromMemberProc(e.target.value); setForm(f => ({ ...f, processCode: e.target.value })) }}
+                className={selectClass}>
+                <option value="">Selecionar...</option>
+                {memberProcs.map(mp => (
+                  <option key={mp.activityTemplateId} value={mp.activityTemplateId}>
+                    {mp.activityTemplate.actCategory?.name ?? mp.activityTemplate.category ?? mp.activityTemplate.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-slate-500 block mb-1">Atividade *</label>
+              <input value={form.activityName} onChange={e => setForm(f => ({ ...f, activityName: e.target.value }))}
+                className={inputClass} placeholder="Ex: Lançar horas extras" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Forma de execução *</label>
+              <select value={form.executionType} onChange={e => setForm(f => ({ ...f, executionType: e.target.value }))} className={selectClass}>
+                {EXECUTION_TYPE_OPTS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label} ({o.pct}%)</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Volume / mês</label>
+              <input type="number" min="0" step="1" value={form.volume}
+                onChange={e => setForm(f => ({ ...f, volume: e.target.value }))}
+                className={inputClass} placeholder="1" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Tempo médio (min)</label>
+              <input type="number" min="0" step="0.5" value={form.avgTimeMinutes}
+                onChange={e => setForm(f => ({ ...f, avgTimeMinutes: e.target.value }))}
+                className={inputClass} placeholder="0" />
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Nível requerido</label>
+              <select value={form.requiredLevel} onChange={e => setForm(f => ({ ...f, requiredLevel: e.target.value }))} className={selectClass}>
+                {REQUIRED_LEVEL_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-slate-500 block mb-1">Observações</label>
+              <input value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))}
+                className={inputClass} placeholder="Opcional" />
+            </div>
+          </div>
+
+          {/* Preview do cálculo em tempo real */}
+          {form.avgTimeMinutes && parseFloat(form.avgTimeMinutes) > 0 && form.volume && parseFloat(form.volume) > 0 && (
+            <div className="rounded-lg bg-white border border-slate-100 px-3 py-2 text-[10px] text-slate-500 flex gap-4">
+              <span>Carga Bruta: <strong className="text-slate-700">{fmt(parseFloat(form.volume) * parseFloat(form.avgTimeMinutes))}</strong></span>
+              <span>Carga Humana: <strong className="text-blue-700">
+                {fmt(parseFloat(form.volume) * parseFloat(form.avgTimeMinutes) * ((interventionPcts[form.executionType] ?? 100) / 100))}
+              </strong></span>
+              <span>Intervenção: <strong>{interventionPcts[form.executionType] ?? 100}%</strong></span>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => { setShowForm(false); setEditId(null) }}
+              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg border border-slate-200 bg-white">Cancelar</button>
+            <button onClick={save} disabled={saving || !form.processCode || !form.activityName}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              {editId ? 'Salvar' : 'Adicionar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista agrupada por processo */}
+      {loading ? (
+        <div className="flex justify-center py-3"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /></div>
+      ) : activities.length === 0 && !showForm ? (
+        <div className="text-center py-3">
+          <p className="text-xs text-slate-400">Nenhuma atividade cadastrada.</p>
+          <p className="text-[10px] text-slate-300 mt-1">
+            Adicione atividades para calcular a carga humana real desta empresa.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {Object.entries(byProcess).map(([code, rows]) => {
+            const procName   = procCatalogMap[code] ?? code
+            const procHuman  = rows.reduce((s, r) => s + r.humanMinutes, 0)
+            const isExpanded = expanded[code] !== false   // default expanded
+            return (
+              <div key={code} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                <button
+                  onClick={() => setExpanded(p => ({ ...p, [code]: !isExpanded }))}
+                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700">{procName}</span>
+                    <span className="text-[10px] text-slate-400">{rows.length} atividade{rows.length > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-blue-600">{fmt(procHuman)}</span>
+                    {isExpanded
+                      ? <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
+                  </div>
+                </button>
+                {isExpanded && (
+                  <div className="border-t border-slate-100 divide-y divide-slate-50">
+                    {rows.map(r => {
+                      const execOpt = EXECUTION_TYPE_OPTS.find(o => o.value === r.executionType)
+                      const pct     = interventionPcts[r.executionType] ?? 100
+                      return (
+                        <div key={r.id} className="px-3 py-2 flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs text-slate-700">{r.activityName}</span>
+                              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${execOpt?.color ?? ''}`}>
+                                {execOpt?.label}
+                              </span>
+                            </div>
+                            <div className="flex gap-3 mt-0.5 text-[10px] text-slate-400">
+                              <span>{r.volume}× {r.avgTimeMinutes}min</span>
+                              <span>→ bruta: {fmt(r.grossMinutes)}</span>
+                              <span className="text-blue-600 font-medium">humana: {fmt(r.humanMinutes)} ({pct}%)</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => openEdit(activities.find(a => a.id === r.id)!)}
+                              className="text-slate-300 hover:text-blue-500 transition-colors">
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => remove(r.id)} disabled={deleting === r.id}
+                              className="text-slate-300 hover:text-red-500 transition-colors">
+                              {deleting === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── MAIN MODAL ──────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1923,17 +2650,22 @@ export function TeamMemberProfileModal({
   onClose,
   onEdit,
   showSalary = false,
+  canEditSalary = false,
+  canCreateSalary = false,
 }: {
   memberId: string | null
   onClose: () => void
   onEdit: (id: string) => void
   showSalary?: boolean
+  canEditSalary?: boolean
+  canCreateSalary?: boolean
 }) {
   const [activeTab, setActiveTab] = useState('dados')
   const [member, setMember] = useState<MemberDetail | null>(null)
   const [activities, setActivities] = useState<MemberActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingAct, setLoadingAct] = useState(false)
+  const [hourBankKey, setHourBankKey] = useState(0)
 
   const loadMember = useCallback(async (id: string) => {
     setLoading(true)
@@ -1988,7 +2720,7 @@ export function TeamMemberProfileModal({
                 <div className="min-w-0">
                   <p className="text-base font-bold text-slate-900 truncate">{member.name}</p>
                   <p className="text-xs text-slate-500 truncate">{member.role}{member.sector ? ` · ${member.sector}` : ''}</p>
-                  <HourBankHeaderSummary memberId={member.id} />
+                  <HourBankHeaderSummary key={hourBankKey} memberId={member.id} />
                 </div>
               </div>
             </div>
@@ -2059,9 +2791,9 @@ export function TeamMemberProfileModal({
               {activeTab === 'feedbacks'    && <TabFeedbacksDirecionamentos member={member} />}
               {activeTab === 'treinamentos' && <TabTreinamentosPerfil member={member} />}
               {activeTab === 'ferias'       && <TabFeriasPerfil member={member} />}
-              {activeTab === 'bancohoras'   && <TabBancoHoras memberId={member.id} />}
+              {activeTab === 'bancohoras'   && <TabBancoHoras memberId={member.id} onChanged={() => setHourBankKey(k => k + 1)} />}
               {activeTab === 'historico'    && <TabHistoricoPerfil member={member} />}
-              {activeTab === 'remuneracao'  && <TabRemuneracao memberId={member.id} showSalary={showSalary} />}
+              {activeTab === 'remuneracao'  && <TabRemuneracao memberId={member.id} memberName={member.name} showSalary={showSalary} canEdit={canEditSalary} canCreate={canCreateSalary} />}
               {activeTab === 'relatorios'   && <TabRelatoriosPerfil member={member} activities={activities} />}
             </>
           )}

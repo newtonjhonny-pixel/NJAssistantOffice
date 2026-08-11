@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 import { calcStatus } from '../../utils'
 

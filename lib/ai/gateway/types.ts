@@ -62,6 +62,8 @@ export interface AIAskInput {
   maxTokens?: number
   tools?: AITool[]
   toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } }
+  /** Força o modelo a retornar JSON. 'json_object' garante JSON válido; 'json_schema' garante estrutura exata. */
+  responseFormat?: { type: 'json_object' } | { type: 'json_schema'; json_schema: Record<string, unknown> }
 }
 
 export interface AIUsage {

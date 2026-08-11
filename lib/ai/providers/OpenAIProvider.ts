@@ -36,6 +36,8 @@ export class OpenAIProvider implements AIProvider {
         ? { max_completion_tokens: request.modelConfig.maxTokens }
         : { max_tokens: request.modelConfig.maxTokens }),
       ...(supportsTemperature ? { temperature: request.modelConfig.temperature } : {}),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(request.responseFormat ? { response_format: request.responseFormat as any } : {}),
     })
 
     const choice = response.choices[0]

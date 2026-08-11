@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { TabCargos } from "./TabCargos"
 import { TabAtividades } from "./TabAtividades"
 import { Button } from "@/components/ui/Button"
@@ -20,6 +20,7 @@ interface Member {
   id: string; name: string; role: string; sector?: string | null
   unit?: string | null; email?: string | null; phone?: string | null
   joinedAt?: string | null; status: string; observations?: string | null
+  companyId?: string | null; companyCode?: string | null; companyName?: string | null
   _count?: { feedbacks: number; directions: number; vacations: number; trainings: number; activities: number }
 }
 interface Feedback {
@@ -327,21 +328,32 @@ function TabVisaoGeral({ summary, onTabSwitch }: { summary: Summary | null; onTa
 
 // ─── Tab: Equipe ──────────────────────────────────────────────────────────────
 
-function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () => void }) {
+function TabEquipe({ members, onRefresh, canViewSalary, canEditSalary, canCreateSalary }: {
+  members: Member[]; onRefresh: () => void
+  canViewSalary: boolean; canEditSalary: boolean; canCreateSalary: boolean
+}) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Member | null>(null)
   const [profileId, setProfileId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
+  const [companiesList, setCompaniesList] = useState<Company[]>([])
   const [form, setForm] = useState({
     name: "", role: "", sector: "", unit: "", email: "", phone: "",
-    joinedAt: "", status: "ATIVO", observations: "",
+    joinedAt: "", status: "ATIVO", observations: "", companyId: "",
   })
+
+  useEffect(() => {
+    fetch('/api/gestao-equipe/companies')
+      .then(r => r.ok ? r.json() : [])
+      .then((d: Company[]) => setCompaniesList(d.filter(c => c.active)))
+      .catch(() => {})
+  }, [])
 
   function openNew() {
     setEditing(null)
-    setForm({ name: "", role: "", sector: "", unit: "", email: "", phone: "", joinedAt: "", status: "ATIVO", observations: "" })
+    setForm({ name: "", role: "", sector: "", unit: "", email: "", phone: "", joinedAt: "", status: "ATIVO", observations: "", companyId: "" })
     setShowForm(true)
   }
   function openEdit(m: Member) {
@@ -351,6 +363,7 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
       email: m.email || "", phone: m.phone || "",
       joinedAt: m.joinedAt ? m.joinedAt.split("T")[0] : "",
       status: m.status, observations: m.observations || "",
+      companyId: m.companyId || "",
     })
     setShowForm(true)
   }
@@ -358,7 +371,11 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
     e.preventDefault(); setSaving(true)
     try {
       const url = editing ? `/api/gestao-equipe/members/${editing.id}` : "/api/gestao-equipe/members"
-      await fetch(url, { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, joinedAt: form.joinedAt || null }) })
+      await fetch(url, {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, joinedAt: form.joinedAt || null, companyId: form.companyId || null }),
+      })
       setShowForm(false); onRefresh()
     } finally { setSaving(false) }
   }
@@ -435,6 +452,9 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
           const m = members.find(x => x.id === id)
           if (m) openEdit(m)
         }}
+        showSalary={canViewSalary}
+        canEditSalary={canEditSalary}
+        canCreateSalary={canCreateSalary}
       />
 
       {showForm && (
@@ -460,6 +480,16 @@ function TabEquipe({ members, onRefresh }: { members: Member[]; onRefresh: () =>
                 </select>
               </Field>
             </div>
+            <Field label="Empresa (lotação)">
+              <select value={form.companyId} onChange={e => setForm(f => ({ ...f, companyId: e.target.value }))} className={selectClass}>
+                <option value="">— Nenhuma empresa selecionada —</option>
+                {companiesList.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.code ? `${c.code} – ` : ''}{c.name}{c.establishmentType === 'FILIAL' ? ' (Filial)' : ''}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Observações"><textarea value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))} rows={2} className={inputClass} /></Field>
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editing ? "Salvar" : "Cadastrar"}</Button>
@@ -1762,7 +1792,55 @@ function TabDiretrizes() {
 
 // ─── Tab: Empresas ────────────────────────────────────────────────────────────
 
-interface Company { id: string; name: string; cnpj?: string | null; segment?: string | null; observations?: string | null; active: boolean }
+interface Company {
+  id: string
+  code: string | null
+  name: string
+  tradeName: string | null
+  cnpj: string | null
+  segment: string | null
+  observations: string | null
+  active: boolean
+  establishmentType: string | null  // MATRIZ | FILIAL
+  parentCompanyId: string | null
+  parentName: string | null
+  parentCode: string | null
+  branchCount?: number
+  zipCode: string | null
+  street: string | null
+  number: string | null
+  complement: string | null
+  neighborhood: string | null
+  city: string | null
+  state: string | null
+  country: string | null
+}
+
+const BR_STATES = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS',
+  'MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+]
+
+// Valida dígitos verificadores do CNPJ
+function validateCnpjFull(raw: string): boolean {
+  const d = raw.replace(/\D/g, '')
+  if (d.length !== 14) return false
+  if (/^(\d)\1+$/.test(d)) return false
+  const calc = (d: string, len: number) => {
+    let s = 0, p = len - 7
+    for (let i = len; i >= 1; i--) {
+      s += parseInt(d[len - i]) * p--
+      if (p < 2) p = 9
+    }
+    return s % 11 < 2 ? 0 : 11 - (s % 11)
+  }
+  return calc(d, 12) === parseInt(d[12]) && calc(d, 13) === parseInt(d[13])
+}
+
+function formatZip(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 8)
+  return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d
+}
 
 function onlyCnpjDigits(value: string) {
   return value.replace(/\D/g, '').slice(0, 14)
@@ -1782,14 +1860,284 @@ function isValidOptionalCnpj(value: string) {
   return digits.length === 0 || digits.length === 14
 }
 
-function TabEmpresas() {
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<Company | null>(null)
+// ─────────────────────────────── FORMULÁRIO EMPRESA ──────────────────────────
+
+const EMPTY_COMPANY_FORM = {
+  code: '', name: '', tradeName: '', cnpj: '', segment: '',
+  establishmentType: 'MATRIZ', parentCompanyId: '',
+  zipCode: '', street: '', number: '', complement: '',
+  neighborhood: '', city: '', state: '', country: 'Brasil',
+  observations: '', active: 'ATIVO',
+}
+
+function CompanyForm({
+  editing, matrices, onSave, onCancel,
+}: {
+  editing: Company | null
+  matrices: Company[]
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const [form, setForm] = useState({ ...EMPTY_COMPANY_FORM })
   const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [form, setForm] = useState({ name: '', cnpj: '', segment: '', observations: '' })
+  const [error, setError]   = useState('')
+  const [cepLoading, setCepLoading] = useState(false)
+  const cepRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        code:              editing.code              ?? '',
+        name:              editing.name              ?? '',
+        tradeName:         editing.tradeName         ?? '',
+        cnpj:              formatCnpj(editing.cnpj  ?? ''),
+        segment:           editing.segment           ?? '',
+        establishmentType: editing.establishmentType ?? 'MATRIZ',
+        parentCompanyId:   editing.parentCompanyId   ?? '',
+        zipCode:           formatZip(editing.zipCode ?? ''),
+        street:            editing.street            ?? '',
+        number:            editing.number            ?? '',
+        complement:        editing.complement        ?? '',
+        neighborhood:      editing.neighborhood      ?? '',
+        city:              editing.city              ?? '',
+        state:             editing.state             ?? '',
+        country:           editing.country           ?? 'Brasil',
+        observations:      editing.observations      ?? '',
+        active:            editing.active            ? 'ATIVO' : 'INATIVO',
+      })
+    } else {
+      setForm({ ...EMPTY_COMPANY_FORM })
+    }
+    setError('')
+  }, [editing])
+
+  const sf = (key: keyof typeof EMPTY_COMPANY_FORM) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+      setError('')
+      setForm(p => ({ ...p, [key]: e.target.value }))
+    }
+
+  async function lookupCep(raw: string) {
+    const digits = raw.replace(/\D/g, '')
+    if (digits.length !== 8) return
+    setCepLoading(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      if (!res.ok) return
+      const d = await res.json()
+      if (d.erro) { setError('CEP não encontrado.'); return }
+      setForm(p => ({
+        ...p,
+        street:       d.logradouro || p.street,
+        neighborhood: d.bairro     || p.neighborhood,
+        city:         d.localidade || p.city,
+        state:        d.uf         || p.state,
+      }))
+    } catch { /* silencioso — permite edição manual */ }
+    finally { setCepLoading(false) }
+  }
+
+  function cnpjError(): string | null {
+    const d = onlyCnpjDigits(form.cnpj)
+    if (!d) return null
+    if (d.length !== 14) return 'CNPJ deve ter 14 dígitos.'
+    if (!validateCnpjFull(d)) return 'CNPJ inválido — dígitos verificadores incorretos.'
+    return null
+  }
+
+  async function handleSave() {
+    const cErr = cnpjError()
+    if (cErr) { setError(cErr); return }
+
+    setSaving(true)
+    setError('')
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { active: _activeStr, ...formRest } = form
+      const payload = {
+        ...formRest,
+        cnpj:            onlyCnpjDigits(form.cnpj) || null,
+        zipCode:         form.zipCode.replace(/\D/g, '') || null,
+        parentCompanyId: form.establishmentType === 'MATRIZ' ? null : (form.parentCompanyId || null),
+        // active só enviado em edição (boolean); criação sempre inicia como ativa
+        ...(editing ? { active: form.active === 'ATIVO' } : {}),
+      }
+      const url  = editing ? `/api/gestao-equipe/companies/${editing.id}` : '/api/gestao-equipe/companies'
+      const meth = editing ? 'PATCH' : 'POST'
+      const res  = await fetch(url, { method: meth, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) { setError(body.error ?? 'Erro ao salvar empresa'); return }
+      onSave()
+    } catch (e: any) {
+      setError(e.message ?? 'Erro ao salvar empresa')
+    } finally { setSaving(false) }
+  }
+
+  const IC   = inputClass
+  const Lbl  = ({ children, req }: { children: React.ReactNode; req?: boolean }) => (
+    <label className="text-xs font-medium text-slate-500 block mb-1">
+      {children}{req && <span className="text-red-500 ml-0.5">*</span>}
+    </label>
+  )
+  const Sec  = ({ label }: { label: string }) => (
+    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-1 border-t border-slate-100">{label}</p>
+  )
+
+  return (
+    <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* ── Identificação ──────────────────────────────────────────────────── */}
+      <Sec label="Identificação da Empresa" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div>
+          <Lbl req>Código</Lbl>
+          <input value={form.code}
+            onChange={e => { setError(''); setForm(p => ({ ...p, code: e.target.value.replace(/\D/g, '').slice(0, 4) })) }}
+            className={IC} placeholder="0101" inputMode="numeric" maxLength={4} />
+        </div>
+        <div className="col-span-3">
+          <Lbl req>Razão Social</Lbl>
+          <input value={form.name} onChange={sf('name')} className={IC} placeholder="Nome empresarial completo" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Lbl>Nome fantasia</Lbl>
+          <input value={form.tradeName} onChange={sf('tradeName')} className={IC} placeholder="Como é conhecido" />
+        </div>
+        <div>
+          <Lbl>CNPJ</Lbl>
+          <input value={form.cnpj}
+            onChange={e => { setError(''); setForm(p => ({ ...p, cnpj: formatCnpj(e.target.value) })) }}
+            className={cn(IC, cnpjError() ? 'border-red-400 focus:border-red-500' : '')}
+            placeholder="00.000.000/0000-00" inputMode="numeric" maxLength={18} />
+          {cnpjError() && <p className="text-xs text-red-500 mt-0.5">{cnpjError()}</p>}
+        </div>
+        <div>
+          <Lbl>Segmento</Lbl>
+          <input value={form.segment} onChange={sf('segment')} className={IC} placeholder="Comércio, Serviços..." />
+        </div>
+        <div>
+          <Lbl req>Tipo de estabelecimento</Lbl>
+          <select value={form.establishmentType} onChange={sf('establishmentType')} className={IC}>
+            <option value="MATRIZ">Matriz</option>
+            <option value="FILIAL">Filial</option>
+          </select>
+        </div>
+        {form.establishmentType === 'FILIAL' && (
+          <div className="sm:col-span-2">
+            <Lbl req>Empresa matriz</Lbl>
+            <select value={form.parentCompanyId} onChange={sf('parentCompanyId')} className={IC}>
+              <option value="">Selecione uma matriz...</option>
+              {matrices
+                .filter(m => m.active && (!editing || m.id !== editing.id))
+                .map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.code ? `${m.code} – ` : ''}{m.name}
+                  </option>
+                ))
+              }
+            </select>
+            {matrices.filter(m => m.active).length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">Nenhuma matriz ativa cadastrada.</p>
+            )}
+          </div>
+        )}
+        <div>
+          <Lbl>Situação</Lbl>
+          <select
+            value={form.active}
+            onChange={e => setForm(p => ({ ...p, active: e.target.value }))}
+            className={IC}
+            disabled={!editing}
+          >
+            <option value="ATIVO">Ativa</option>
+            <option value="INATIVO">Inativa</option>
+          </select>
+          {!editing && <p className="text-xs text-slate-400 mt-0.5">Novas empresas são criadas como ativas.</p>}
+        </div>
+      </div>
+
+      {/* ── Endereço ───────────────────────────────────────────────────────── */}
+      <Sec label="Endereço" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="col-span-2 sm:col-span-1">
+          <Lbl req>CEP</Lbl>
+          <div className="flex gap-1">
+            <input
+              ref={cepRef}
+              value={form.zipCode}
+              onChange={e => { setError(''); setForm(p => ({ ...p, zipCode: formatZip(e.target.value) })) }}
+              onBlur={e => lookupCep(e.target.value)}
+              className={IC} placeholder="00000-000" inputMode="numeric" maxLength={9}
+            />
+            {cepLoading && <Spin className="w-4 h-4 animate-spin text-slate-400 self-center shrink-0" />}
+          </div>
+        </div>
+        <div className="col-span-2 sm:col-span-3">
+          <Lbl req>Logradouro</Lbl>
+          <input value={form.street} onChange={sf('street')} className={IC} placeholder="Rua, Avenida..." />
+        </div>
+        <div>
+          <Lbl>Número</Lbl>
+          <input value={form.number} onChange={sf('number')} className={IC} placeholder="S/N" />
+        </div>
+        <div className="col-span-1 sm:col-span-2">
+          <Lbl>Complemento</Lbl>
+          <input value={form.complement} onChange={sf('complement')} className={IC} placeholder="Sala, Andar..." />
+        </div>
+        <div>
+          <Lbl req>Bairro</Lbl>
+          <input value={form.neighborhood} onChange={sf('neighborhood')} className={IC} placeholder="Bairro" />
+        </div>
+        <div className="col-span-2 sm:col-span-2">
+          <Lbl req>Município</Lbl>
+          <input value={form.city} onChange={sf('city')} className={IC} placeholder="Cidade" />
+        </div>
+        <div>
+          <Lbl req>UF</Lbl>
+          <select value={form.state} onChange={sf('state')} className={IC}>
+            <option value="">UF</option>
+            {BR_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="col-span-1">
+          <Lbl>País</Lbl>
+          <input value={form.country} onChange={sf('country')} className={IC} placeholder="Brasil" />
+        </div>
+      </div>
+
+      {/* ── Observações ────────────────────────────────────────────────────── */}
+      <Sec label="Observações" />
+      <textarea value={form.observations} onChange={sf('observations')} rows={2} className={IC} placeholder="Observações sobre a empresa..." />
+
+      {/* ── Ações ─────────────────────────────────────────────────────────── */}
+      <div className="flex gap-2 pt-2 border-t border-slate-100 sticky bottom-0 bg-white pb-1">
+        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
+        <button onClick={handleSave} disabled={saving}
+          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          {saving ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {editing ? 'Salvar alterações' : 'Cadastrar empresa'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────── TAB EMPRESAS ─────────────────────────────────
+
+function TabEmpresas() {
+  const [companies, setCompanies]   = useState<Company[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [showForm, setShowForm]     = useState(false)
+  const [editing, setEditing]       = useState<Company | null>(null)
+  const [expanded, setExpanded]     = useState<Record<string, boolean>>({})
+  const [search, setSearch]         = useState('')
 
   async function load() {
     setLoading(true)
@@ -1799,40 +2147,8 @@ function TabEmpresas() {
   }
   useEffect(() => { load() }, [])
 
-  function openNew() { setEditing(null); setFormError(''); setForm({ name: '', cnpj: '', segment: '', observations: '' }); setShowForm(true) }
-  function openEdit(c: Company) { setEditing(c); setFormError(''); setForm({ name: c.name, cnpj: formatCnpj(c.cnpj ?? ''), segment: c.segment ?? '', observations: c.observations ?? '' }); setShowForm(true) }
-
-  async function save() {
-    if (!form.name.trim()) return
-    if (!isValidOptionalCnpj(form.cnpj)) {
-      setFormError('Informe um CNPJ válido com 14 dígitos.')
-      return
-    }
-    setSaving(true)
-    setFormError('')
-    try {
-      const payload = { ...form, cnpj: onlyCnpjDigits(form.cnpj) || null }
-      let res: Response
-      if (editing) {
-        res = await fetch(`/api/gestao-equipe/companies/${editing.id}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-      } else {
-        res = await fetch('/api/gestao-equipe/companies', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error ?? 'Erro ao salvar empresa')
-      }
-      setShowForm(false); await load()
-    } catch (e: any) {
-      setFormError(e.message ?? 'Erro ao salvar empresa')
-    } finally { setSaving(false) }
-  }
+  function openNew()         { setEditing(null); setShowForm(true) }
+  function openEdit(c: Company) { setEditing(c); setShowForm(true) }
 
   async function toggleActive(c: Company) {
     await fetch(`/api/gestao-equipe/companies/${c.id}`, {
@@ -1842,95 +2158,184 @@ function TabEmpresas() {
     await load()
   }
 
+  const matrices = companies.filter(c => c.establishmentType === 'MATRIZ' || !c.establishmentType)
+
+  const filtered = companies.filter(c => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(s) ||
+      (c.tradeName ?? '').toLowerCase().includes(s) ||
+      (c.cnpj ?? '').includes(s.replace(/\D/g, '')) ||
+      (c.code ?? '').includes(s) ||
+      (c.city ?? '').toLowerCase().includes(s)
+    )
+  })
+
+  const fmtCnpjCompany = (v: string | null) => v ? formatCnpj(v) : '—'
+  const fmtAddr = (c: Company) => [c.city, c.state].filter(Boolean).join(' / ') || '—'
+
+  const typeBadge = (type: string | null) =>
+    type === 'FILIAL'
+      ? <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">Filial</span>
+      : <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Matriz</span>
+
+  const activeBadge = (active: boolean) =>
+    active
+      ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">Ativa</span>
+      : <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">Inativa</span>
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{companies.length} empresa(s) cadastrada(s)</p>
+      {/* Cabeçalho */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nome, CNPJ, código, município..."
+            className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400" />
+        </div>
         <button onClick={openNew}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors shrink-0">
           <Plus className="w-3.5 h-3.5" /> Nova empresa
         </button>
       </div>
 
-      {showForm && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
-          <p className="text-sm font-semibold text-slate-700">{editing ? 'Editar empresa' : 'Nova empresa'}</p>
-          {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-              {formError}
-            </div>
-          )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-slate-500 block mb-1">Nome *</label>
-              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                className={inputClass} placeholder="Nome da empresa" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">CNPJ</label>
-              <input
-                value={form.cnpj}
-                onChange={e => { setFormError(''); setForm(p => ({ ...p, cnpj: formatCnpj(e.target.value) })) }}
-                className={inputClass}
-                placeholder="00.000.000/0000-00"
-                inputMode="numeric"
-                maxLength={18}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Segmento</label>
-              <input value={form.segment} onChange={e => setForm(p => ({ ...p, segment: e.target.value }))}
-                className={inputClass} placeholder="Comércio, Indústria, Serviços..." />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-slate-500 block mb-1">Observações</label>
-              <input value={form.observations} onChange={e => setForm(p => ({ ...p, observations: e.target.value }))}
-                className={inputClass} />
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
-            <button onClick={save} disabled={saving || !form.name.trim() || !isValidOptionalCnpj(form.cnpj)}
-              className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              {editing ? 'Salvar' : 'Adicionar'}
-            </button>
-          </div>
+      {/* Lista */}
+      {loading ? (
+        <div className="flex justify-center py-12"><Spin className="w-5 h-5 animate-spin text-slate-400" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 text-sm">
+          <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>{search ? 'Nenhuma empresa encontrada.' : 'Nenhuma empresa cadastrada.'}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(c => {
+            const branches = companies.filter(b => b.parentCompanyId === c.id)
+            const isMatrix = c.establishmentType !== 'FILIAL'
+            const isOpen   = expanded[c.id]
+
+            return (
+              <div key={c.id} className={cn(
+                "rounded-xl border bg-white transition-all",
+                c.active ? "border-slate-200" : "border-slate-100 opacity-70"
+              )}>
+                {/* Linha principal */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  {/* Código */}
+                  <div className="shrink-0">
+                    <span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                      {c.code ?? '—'}
+                    </span>
+                  </div>
+
+                  {/* Ícone */}
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                    isMatrix ? "bg-blue-100" : "bg-indigo-50"
+                  )}>
+                    <Building2 className={cn("w-4 h-4", isMatrix ? "text-blue-600" : "text-indigo-500")} />
+                  </div>
+
+                  {/* Nomes */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+                      {typeBadge(c.establishmentType)}
+                      {activeBadge(c.active)}
+                    </div>
+                    {c.tradeName && <p className="text-xs text-slate-400 truncate">{c.tradeName}</p>}
+                    {c.parentName && (
+                      <p className="text-xs text-indigo-500">
+                        Matriz: {c.parentCode ? `${c.parentCode} – ` : ''}{c.parentName}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Infos rápidas */}
+                  <div className="hidden sm:flex flex-col items-end gap-0.5 shrink-0">
+                    <p className="text-xs text-slate-500 font-mono">{fmtCnpjCompany(c.cnpj)}</p>
+                    <p className="text-xs text-slate-400">{fmtAddr(c)}</p>
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEdit(c)}
+                      title="Editar"
+                      className="text-slate-400 hover:text-blue-600 p-1.5 rounded transition-colors">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => toggleActive(c)}
+                      title={c.active ? 'Inativar' : 'Reativar'}
+                      className={cn(
+                        "p-1.5 rounded transition-colors text-xs",
+                        c.active ? "text-green-600 hover:text-red-500" : "text-slate-400 hover:text-green-600"
+                      )}>
+                      {c.active ? '✓' : '○'}
+                    </button>
+                    {isMatrix && branches.length > 0 && (
+                      <button
+                        onClick={() => setExpanded(p => ({ ...p, [c.id]: !isOpen }))}
+                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded transition-colors"
+                        title={isOpen ? 'Ocultar filiais' : 'Ver filiais'}>
+                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isOpen && "rotate-180")} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filiais (expansível) */}
+                {isMatrix && isOpen && branches.length > 0 && (
+                  <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2 space-y-1.5 rounded-b-xl">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                      Filiais vinculadas ({branches.length})
+                    </p>
+                    {branches.map(b => (
+                      <div key={b.id} className="flex items-center gap-3 py-1">
+                        <span className="font-mono text-xs text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {b.code ?? '—'}
+                        </span>
+                        <p className="flex-1 text-xs text-slate-700 font-medium">{b.name}</p>
+                        {activeBadge(b.active)}
+                        <button onClick={() => openEdit(b)}
+                          className="text-slate-400 hover:text-blue-600 p-1 transition-colors">
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Resumo rápido (mobile) */}
+                <div className="sm:hidden flex items-center gap-3 px-4 py-2 border-t border-slate-50 text-xs text-slate-400">
+                  <span className="font-mono">{fmtCnpjCompany(c.cnpj)}</span>
+                  <span>{fmtAddr(c)}</span>
+                </div>
+              </div>
+            )
+          })}
+          <p className="text-xs text-slate-400 text-center pt-1">
+            {companies.filter(c => c.establishmentType !== 'FILIAL').length} matriz(es) ·{' '}
+            {companies.filter(c => c.establishmentType === 'FILIAL').length} filial(ais)
+          </p>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-8"><Spin className="w-5 h-5 animate-spin text-slate-400" /></div>
-      ) : companies.length === 0 ? (
-        <div className="text-center py-12 text-slate-400 text-sm">
-          <Building2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
-          <p>Nenhuma empresa cadastrada.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {companies.map(c => (
-            <div key={c.id} className={cn("rounded-xl border bg-white p-4", c.active ? "border-slate-200" : "border-slate-100 opacity-60")}>
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
-                    <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">{c.name}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(c)} className="text-slate-400 hover:text-blue-600 p-1 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                </div>
-              </div>
-              {c.cnpj && <p className="text-xs text-slate-400 mb-1">CNPJ: {formatCnpj(c.cnpj)}</p>}
-              {c.segment && <span className="inline-block text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{c.segment}</span>}
-              <button onClick={() => toggleActive(c)}
-                className={cn("mt-3 text-xs px-2 py-1 rounded-full border transition-colors",
-                  c.active ? "text-green-600 bg-green-50 border-green-200 hover:bg-green-100" : "text-slate-400 bg-slate-50 border-slate-200 hover:bg-slate-100")}>
-                {c.active ? 'Ativa' : 'Inativa'}
-              </button>
-            </div>
-          ))}
-        </div>
+      {/* Modal do formulário */}
+      {showForm && (
+        <Modal
+          title={editing ? `Editar — ${editing.code ? editing.code + ' – ' : ''}${editing.name}` : 'Nova Empresa'}
+          onClose={() => setShowForm(false)}
+        >
+          <CompanyForm
+            editing={editing}
+            matrices={matrices}
+            onSave={() => { setShowForm(false); load() }}
+            onCancel={() => setShowForm(false)}
+          />
+        </Modal>
       )}
     </div>
   )
@@ -1946,36 +2351,72 @@ const DIM_BAND: Record<string, { bar: string; bg: string; border: string; text: 
   critical: { bar: 'bg-red-600',    bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700',    label: 'Sobrecarga Crítica'},
 }
 
+const INE_BAND: Record<string, { bg: string; border: string; text: string }> = {
+  green:    { bg: 'bg-green-50',  border: 'border-green-200', text: 'text-green-700'  },
+  blue:     { bg: 'bg-blue-50',   border: 'border-blue-200',  text: 'text-blue-700'   },
+  yellow:   { bg: 'bg-amber-50',  border: 'border-amber-200', text: 'text-amber-700'  },
+  orange:   { bg: 'bg-orange-50', border: 'border-orange-200',text: 'text-orange-700' },
+  critical: { bg: 'bg-red-50',    border: 'border-red-200',   text: 'text-red-700'    },
+}
+
+const BREAKDOWN_COLORS: Record<string, string> = {
+  base: 'bg-slate-400', employees: 'bg-blue-500', movements: 'bg-cyan-500',
+  complexity: 'bg-violet-500', manual: 'bg-orange-500', unions: 'bg-amber-400',
+  processes: 'bg-green-500', critical: 'bg-red-500',
+}
+
+interface DimINE { analysts: number; assistants: number; label: string; situation: string; color: string }
+interface DimBreakdownItem { key: string; label: string; points: number }
+interface DimLinkBreakdown {
+  companyId: string; companyName: string; memberRole: string | null
+  score: number; headcount: number; processCount: number
+  ine: DimINE; breakdown: DimBreakdownItem[]
+}
 interface DimMember {
-  id: string; name: string; role: string; sector: string | null
+  id: string; name: string; role: string; sector: string | null; unit: string | null
   companyCount: number; totalHeadcount: number; totalProcesses: number
-  totalScore: number; capacityPct: number; band: string; bandLabel: string
-  linkBreakdown: { companyId: string; companyName: string; score: number }[]
+  totalScore: number; capacityPct: number; band: string; bandLabel: string; hourBalance: number
+  linkBreakdown: DimLinkBreakdown[]
 }
 interface DimResult {
-  config: {
-    weightEmployee: number; weightCompany: number; weightProcess: number
-    weightVolume: number; weightComplexity: number; weightManual: number; weightCritical: number
-    capacityRef: number; bandGreen: number; bandBlue: number; bandYellow: number; bandOrange: number
-  }
+  bandConfig: { bandGreen: number; bandBlue: number; bandYellow: number; bandOrange: number }
+  capacityRef: number
   summary: {
-    totalMembers: number; totalHeadcount: number; avgCapacity: number
+    totalMembers: number; totalHeadcount: number; avgCapacity: number; avgScore: number
     bandCounts: Record<string, number>
   }
   members: DimMember[]
+  ranked: DimMember[]
+}
+
+interface SimForm {
+  memberId: string; headcount: number; admissions: number; terminations: number
+  complexity: string; automationLevel: string; processes: number; payrollType: string
+}
+
+interface SimResult {
+  currentScore: number; newScore: number; delta: number; newBand: string; newBandLabel: string
 }
 
 function TabDimensionamento() {
-  const [data, setData] = useState<DimResult | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [showConfig, setShowConfig] = useState(false)
+  const [data, setData]               = useState<DimResult | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [view, setView]               = useState<'ranking' | 'cards'>('ranking')
+  const [expanded, setExpanded]       = useState<Record<string, boolean>>({})
+  const [expandedCo, setExpandedCo]   = useState<Record<string, boolean>>({})
+  const [showConfig, setShowConfig]   = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
-  const [configForm, setConfigForm] = useState<Record<string, string>>({})
-  const [aiContent, setAiContent] = useState<string | null>(null)
-  const [aiPowered, setAiPowered] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [showAI, setShowAI] = useState(false)
+  const [configForm, setConfigForm]   = useState<Record<string, string>>({})
+  const [aiContent, setAiContent]     = useState<string | null>(null)
+  const [aiPowered, setAiPowered]     = useState(false)
+  const [aiLoading, setAiLoading]     = useState(false)
+  const [showAI, setShowAI]           = useState(false)
+  const [showSim, setShowSim]         = useState(false)
+  const [simForm, setSimForm]         = useState<SimForm>({
+    memberId: '', headcount: 5, admissions: 0, terminations: 0,
+    complexity: 'MEDIA', automationLevel: 'MEDIA', processes: 1, payrollType: 'FIXA',
+  })
+  const [simResult, setSimResult] = useState<SimResult | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1984,18 +2425,11 @@ function TabDimensionamento() {
       const d: DimResult = await res.json()
       setData(d)
       setConfigForm({
-        weightEmployee: d.config.weightEmployee.toString(),
-        weightCompany: d.config.weightCompany.toString(),
-        weightProcess: d.config.weightProcess.toString(),
-        weightVolume: d.config.weightVolume.toString(),
-        weightComplexity: d.config.weightComplexity.toString(),
-        weightManual: d.config.weightManual.toString(),
-        weightCritical: d.config.weightCritical.toString(),
-        capacityRef: d.config.capacityRef.toString(),
-        bandGreen: d.config.bandGreen.toString(),
-        bandBlue: d.config.bandBlue.toString(),
-        bandYellow: d.config.bandYellow.toString(),
-        bandOrange: d.config.bandOrange.toString(),
+        capacityRef: d.capacityRef.toString(),
+        bandGreen:   d.bandConfig.bandGreen.toString(),
+        bandBlue:    d.bandConfig.bandBlue.toString(),
+        bandYellow:  d.bandConfig.bandYellow.toString(),
+        bandOrange:  d.bandConfig.bandOrange.toString(),
       })
     }
     setLoading(false)
@@ -2010,7 +2444,7 @@ function TabDimensionamento() {
     const res = await fetch('/api/gestao-equipe/dimensionamento/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: data.summary, members: data.members, config: data.config }),
+      body: JSON.stringify({ summary: data.summary, members: data.members, bandConfig: data.bandConfig, capacityRef: data.capacityRef }),
     })
     if (res.ok) {
       const r = await res.json()
@@ -2043,6 +2477,43 @@ function TabDimensionamento() {
     setSavingConfig(false)
   }
 
+  function runSimulator() {
+    if (!data || !simForm.memberId) return
+    const member = data.members.find(m => m.id === simForm.memberId)
+    if (!member) return
+    const bc = data.bandConfig
+    const capRef = data.capacityRef
+
+    // Nova fórmula: cargaBase × fatorPapel × fatorComplexidade × fatorAutomação
+    const FATOR_PAPEL:        Record<string, number> = { RESPONSAVEL: 1.00, CORRESPONSAVEL: 0.70, APOIO: 0.45, CONFERENCIA: 0.25 }
+    const FATOR_COMPLEXIDADE: Record<string, number> = { BAIXA: 0.85, MEDIA: 1.00, ALTA: 1.20, CRITICA: 1.40, MUITO_ALTA: 1.40 }
+    const FATOR_AUTOMACAO:    Record<string, number> = { ALTA: 0.80, MEDIA: 1.00, BAIXA: 1.20, MANUAL: 1.35 }
+
+    const cargaBase = 5
+      + simForm.headcount   * 0.10
+      + simForm.admissions  * 1.50
+      + simForm.terminations * 2.00
+      + 1 * 1.50  // 1 estabelecimento padrão
+
+    const fp = FATOR_PAPEL[simForm.memberId ? 'RESPONSAVEL' : 'RESPONSAVEL'] ?? 1.00  // usa papel padrão no sim
+    const fc = FATOR_COMPLEXIDADE[simForm.complexity]    ?? 1.00
+    const fa = FATOR_AUTOMACAO[simForm.automationLevel]  ?? 1.00
+
+    const delta     = Math.round(cargaBase * fp * fc * fa * 100) / 100
+    const newScore  = Math.round((member.totalScore + delta) * 100) / 100
+    const newPct    = capRef > 0 ? (newScore / capRef) * 100 : 0
+
+    const newBand = newPct > bc.bandOrange ? 'critical' :
+      newPct > bc.bandYellow ? 'orange' :
+      newPct > bc.bandBlue   ? 'yellow' :
+      newPct > bc.bandGreen  ? 'blue' : 'green'
+    const SIM_BAND_LABELS: Record<string, string> = {
+      green: 'Capacidade disponível', blue: 'Capacidade adequada', yellow: 'Atenção',
+      orange: 'Sobrecarga', critical: 'Sobrecarga Crítica',
+    }
+    setSimResult({ currentScore: member.totalScore, newScore, delta, newBand, newBandLabel: SIM_BAND_LABELS[newBand] })
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center py-20">
       <Spin className="w-6 h-6 animate-spin text-slate-400" />
@@ -2050,12 +2521,13 @@ function TabDimensionamento() {
   )
   if (!data) return <p className="text-sm text-slate-400 text-center py-12">Erro ao carregar dados.</p>
 
-  const { summary, members, config } = data
+  const { summary, members, ranked, bandConfig: config, capacityRef } = data
   const bandOrder = ['green', 'blue', 'yellow', 'orange', 'critical'] as const
 
   return (
-    <div className="space-y-6">
-      {/* Resumo da equipe */}
+    <div className="space-y-5">
+
+      {/* ── KPI tiles ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
           <p className="text-2xl font-bold text-blue-600">{summary.totalMembers}</p>
@@ -2071,11 +2543,11 @@ function TabDimensionamento() {
           summary.avgCapacity <= config.bandYellow ? "bg-amber-50 border-amber-200" :
           summary.avgCapacity <= config.bandOrange ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"
         )}>
-          <p className="text-2xl font-bold text-slate-700">{summary.avgCapacity}%</p>
-          <p className="text-xs text-slate-400 mt-0.5">Capacidade Média</p>
+          <p className="text-2xl font-bold text-slate-700">{summary.avgScore} <span className="text-base font-normal text-slate-400">pts</span></p>
+          <p className="text-xs text-slate-400 mt-0.5">ICO Médio · {summary.avgCapacity}%</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-slate-400 mb-2">Distribuição</p>
+          <p className="text-xs text-slate-400 mb-2">Distribuição situação</p>
           <div className="space-y-1">
             {bandOrder.map(b => {
               const count = summary.bandCounts[b] ?? 0
@@ -2093,21 +2565,38 @@ function TabDimensionamento() {
         </div>
       </div>
 
-      {/* Header + Config */}
+      {/* ── Toolbar ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm font-semibold text-slate-700">Colaboradores — Análise de Capacidade</p>
+        {/* View toggles */}
+        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+          <button onClick={() => setView('ranking')}
+            className={cn("text-xs px-3 py-1.5 rounded-md font-medium transition-colors",
+              view === 'ranking' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+            🏆 Ranking
+          </button>
+          <button onClick={() => setView('cards')}
+            className={cn("text-xs px-3 py-1.5 rounded-md font-medium transition-colors",
+              view === 'cards' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+            📋 Carteiras
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={load} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors">
             <RefreshCw className="w-3.5 h-3.5" /> Recalcular
           </button>
+          <button onClick={() => { setShowSim(v => !v); setSimResult(null) }}
+            className={cn("inline-flex items-center gap-1 text-xs border rounded-lg px-2.5 py-1.5 transition-colors",
+              showSim ? "bg-emerald-600 text-white border-emerald-600" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
+            🧮 Simulador
+          </button>
           <button onClick={() => setShowConfig(v => !v)}
             className="inline-flex items-center gap-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 transition-colors">
-            <Filter className="w-3.5 h-3.5" /> {showConfig ? 'Fechar config' : 'Configurar pesos'}
+            <Filter className="w-3.5 h-3.5" /> Pesos
           </button>
           <button onClick={analyzeAI} disabled={aiLoading}
             className="inline-flex items-center gap-1 text-xs bg-purple-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-purple-700 disabled:opacity-60 transition-colors">
             {aiLoading ? <Spin className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Analisar com IA
+            Analisar IA
           </button>
           <div className="relative group">
             <button className="inline-flex items-center gap-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 transition-colors">
@@ -2125,29 +2614,118 @@ function TabDimensionamento() {
         </div>
       </div>
 
-      {/* Config panel */}
+      {/* ── Simulador ─────────────────────────────────────────────────────────── */}
+      {showSim && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">🧮 Simular inclusão de empresa</p>
+            <button onClick={() => setShowSim(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="col-span-2 sm:col-span-4">
+              <label className="text-xs text-slate-500 block mb-1">Colaborador</label>
+              <select value={simForm.memberId}
+                onChange={e => { setSimForm(p => ({ ...p, memberId: e.target.value })); setSimResult(null) }}
+                className={inputClass}>
+                <option value="">— selecione —</option>
+                {members.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.totalScore} pts)</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Empregados</label>
+              <input type="number" min={0} value={simForm.headcount}
+                onChange={e => setSimForm(p => ({ ...p, headcount: +e.target.value }))}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Admissões/mês</label>
+              <input type="number" min={0} value={simForm.admissions}
+                onChange={e => setSimForm(p => ({ ...p, admissions: +e.target.value }))}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Rescisões/mês</label>
+              <input type="number" min={0} value={simForm.terminations}
+                onChange={e => setSimForm(p => ({ ...p, terminations: +e.target.value }))}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Processos</label>
+              <input type="number" min={0} value={simForm.processes}
+                onChange={e => setSimForm(p => ({ ...p, processes: +e.target.value }))}
+                className={inputClass} />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Complexidade</label>
+              <select value={simForm.complexity}
+                onChange={e => setSimForm(p => ({ ...p, complexity: e.target.value }))}
+                className={inputClass}>
+                <option value="BAIXA">Baixa</option>
+                <option value="MEDIA">Média</option>
+                <option value="ALTA">Alta</option>
+                <option value="MUITO_ALTA">Muito alta</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Automação</label>
+              <select value={simForm.automationLevel}
+                onChange={e => setSimForm(p => ({ ...p, automationLevel: e.target.value }))}
+                className={inputClass}>
+                <option value="ALTA">Alta</option>
+                <option value="MEDIA">Média</option>
+                <option value="BAIXA">Baixa</option>
+                <option value="MANUAL">Manual</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Tipo de folha</label>
+              <select value={simForm.payrollType}
+                onChange={e => setSimForm(p => ({ ...p, payrollType: e.target.value }))}
+                className={inputClass}>
+                <option value="FIXA">Fixa</option>
+                <option value="COMISSAO">Comissão</option>
+                <option value="PRODUCAO">Produção</option>
+                <option value="HORISTA">Horista</option>
+                <option value="MISTA">Mista</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={runSimulator} disabled={!simForm.memberId}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-40 transition-colors">
+              <BarChart2 className="w-3.5 h-3.5" /> Calcular impacto
+            </button>
+            {simResult && (
+              <div className={cn("flex items-center gap-3 px-4 py-2 rounded-lg border text-xs font-medium", DIM_BAND[simResult.newBand]?.bg, DIM_BAND[simResult.newBand]?.border)}>
+                <span className="text-slate-500">ICO atual: <strong className="text-slate-700">{simResult.currentScore} pts</strong></span>
+                <span className="text-slate-400">→</span>
+                <span className="text-slate-500">Resultante: <strong className={DIM_BAND[simResult.newBand]?.text}>{simResult.newScore} pts</strong></span>
+                <span className={cn("px-2 py-0.5 rounded-full text-xs", DIM_BAND[simResult.newBand]?.bg, DIM_BAND[simResult.newBand]?.text, DIM_BAND[simResult.newBand]?.border, "border")}>
+                  +{simResult.delta} pts · {simResult.newBandLabel}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Config panel ──────────────────────────────────────────────────────── */}
       {showConfig && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
-          <p className="text-sm font-semibold text-slate-700">Configuração dos Pesos e Faixas</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { key: 'weightEmployee',   label: 'Peso: Empregado'  },
-              { key: 'weightCompany',    label: 'Peso: Empresa'    },
-              { key: 'weightProcess',    label: 'Peso: Processo'   },
-              { key: 'weightVolume',     label: 'Peso: Volume'     },
-              { key: 'weightComplexity', label: 'Peso: Complexidade'},
-              { key: 'weightManual',     label: 'Bônus: Manual'    },
-              { key: 'weightCritical',   label: 'Bônus: Crítico'   },
-              { key: 'capacityRef',      label: 'Referência (pts)' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
-                <input type="number" step="0.1" min="0"
-                  value={configForm[f.key] ?? ''}
-                  onChange={e => setConfigForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={inputClass} />
-              </div>
-            ))}
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Configuração dos Pesos e Faixas</p>
+            <button onClick={() => setShowConfig(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Referência (pts)</label>
+              <input type="number" step="1" min="1"
+                value={configForm['capacityRef'] ?? ''}
+                onChange={e => setConfigForm(p => ({ ...p, capacityRef: e.target.value }))}
+                className={inputClass} />
+            </div>
           </div>
           <p className="text-xs font-medium text-slate-500 pt-1">Faixas (%) — limite superior de cada faixa</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -2177,7 +2755,7 @@ function TabDimensionamento() {
         </div>
       )}
 
-      {/* AI Analysis Panel */}
+      {/* ── AI Analysis Panel ─────────────────────────────────────────────────── */}
       {showAI && (
         <div className="rounded-xl border border-purple-200 bg-purple-50/30 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-purple-200 bg-purple-50">
@@ -2207,34 +2785,116 @@ function TabDimensionamento() {
         </div>
       )}
 
-      {/* Members list */}
-      {members.length === 0 ? (
+      {/* ── Empty state ───────────────────────────────────────────────────────── */}
+      {members.length === 0 && (
         <div className="text-center py-12 text-slate-400 text-sm">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
           <p>Nenhum colaborador ativo com carteira de empresas.</p>
         </div>
-      ) : (
+      )}
+
+      {/* ── VIEW: Ranking ─────────────────────────────────────────────────────── */}
+      {members.length > 0 && view === 'ranking' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-600">Ranking Comparativo — ICO Decrescente</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left px-4 py-2.5 text-slate-400 font-medium w-6">#</th>
+                  <th className="text-left px-4 py-2.5 text-slate-400 font-medium">Colaborador</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-right">ICO (pts)</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-right">%</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-center">Situação</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-right">Empresas</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-right">Empregados</th>
+                  <th className="px-4 py-2.5 text-slate-400 font-medium text-right">B.Horas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((m, idx) => {
+                  const c = DIM_BAND[m.band] ?? DIM_BAND.green
+                  const barW = Math.min((m.capacityPct / Math.max(config.bandOrange * 1.2, 100)) * 100, 100)
+                  return (
+                    <tr key={m.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3 text-slate-300 font-medium">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {m.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-800 whitespace-nowrap">{m.name}</p>
+                            <p className="text-slate-400">{m.role}{m.sector ? ` · ${m.sector}` : ''}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={cn("font-bold text-sm", c.text)}>{m.totalScore}</span>
+                          <div className="w-20 h-1 rounded-full bg-slate-100 overflow-hidden">
+                            <div className={cn("h-1 rounded-full", c.bar)} style={{ width: `${barW}%` }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500">{m.capacityPct}%</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", c.bg, c.border, c.text)}>
+                          {m.bandLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-600">{m.companyCount}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{m.totalHeadcount}</td>
+                      <td className="px-4 py-3 text-right">
+                        {m.hourBalance !== 0 ? (
+                          <span className={cn("font-medium", m.hourBalance > 0 ? "text-blue-600" : "text-red-500")}>
+                            {m.hourBalance > 0 ? '+' : ''}{m.hourBalance}h
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW: Cards ───────────────────────────────────────────────────────── */}
+      {members.length > 0 && view === 'cards' && (
         <div className="space-y-3">
           {members.map(m => {
-            const c = DIM_BAND[m.band] ?? DIM_BAND.green
-            const isExp = expanded[m.id]
-            const barW = Math.min((m.capacityPct / (config.bandOrange * 1.1)) * 100, 100)
+            const c    = DIM_BAND[m.band] ?? DIM_BAND.green
+            const isEx = expanded[m.id]
+            const barW = Math.min((m.capacityPct / Math.max(config.bandOrange * 1.2, 100)) * 100, 100)
+            const maxPts = Math.max(...m.linkBreakdown.map(l => l.score), 1)
+
             return (
               <div key={m.id} className={cn("rounded-xl border bg-white overflow-hidden", c.border)}>
-                <button className="w-full text-left px-4 py-3 flex items-center gap-4"
+                {/* Member header */}
+                <button className="w-full text-left px-4 py-3 flex items-center gap-3"
                   onClick={() => setExpanded(p => ({ ...p, [m.id]: !p[m.id] }))}>
-                  {/* Avatar */}
                   <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-white text-sm font-bold shrink-0">
                     {m.name.charAt(0)}
                   </div>
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
                       <p className="text-sm font-semibold text-slate-800 truncate">{m.name}</p>
-                      <span className={cn("text-sm font-bold shrink-0", c.text)}>{m.capacityPct}%</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {m.hourBalance !== 0 && (
+                          <span className={cn("text-xs font-medium", m.hourBalance > 0 ? "text-blue-600" : "text-red-500")}>
+                            {m.hourBalance > 0 ? '+' : ''}{m.hourBalance}h
+                          </span>
+                        )}
+                        <span className={cn("text-sm font-bold", c.text)}>{m.totalScore} pts</span>
+                        <span className="text-xs text-slate-400">/ {m.capacityPct}%</span>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-400 mb-1.5">{m.role}{m.sector ? ` · ${m.sector}` : ''}</p>
-                    {/* Bar */}
                     <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
                       <div className={cn("h-1.5 rounded-full transition-all", c.bar)} style={{ width: `${barW}%` }} />
                     </div>
@@ -2242,32 +2902,85 @@ function TabDimensionamento() {
                       <span className={cn("font-medium", c.text)}>{m.bandLabel}</span>
                       <span>{m.companyCount} empresa(s)</span>
                       <span>{m.totalHeadcount} empregado(s)</span>
-                      {m.totalProcesses > 0 && <span>{m.totalProcesses} processo(s)</span>}
                     </div>
                   </div>
-                  <ChevronDown className={cn("w-4 h-4 text-slate-300 shrink-0 transition-transform", isExp && "rotate-180")} />
+                  <ChevronDown className={cn("w-4 h-4 text-slate-300 shrink-0 transition-transform", isEx && "rotate-180")} />
                 </button>
 
-                {isExp && m.linkBreakdown.length > 0 && (
-                  <div className={cn("px-4 pb-3 pt-1 border-t", c.border, c.bg)}>
-                    <p className="text-xs font-medium text-slate-400 mb-2">Contribuição por empresa (score)</p>
-                    <div className="space-y-1.5">
-                      {m.linkBreakdown.map(l => {
-                        const pct = m.totalScore > 0 ? (l.score / m.totalScore) * 100 : 0
-                        return (
-                          <div key={l.companyId} className="flex items-center gap-2 text-xs">
-                            <span className="truncate flex-1 text-slate-600">{l.companyName}</span>
-                            <div className="w-24 h-1.5 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                              <div className={cn("h-1.5 rounded-full", c.bar)} style={{ width: `${pct}%` }} />
+                {/* Company cards expanded */}
+                {isEx && m.linkBreakdown.length > 0 && (
+                  <div className={cn("border-t p-4 space-y-3", c.border, c.bg)}>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Carteira de empresas</p>
+                    {m.linkBreakdown.map(l => {
+                      const ineC = INE_BAND[l.ine.color] ?? INE_BAND.green
+                      const coKey = `${m.id}-${l.companyId}`
+                      const isCoEx = expandedCo[coKey]
+                      const maxBdPts = Math.max(...l.breakdown.map(b => b.points), 1)
+                      return (
+                        <div key={l.companyId} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                          <button className="w-full text-left px-3 py-2.5 flex items-center gap-3"
+                            onClick={() => setExpandedCo(p => ({ ...p, [coKey]: !p[coKey] }))}>
+                            <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="text-xs font-semibold text-slate-700 truncate">{l.companyName}</p>
+                                <span className="text-xs font-bold text-slate-600 shrink-0">{l.score} pts</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                                {l.memberRole && <span className="font-medium text-slate-500">{l.memberRole}</span>}
+                                <span>{l.headcount} empreg.</span>
+                                {l.processCount > 0 && <span>{l.processCount} proc.</span>}
+                              </div>
                             </div>
-                            <span className="text-slate-500 w-12 text-right shrink-0">{l.score} pts</span>
-                          </div>
-                        )
-                      })}
-                      <div className="flex items-center gap-2 text-xs pt-1 border-t border-slate-200 mt-1">
-                        <span className="font-medium text-slate-500 flex-1">Total</span>
-                        <span className={cn("font-bold", c.text)}>{m.totalScore} pts</span>
-                      </div>
+                            {/* INE badge */}
+                            <span className={cn("text-xs px-2 py-0.5 rounded-full border font-medium shrink-0", ineC.bg, ineC.border, ineC.text)}>
+                              {l.ine.label}
+                            </span>
+                            <ChevronDown className={cn("w-3.5 h-3.5 text-slate-300 shrink-0 transition-transform", isCoEx && "rotate-180")} />
+                          </button>
+
+                          {isCoEx && (
+                            <div className="border-t border-slate-100 px-3 py-3 space-y-2 bg-slate-50/60">
+                              {/* INE detail */}
+                              <div className={cn("rounded-lg border px-3 py-2 flex items-center justify-between text-xs", ineC.bg, ineC.border)}>
+                                <div>
+                                  <p className={cn("font-semibold", ineC.text)}>INE — {l.ine.label}</p>
+                                  <p className="text-slate-500 mt-0.5">{l.ine.situation}</p>
+                                </div>
+                                <div className="text-right text-slate-500">
+                                  <p><strong>{l.ine.analysts}</strong> Analista(s)</p>
+                                  {l.ine.assistants > 0 && <p><strong>{l.ine.assistants}</strong> Assistente(s)</p>}
+                                </div>
+                              </div>
+                              {/* Breakdown bars */}
+                              <p className="text-xs font-medium text-slate-400">Composição da carga</p>
+                              <div className="space-y-1.5">
+                                {l.breakdown.map(b => (
+                                  <div key={b.key} className="flex items-center gap-2 text-xs">
+                                    <span className="text-slate-500 w-36 truncate shrink-0">{b.label}</span>
+                                    <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                      <div
+                                        className={cn("h-2 rounded-full transition-all", BREAKDOWN_COLORS[b.key] ?? 'bg-slate-400')}
+                                        style={{ width: `${(b.points / maxBdPts) * 100}%` }} />
+                                    </div>
+                                    <span className="text-slate-600 font-medium w-10 text-right shrink-0">{b.points} pts</span>
+                                  </div>
+                                ))}
+                                <div className="flex items-center gap-2 text-xs pt-1.5 border-t border-slate-200 mt-1">
+                                  <span className="text-slate-400 w-36 shrink-0">Total empresa</span>
+                                  <span className="flex-1" />
+                                  <span className="font-bold text-slate-700 w-10 text-right shrink-0">{l.score} pts</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {/* Member total */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200">
+                      <span className="font-semibold text-slate-500">ICO Total</span>
+                      <span className={cn("font-bold text-base", c.text)}>{m.totalScore} pts <span className="text-xs text-slate-400 font-normal">({m.capacityPct}%)</span></span>
                     </div>
                   </div>
                 )}
@@ -2277,8 +2990,8 @@ function TabDimensionamento() {
         </div>
       )}
 
-      {/* Disclaimer */}
-      <p className="text-xs text-slate-400 text-center pt-2">
+      {/* ── Disclaimer ────────────────────────────────────────────────────────── */}
+      <p className="text-xs text-slate-400 text-center pt-1">
         Análise indicativa. A decisão final deve considerar calendário, complexidade qualitativa e organização interna.
       </p>
     </div>
@@ -2301,10 +3014,19 @@ const TABS = [
   { id: "dimensionamento",   label: "Dimensionamento",     icon: BarChart2       },
 ]
 
+interface CurrentUser {
+  id: string; name: string; role: string
+  canViewSalary: boolean; canEditSalary: boolean; canCreateSalary: boolean
+}
+
 export function GestaoEquipeClient() {
   const [activeTab, setActiveTab] = useState("visao-geral")
   const [members, setMembers] = useState<Member[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [currentUser, setCurrentUser] = useState<CurrentUser>({
+    id: '', name: '', role: 'viewer',
+    canViewSalary: false, canEditSalary: false, canCreateSalary: false,
+  })
 
   async function loadMembers() {
     const res = await fetch("/api/gestao-equipe/members")
@@ -2314,10 +3036,17 @@ export function GestaoEquipeClient() {
     const res = await fetch("/api/gestao-equipe/summary")
     setSummary(await res.json())
   }
+  async function loadCurrentUser() {
+    try {
+      const res = await fetch("/api/me")
+      if (res.ok) setCurrentUser(await res.json())
+    } catch { /* mantém defaults */ }
+  }
 
   useEffect(() => {
     loadMembers()
     loadSummary()
+    loadCurrentUser()
   }, [])
 
   function handleTabSwitch(tab: string) {
@@ -2368,7 +3097,7 @@ export function GestaoEquipeClient() {
       {/* Content */}
       <div>
         {activeTab === "visao-geral"    && <TabVisaoGeral summary={summary} onTabSwitch={handleTabSwitch} />}
-        {activeTab === "equipe"         && <TabEquipe members={members} onRefresh={onMembersRefresh} />}
+        {activeTab === "equipe"         && <TabEquipe members={members} onRefresh={onMembersRefresh} canViewSalary={currentUser.canViewSalary} canEditSalary={currentUser.canEditSalary} canCreateSalary={currentUser.canCreateSalary} />}
         {activeTab === "feedbacks"      && <TabFeedbacks members={members} />}
         {activeTab === "direcionamento" && <TabDirecionamento members={members} />}
         {activeTab === "ferias"         && <TabFerias members={members} />}

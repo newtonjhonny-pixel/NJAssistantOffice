@@ -1,47 +1,183 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
+// â??â??â?? Auto-migração: adiciona colunas sem migration â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
-
-function normalizeCnpj(value: unknown) {
-  if (value == null || value === '') return null
-  const digits = String(value).replace(/\D/g, '').slice(0, 14)
-  return digits || null
+async function ensureSchema() {
+  const companyCols = [
+    `ALTER TABLE "ClientCompany" ADD COLUMN "code"              TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "tradeName"         TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "establishmentType" TEXT DEFAULT 'MATRIZ'`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "parentCompanyId"   TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "zipCode"           TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "street"            TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "number"            TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "complement"        TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "neighborhood"      TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "city"              TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "state"             TEXT`,
+    `ALTER TABLE "ClientCompany" ADD COLUMN "country"           TEXT DEFAULT 'Brasil'`,
+  ]
+  const memberCols = [
+    `ALTER TABLE "TeamMember" ADD COLUMN "companyId" TEXT`,
+  ]
+  for (const sql of [...companyCols, ...memberCols]) {
+    try { await prisma.$executeRawUnsafe(sql) } catch { /* já existe */ }
+  }
 }
 
-function validateCnpj(value: string | null) {
-  return !value || value.length === 14
+// â??â??â?? CNPJ â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+
+function onlyDigits(s: string) { return s.replace(/\D/g, '') }
+
+function validateCnpj(raw: string | null): boolean {
+  if (!raw) return true          // campo opcional
+  const d = onlyDigits(raw)
+  if (d.length !== 14) return false
+  if (/^(\d)\1+$/.test(d)) return false  // todos iguais (00000000000000â?¦)
+  const calc = (d: string, len: number) => {
+    let s = 0, p = len - 7
+    for (let i = len; i >= 1; i--) {
+      s += parseInt(d[len - i]) * p--
+      if (p < 2) p = 9
+    }
+    return s % 11 < 2 ? 0 : 11 - (s % 11)
+  }
+  return calc(d, 12) === parseInt(d[12]) && calc(d, 13) === parseInt(d[13])
 }
+
+// â??â??â?? GET /api/gestao-equipe/companies â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
 
 export async function GET() {
   try {
-    const rows = await prisma.$queryRaw<any[]>`
-      SELECT * FROM "ClientCompany" ORDER BY "name" ASC
-    `
-    return NextResponse.json(rows)
+    await ensureSchema()
+    const rows = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT
+        c.*,
+        p."name" AS "parentName",
+        p."code" AS "parentCode",
+        (SELECT COUNT(*) FROM "ClientCompany" f WHERE f."parentCompanyId" = c."id") AS "branchCount"
+      FROM "ClientCompany" c
+      LEFT JOIN "ClientCompany" p ON p."id" = c."parentCompanyId"
+      ORDER BY
+        CASE WHEN c."establishmentType" = 'MATRIZ' THEN 0 ELSE 1 END ASC,
+        COALESCE(c."code", 'ZZZZZ') ASC,
+        c."name" ASC
+    `)
+    // BigInt do COUNT(*) não é serializável; converter para Number
+    const normalized = rows.map(r => ({ ...r, branchCount: Number(r.branchCount ?? 0) }))
+    return NextResponse.json(normalized)
   } catch (e) {
     console.error('[companies GET]', e)
     return NextResponse.json({ error: 'Erro ao listar empresas' }, { status: 500 })
   }
 }
 
+// â??â??â?? POST /api/gestao-equipe/companies â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+
 export async function POST(req: Request) {
   try {
+    await ensureSchema()
     const body = await req.json()
-    const { name, segment, observations } = body
-    const cnpj = normalizeCnpj(body.cnpj)
-    if (!name?.trim()) return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 })
-    if (!validateCnpj(cnpj)) return NextResponse.json({ error: 'Informe um CNPJ válido com 14 dígitos.' }, { status: 400 })
+
+    const {
+      code, name, tradeName, segment, observations,
+      establishmentType, parentCompanyId,
+      zipCode, street, number, complement, neighborhood, city, state, country,
+    } = body
+    const cnpj = body.cnpj ? onlyDigits(String(body.cnpj)) : null
+
+    // â??â?? Validações obrigatórias â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+    if (!code?.trim())
+      return NextResponse.json({ error: 'Código da empresa é obrigatório.' }, { status: 400 })
+    if (!/^\d{4}$/.test(code.trim()))
+      return NextResponse.json({ error: 'Código deve conter exatamente 4 dígitos numéricos.' }, { status: 400 })
+    if (!name?.trim())
+      return NextResponse.json({ error: 'Razão social é obrigatória.' }, { status: 400 })
+    if (!establishmentType)
+      return NextResponse.json({ error: 'Tipo de estabelecimento é obrigatório.' }, { status: 400 })
+    if (establishmentType === 'FILIAL' && !parentCompanyId)
+      return NextResponse.json({ error: 'Filial deve ter uma empresa matriz selecionada.' }, { status: 400 })
+    if (!zipCode?.trim())
+      return NextResponse.json({ error: 'CEP é obrigatório.' }, { status: 400 })
+    if (!street?.trim())
+      return NextResponse.json({ error: 'Logradouro é obrigatório.' }, { status: 400 })
+    if (!neighborhood?.trim())
+      return NextResponse.json({ error: 'Bairro é obrigatório.' }, { status: 400 })
+    if (!city?.trim())
+      return NextResponse.json({ error: 'Município é obrigatório.' }, { status: 400 })
+    if (!state?.trim())
+      return NextResponse.json({ error: 'UF é obrigatória.' }, { status: 400 })
+
+    // â??â?? CNPJ â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+    if (cnpj && !validateCnpj(cnpj))
+      return NextResponse.json({ error: 'CNPJ inválido â?? verifique os dígitos verificadores.' }, { status: 400 })
+
+    // â??â?? Código duplicado â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+    const codeCheck = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "id" FROM "ClientCompany" WHERE "code" = ?`, code.trim()
+    )
+    if (codeCheck.length)
+      return NextResponse.json({ error: `O código ${code} já está cadastrado para outra empresa.` }, { status: 400 })
+
+    // â??â?? CNPJ duplicado â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+    if (cnpj) {
+      const cnpjCheck = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT "id" FROM "ClientCompany" WHERE "cnpj" = ?`, cnpj
+      )
+      if (cnpjCheck.length)
+        return NextResponse.json({ error: 'Este CNPJ já está cadastrado para outra empresa.' }, { status: 400 })
+    }
+
+    // â??â?? Validação da matriz â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??â??
+    if (parentCompanyId) {
+      const parentRow = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT "establishmentType", "active" FROM "ClientCompany" WHERE "id" = ?`, parentCompanyId
+      )
+      if (!parentRow.length)
+        return NextResponse.json({ error: 'Empresa matriz não encontrada.' }, { status: 400 })
+      if (parentRow[0].establishmentType !== 'MATRIZ')
+        return NextResponse.json({ error: 'A empresa selecionada não é do tipo Matriz.' }, { status: 400 })
+      if (!parentRow[0].active)
+        return NextResponse.json({ error: 'A empresa matriz está inativa.' }, { status: 400 })
+    }
+
     const id = randomUUID()
-    const now = new Date()
-    await prisma.$executeRaw`
-      INSERT INTO "ClientCompany" ("id","name","cnpj","segment","observations","active","createdAt","updatedAt")
-      VALUES (${id}, ${name.trim()}, ${cnpj}, ${segment ?? null}, ${observations ?? null}, true, ${now}, ${now})
-    `
-    const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "ClientCompany" WHERE "id" = ${id}`
+    const now = new Date().toISOString()
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "ClientCompany" (
+        "id","code","name","tradeName","cnpj","segment","observations",
+        "establishmentType","parentCompanyId","active",
+        "zipCode","street","number","complement","neighborhood","city","state","country",
+        "createdAt","updatedAt"
+      ) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)
+    `,
+      id,
+      code.trim(),
+      name.trim(),
+      tradeName?.trim() || null,
+      cnpj || null,
+      segment?.trim() || null,
+      observations?.trim() || null,
+      establishmentType,
+      parentCompanyId || null,
+      onlyDigits(zipCode?.trim() || '').slice(0, 8) || null,
+      street?.trim() || null,
+      number?.trim() || null,
+      complement?.trim() || null,
+      neighborhood?.trim() || null,
+      city?.trim() || null,
+      (state?.trim() || '').toUpperCase() || null,
+      country?.trim() || 'Brasil',
+      now, now
+    )
+
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM "ClientCompany" WHERE "id" = ?`, id
+    )
     return NextResponse.json(rows[0], { status: 201 })
   } catch (e) {
     console.error('[companies POST]', e)

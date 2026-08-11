@@ -577,17 +577,18 @@ model TeamMember {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  feedbacks           TeamFeedback[]
-  directions          TeamActivityDirection[]
-  vacations           TeamVacation[]
-  trainings           TeamTraining[]
-  activities          TeamActivity[]
-  history             TeamHistory[]
-  memberActivityLinks MemberActivityLink[]
-  companyLinks        MemberCompanyLink[]
-  salary              MemberSalary?
-  hourBankEntries     HourBankEntry[]
-  hourBankConfig      HourBankConfig?
+  feedbacks              TeamFeedback[]
+  directions             TeamActivityDirection[]
+  vacations              TeamVacation[]
+  trainings              TeamTraining[]
+  trainingParticipations TrainingParticipant[]
+  activities             TeamActivity[]
+  history                TeamHistory[]
+  memberActivityLinks    MemberActivityLink[]
+  companyLinks           MemberCompanyLink[]
+  salary                 MemberSalary?
+  hourBankEntries        HourBankEntry[]
+  hourBankConfig         HourBankConfig?
 }
 
 // ─── CARTEIRA DE EMPRESAS E REMUNERAÇÃO ──────────────────────────────────────
@@ -1506,4 +1507,227 @@ model PresentationTemplate {
   thumbnail   String?
   isDefault   Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+// ─── MÓDULO DE TREINAMENTOS ───────────────────────────────────────────────────
+// Unifica Treinamento Completo + Ambientação Operacional num único motor.
+// A diferença é o campo `modalidade` e `tipo`. O motor de slides (Presentation)
+// é compartilhado entre os dois via `presentationId`.
+
+model Training {
+  id            String   @id @default(cuid())
+  /// TREINAMENTO | AMBIENTACAO
+  tipo          String   @default("TREINAMENTO")
+  /// COMPLETO | SIMPLIFICADO
+  modalidade    String   @default("COMPLETO")
+  titulo        String
+  subtitulo     String?
+  objetivo      String?
+  /// Processo vinculado (reutiliza dados reais — sem duplicação)
+  processId     String?
+  /// Apresentação de slides vinculada (Presentation já existente)
+  presentationId String?
+  /// Departamento/área
+  departamento  String?
+  /// Público-alvo
+  publicoAlvo   String?
+  /// Instrutor/responsável
+  responsavel   String?
+  /// Tags para busca
+  tags          String?
+  /// Duração estimada em minutos
+  duracaoMin    Int?
+  /// RASCUNHO | ATIVO | ARQUIVADO
+  status        String   @default("RASCUNHO")
+  /// Obrigatório para onboarding
+  obrigatorio   Boolean  @default(false)
+  /// Configurações de avaliação e prontidão em JSON
+  config        String?
+  /// Conteúdo livre em JSON (módulos, aulas, passo a passo)
+  conteudo      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  modules      TrainingModule[]
+  materials    TrainingMaterial[]
+  participants TrainingParticipant[]
+  history      TrainingHistory[]
+  trailItems   TrainingTrailItem[]
+
+  @@index([tipo])
+  @@index([status])
+  @@index([processId])
+}
+
+model TrainingModule {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  ordem      Int      @default(0)
+  titulo     String
+  descricao  String?
+  /// Conteúdo rico em JSON (aulas, passos, prints, links)
+  conteudo   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  lessons TrainingLesson[]
+
+  @@index([trainingId, ordem])
+}
+
+model TrainingLesson {
+  id       String         @id @default(cuid())
+  moduleId String
+  module   TrainingModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  ordem    Int            @default(0)
+  titulo   String
+  tipo     String         @default("TEXTO") // TEXTO | VIDEO | PRINT | CHECKLIST | EXERCICIO | PRATICA
+  conteudo String?
+  duracao  Int?           // minutos
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([moduleId, ordem])
+}
+
+model TrainingMaterial {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  titulo     String
+  tipo       String   @default("LINK") // LINK | PDF | IMAGEM | VIDEO | ARQUIVO
+  url        String?
+  descricao  String?
+  createdAt  DateTime @default(now())
+
+  @@index([trainingId])
+}
+
+model TrainingParticipant {
+  id              String    @id @default(cuid())
+  trainingId      String
+  training        Training  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  memberId        String
+  member          TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// PENDENTE | EM_ANDAMENTO | CONCLUIDO | CANCELADO
+  status          String    @default("PENDENTE")
+  progresso       Int       @default(0) // 0-100
+  nota            Float?
+  dataInicio      DateTime?
+  dataConclusao   DateTime?
+  instrutorNome   String?
+  duracaoReal     Int?      // minutos reais
+  cienciaConfirmada Boolean @default(false)
+  dataCiencia     DateTime?
+  observacoes     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([trainingId, memberId])
+  @@index([memberId])
+  @@index([trainingId])
+}
+
+model TrainingHistory {
+  id         String   @id @default(cuid())
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  acao       String   // CRIACAO | EDICAO | PUBLICACAO | PARTICIPANTE_ADICIONADO | CONCLUIDO | ARQUIVADO
+  descricao  String?
+  memberId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([trainingId])
+}
+
+// ─── TRILHAS DE TREINAMENTO ───────────────────────────────────────────────────
+
+model TrainingTrail {
+  id          String   @id @default(cuid())
+  titulo      String
+  descricao   String?
+  /// Cargo recomendado (ex: "Assistente DP", "Analista DP")
+  cargo       String?
+  /// ATIVA | ARQUIVADA
+  status      String   @default("ATIVA")
+  obrigatorio Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items TrainingTrailItem[]
+
+  @@index([status])
+}
+
+model TrainingTrailItem {
+  id         String        @id @default(cuid())
+  trilhaId   String
+  trilha     TrainingTrail @relation(fields: [trilhaId], references: [id], onDelete: Cascade)
+  trainingId String
+  training   Training      @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  ordem      Int           @default(0)
+  obrigatorio Boolean      @default(true)
+  createdAt  DateTime      @default(now())
+
+  @@unique([trilhaId, trainingId])
+  @@index([trilhaId, ordem])
+}
+
+// ─── SISTEMAS PARA AMBIENTAÇÃO ────────────────────────────────────────────────
+
+model AmbientacaoSystem {
+  id               String   @id @default(cuid())
+  nome             String
+  finalidade       String?
+  responsavel      String?
+  url              String?
+  nivelAcesso      String?
+  observacoes      String?
+  logoUrl          String?
+  /// IDs de Process vinculados (JSON array de strings)
+  processosIds     String?
+  /// Prints/capturas de tela em JSON
+  prints           String?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ─── CONFIGURAÇÃO DE PRONTIDÃO ────────────────────────────────────────────────
+// Pesos configuráveis — nunca hardcoded no código.
+
+model TrainingReadinessConfig {
+  id                     String   @id @default(cuid())
+  /// Cargo ou "global"
+  cargo                  String   @unique @default("global")
+  pesoAmbientacao        Int      @default(20)  // %
+  pesoTreinamento        Int      @default(40)  // %
+  pesoPratica            Int      @default(20)  // %
+  pesoAvaliacao          Int      @default(20)  // %
+  /// IDs de trainings obrigatórios (JSON array)
+  trainingsObrigatorios  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// ─── TURMAS ───────────────────────────────────────────────────────────────────
+
+model TrainingClass {
+  id          String    @id @default(cuid())
+  trainingId  String
+  titulo      String
+  dataInicio  DateTime?
+  dataFim     DateTime?
+  local       String?   // Online | Presencial | Híbrido
+  instrutorNome String?
+  vagas       Int?
+  /// PLANEJADA | EM_ANDAMENTO | CONCLUIDA | CANCELADA
+  status      String    @default("PLANEJADA")
+  observacoes String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([trainingId])
+  @@index([status])
 }

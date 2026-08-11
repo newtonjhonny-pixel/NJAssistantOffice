@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 
 // GET /api/processes/[id]/documents — documentos vinculados a este processo
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {

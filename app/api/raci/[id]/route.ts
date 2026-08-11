@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const rows = await prisma.$queryRawUnsafe(`SELECT * FROM "RaciMatrix" WHERE id = ?`, params.id) as unknown[]
@@ -10,7 +10,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
-  const now = new Date()
+  const now = new Date().toISOString()
   await prisma.$executeRawUnsafe(
     `UPDATE "RaciMatrix" SET "processId"=?, name=?, description=?, activities=?, roles=?, entries=?, notes=?, "updatedAt"=? WHERE id=?`,
     body.processId   ?? null,

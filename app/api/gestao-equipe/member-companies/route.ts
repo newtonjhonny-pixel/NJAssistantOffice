@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     if (dup.length) return NextResponse.json({ error: 'Vínculo já existe para este colaborador e empresa' }, { status: 409 })
 
     const id = randomUUID()
-    const now = new Date()
+    const now = new Date().toISOString()
     const headcountActive = nullableInt(body.headcountActive)
     const headcountApprentice = nullableInt(body.headcountApprentice)
     const headcountIntern = nullableInt(body.headcountIntern)

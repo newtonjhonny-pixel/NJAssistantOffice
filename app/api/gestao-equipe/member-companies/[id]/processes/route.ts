@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -23,13 +23,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const body = await req.json()
     const { processType, volume, complexity, automationLevel, avgTimeMinutes, isCritical, observations } = body
 
-    if (!processType) return NextResponse.json({ error: 'processType obrigatÃ³rio' }, { status: 400 })
+    if (!processType) return NextResponse.json({ error: 'processType obrigatório' }, { status: 400 })
 
     const existing = await prisma.$queryRaw<any[]>`
       SELECT "id" FROM "MemberCompanyProcess" WHERE "linkId" = ${params.id} AND "processType" = ${processType}
     `
     if (existing.length) {
-      return NextResponse.json({ error: 'Processo jÃ¡ cadastrado para este vÃ­nculo' }, { status: 409 })
+      return NextResponse.json({ error: 'Processo já cadastrado para este vínculo' }, { status: 409 })
     }
 
     const id = randomUUID()

@@ -13,6 +13,7 @@ export interface AIProviderRequest {
   modelConfig: AIModelConfig
   tools?: AITool[]
   toolChoice?: 'auto' | 'none' | { type: 'function'; function: { name: string } }
+  responseFormat?: { type: 'json_object' } | { type: 'json_schema'; json_schema: Record<string, unknown> }
 }
 
 export interface AIProviderResponse {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 import { randomUUID } from "crypto"
 
 export async function GET(req: NextRequest) {
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const department = searchParams.get("department") || ""
   const status     = searchParams.get("status")     || ""
 
-  // Raw SQL — Prisma runtime não reconhece Process sem restart do engine
+  // Raw SQL â?? Prisma runtime não reconhece Process sem restart do engine
   let sql = `SELECT * FROM "Process" WHERE 1=1`
   const params: unknown[] = []
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
 
   const id  = randomUUID()
-  const now = new Date()
+  const now = new Date().toISOString()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Process" (id, code, name, description, objective, owner, department, category, status, sla, frequency, inputs, outputs, tools, risks, notes, "createdAt", "updatedAt")

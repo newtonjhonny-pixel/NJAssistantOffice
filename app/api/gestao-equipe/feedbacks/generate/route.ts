@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma-sqlite"
 import { generateFeedbackAI } from "@/lib/ai/team"
 
 export const dynamic = "force-dynamic"

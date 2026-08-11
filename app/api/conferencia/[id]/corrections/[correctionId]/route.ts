@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const prev = await prisma.conferenceCorrection.findUnique({ where: { id: params.correctionId } })
   if (!prev) return NextResponse.json({ error: 'Correção não encontrada' }, { status: 404 })
 
-  const now = new Date()
+  const now = new Date().toISOString()
   const corr = await prisma.conferenceCorrection.update({
     where: { id: params.correctionId },
     data: {

@@ -2,104 +2,73 @@
 import { prisma } from '@/lib/prisma-sqlite'
 import ExcelJS from 'exceljs'
 import jsPDF from 'jspdf'
+import {
+  calcCompanyICO, calcBand as calcBandFn, BAND_LABELS, DEFAULT_BAND_CONFIG,
+  type BandConfig,
+} from '@/lib/team/capacity/calculateICO'
 
 export const dynamic = 'force-dynamic'
 
-
-// â”€â”€â”€ Capacity calculation (mirrors dimensionamento/route.ts) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-interface Config {
-  weightEmployee: number; weightCompany: number; weightProcess: number
-  weightVolume: number; weightComplexity: number; weightManual: number; weightCritical: number
-  capacityRef: number
-  bandGreen: number; bandBlue: number; bandYellow: number; bandOrange: number
-}
-
-const COMPLEXITY_MULT: Record<string, number> = { BAIXA: 0, MEDIA: 1, ALTA: 2, MUITO_ALTA: 3 }
-function complexityScore(level: string | null, weight: number): number {
-  return ((COMPLEXITY_MULT[level ?? ''] ?? 0) / 3) * weight
-}
-function calcBand(pct: number, cfg: Config): string {
-  if (pct <= cfg.bandGreen)  return 'DisponÃ­vel'
-  if (pct <= cfg.bandBlue)   return 'Equilibrado'
-  if (pct <= cfg.bandYellow) return 'AtenÃ§Ã£o'
-  if (pct <= cfg.bandOrange) return 'Sobrecarga'
-  return 'Sobrecarga CrÃ­tica'
-}
-
 async function getDimData() {
-  const cfgRows = await prisma.$queryRaw<Config[]>`SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1`
-  const cfg: Config = cfgRows[0] ?? {
-    weightEmployee: 1, weightCompany: 5, weightProcess: 2, weightVolume: 0.5,
-    weightComplexity: 3, weightManual: 2, weightCritical: 3, capacityRef: 100,
-    bandGreen: 70, bandBlue: 85, bandYellow: 100, bandOrange: 120,
-  }
+  const cfgRows = await prisma.$queryRaw<any[]>`
+    SELECT “capacityRef”,”bandGreen”,”bandBlue”,”bandYellow”,”bandOrange”
+    FROM “CapacityConfig” WHERE “active” = true LIMIT 1
+  `
+  const rawCfg = cfgRows[0]
+  const bandCfg: BandConfig = rawCfg ? {
+    bandGreen:  Number(rawCfg.bandGreen),
+    bandBlue:   Number(rawCfg.bandBlue),
+    bandYellow: Number(rawCfg.bandYellow),
+    bandOrange: Number(rawCfg.bandOrange),
+  } : DEFAULT_BAND_CONFIG
+  const capacityRef = rawCfg ? Number(rawCfg.capacityRef) : 100
 
   const members = await prisma.$queryRaw<any[]>`
-    SELECT "id","name","role","sector","unit" FROM "TeamMember" WHERE "status" = 'ATIVO' ORDER BY "name"
+    SELECT “id”,”name”,”role”,”sector”,”unit” FROM “TeamMember” WHERE “status” = 'ATIVO' ORDER BY “name”
   `
-  const links = await prisma.$queryRaw<any[]>`
-    SELECT l.*, c."name" as "companyName"
-    FROM "MemberCompanyLink" l
-    JOIN "ClientCompany" c ON c."id" = l."companyId"
-    JOIN "TeamMember" m ON m."id" = l."memberId"
-    WHERE m."status" = 'ATIVO'
-  `
-  const processes = await prisma.$queryRaw<any[]>`
-    SELECT p.* FROM "MemberCompanyProcess" p
-    JOIN "MemberCompanyLink" l ON l."id" = p."linkId"
-    JOIN "TeamMember" m ON m."id" = l."memberId"
-    WHERE m."status" = 'ATIVO'
-  `
+  const links = await prisma.$queryRawUnsafe<any[]>(`
+    SELECT l.*, c.”name” AS “companyName”
+    FROM “MemberCompanyLink” l
+    JOIN “ClientCompany” c ON c.”id” = l.”companyId”
+    JOIN “TeamMember” m ON m.”id” = l.”memberId”
+    WHERE m.”status” = 'ATIVO'
+  `)
 
   const linksByMember = links.reduce<Record<string, any[]>>((acc, l) => {
     if (!acc[l.memberId]) acc[l.memberId] = []
     acc[l.memberId].push(l); return acc
   }, {})
-  const processByLink = processes.reduce<Record<string, any[]>>((acc, p) => {
-    if (!acc[p.linkId]) acc[p.linkId] = []
-    acc[p.linkId].push(p); return acc
-  }, {})
 
   const rows = members.map(m => {
     const memberLinks = linksByMember[m.id] ?? []
-    let totalScore = 0; let totalHeadcount = 0; let totalProcesses = 0
+    let totalScore = 0
+    let totalHeadcount = 0
     const companies: { name: string; score: number }[] = []
 
     for (const l of memberLinks) {
-      let score = cfg.weightCompany
-      const hc = (l.headcountActive ?? 0) + (l.headcountApprentice ?? 0) + (l.headcountIntern ?? 0)
-      score += hc * cfg.weightEmployee
-      score += ((l.avgAdmissions ?? 0) + (l.avgTerminations ?? 0) + (l.avgVacations ?? 0)) * cfg.weightVolume
-      score += complexityScore(l.complexity, cfg.weightComplexity)
-      if (l.automationLevel === 'MANUAL') score += cfg.weightManual
-      const procs = processByLink[l.id] ?? []
-      for (const p of procs) {
-        score += cfg.weightProcess
-        score += (p.volume ?? 0) * cfg.weightVolume
-        score += complexityScore(p.complexity, cfg.weightComplexity)
-        if (p.automationLevel === 'MANUAL') score += cfg.weightManual
-        if (p.isCritical) score += cfg.weightCritical
-      }
-      totalScore += score; totalHeadcount += hc; totalProcesses += procs.length
-      companies.push({ name: l.companyName, score: Math.round(score * 10) / 10 })
+      const result = calcCompanyICO(l)
+      totalScore     += result.score
+      totalHeadcount += Number(l.headcountActive ?? 0)
+      companies.push({ name: l.companyName, score: Math.round(result.score * 100) / 100 })
     }
 
-    const pct = cfg.capacityRef > 0 ? Math.round((totalScore / cfg.capacityRef) * 1000) / 10 : 0
+    const capacityPct = capacityRef > 0 ? (totalScore / capacityRef) * 100 : 0
+    const pctRnd = Math.round(capacityPct * 100) / 100
+    const band = calcBandFn(pctRnd, bandCfg)
     return {
       name: m.name, role: m.role, sector: m.sector ?? '', unit: m.unit ?? '',
-      companyCount: memberLinks.length, totalHeadcount, totalProcesses,
-      totalScore: Math.round(totalScore * 10) / 10,
-      capacityPct: pct, band: calcBand(pct, cfg), companies,
+      companyCount: memberLinks.length, totalHeadcount,
+      totalScore: Math.round(totalScore * 100) / 100,
+      capacityPct: pctRnd, band, bandLabel: BAND_LABELS[band], companies,
     }
   })
 
-  return { cfg, rows }
+  return { bandCfg, capacityRef, rows }
 }
 
 // â”€â”€â”€ Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-async function buildExcel(cfg: Config, rows: any[]): Promise<Buffer> {
+async function buildExcel(cfg: BandConfig & { capacityRef: number }, rows: any[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'NJ Assistant Office'
   wb.created = new Date()
@@ -168,7 +137,7 @@ async function buildExcel(cfg: Config, rows: any[]): Promise<Buffer> {
 
 // â”€â”€â”€ PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function buildPDF(cfg: Config, rows: any[]): Buffer {
+function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffer {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -268,7 +237,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const format = searchParams.get('format') ?? 'xlsx'
 
-    const { cfg, rows } = await getDimData()
+    const { bandCfg, capacityRef, rows } = await getDimData()
+    const cfg = { ...bandCfg, capacityRef }
 
     if (format === 'pdf') {
       const buf = buildPDF(cfg, rows)

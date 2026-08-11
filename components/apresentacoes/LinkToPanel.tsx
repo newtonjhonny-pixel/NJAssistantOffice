@@ -112,7 +112,8 @@ export function LinkToPanel({ presentationId, linkedTo, onLinked }: Props) {
       {current ? (
         <div className="flex items-center gap-2">
           {(() => {
-            const cfg = TYPE_CONFIG[current.type]
+            const cfg = TYPE_CONFIG[current.type as keyof typeof TYPE_CONFIG]
+              ?? { label: current.type, icon: Link2, color: 'text-slate-500' }
             const Icon = cfg.icon
             return (
               <>

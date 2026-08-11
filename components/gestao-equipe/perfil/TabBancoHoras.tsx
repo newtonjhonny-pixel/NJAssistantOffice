@@ -277,7 +277,7 @@ function ConfigForm({ memberId, config, onSaved, onCancel }: { memberId: string;
 
 // ─── Main tab component ───────────────────────────────────────────────────────
 
-export function TabBancoHoras({ memberId }: { memberId: string }) {
+export function TabBancoHoras({ memberId, onChanged }: { memberId: string; onChanged?: () => void }) {
   const [data, setData]                   = useState<HBData | null>(null)
   const [loading, setLoading]             = useState(true)
   const [showForm, setShowForm]           = useState(false)
@@ -298,6 +298,7 @@ export function TabBancoHoras({ memberId }: { memberId: string }) {
     if (!confirm('Estornar este lançamento?')) return
     await fetch(`/api/gestao-equipe/members/${memberId}/banco-horas/${id}`, { method: 'DELETE' })
     load()
+    onChanged?.()
   }
 
   function downloadReport(format: 'xlsx' | 'pdf') {
@@ -371,10 +372,10 @@ export function TabBancoHoras({ memberId }: { memberId: string }) {
 
       {/* Entry form */}
       {(showForm && !editEntry) && (
-        <EntryForm memberId={memberId} onSaved={() => { setShowForm(false); load() }} onCancel={() => setShowForm(false)} />
+        <EntryForm memberId={memberId} onSaved={() => { setShowForm(false); load(); onChanged?.() }} onCancel={() => setShowForm(false)} />
       )}
       {editEntry && (
-        <EntryForm memberId={memberId} initial={editEntry} onSaved={() => { setEditEntry(null); load() }} onCancel={() => setEditEntry(null)} />
+        <EntryForm memberId={memberId} initial={editEntry} onSaved={() => { setEditEntry(null); load(); onChanged?.() }} onCancel={() => setEditEntry(null)} />
       )}
 
       {/* Alerts */}

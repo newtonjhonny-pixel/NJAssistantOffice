@@ -29,7 +29,7 @@ function nullableText(value: unknown) {
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json() as Record<string, unknown>
-    const now = new Date()
+    const now = new Date().toISOString()
     const currentRows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "MemberCompanyLink" WHERE "id" = ${params.id}
     `

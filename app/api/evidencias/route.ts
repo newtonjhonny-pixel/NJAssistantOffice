@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id  = randomUUID()
-  const now = new Date()
+  const now = new Date().toISOString()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "Evidence"
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
        "evidenceDate", status, "expiresAt", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    body.title        || 'Nova Evidência',
+    body.title        || 'Nova EvidÃªncia',
     body.type         || 'DOCUMENTO',
     body.description  || null,
     body.processId    || null,

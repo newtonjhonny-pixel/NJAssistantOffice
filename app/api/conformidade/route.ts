@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id  = randomUUID()
-  const now = new Date()
+  const now = new Date().toISOString()
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "ComplianceObligation"
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
        "dueDate", status, description, notes, "processId", "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    body.title       || 'Nova Obrigação',
+    body.title       || 'Nova ObrigaÃ§Ã£o',
     body.legalBasis  || null,
     body.category    || 'OUTROS',
     body.responsible || null,
