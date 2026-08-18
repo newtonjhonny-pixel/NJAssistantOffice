@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   if (!body.name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
   const id  = randomUUID()
-  const now = new Date().toISOString()
+  const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
   await prisma.$executeRawUnsafe(
     `INSERT INTO "RaciMatrix" (id, "processId", name, description, activities, roles, entries, notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

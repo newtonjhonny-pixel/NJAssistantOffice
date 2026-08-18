@@ -21,9 +21,12 @@ export async function GET() {
     const user = users[0]
     if (!user) {
       // Não há usuário: cria o default e retorna com admin
+      // ON CONFLICT + CURRENT_TIMESTAMP funcionam em SQLite e PostgreSQL
+      // (INSERT OR IGNORE e datetime('now') sao exclusivos do SQLite).
       await prisma.$executeRawUnsafe(`
-        INSERT OR IGNORE INTO "User" ("id","name","email","role","createdAt","updatedAt")
-        VALUES ('default-user','Newton','admin@sistema.local','admin',datetime('now'),datetime('now'))
+        INSERT INTO "User" ("id","name","email","role","createdAt","updatedAt")
+        VALUES ('default-user','Newton','admin@sistema.local','admin',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT ("id") DO NOTHING
       `)
       return NextResponse.json({
         id: 'default-user', name: 'Newton', role: 'admin',

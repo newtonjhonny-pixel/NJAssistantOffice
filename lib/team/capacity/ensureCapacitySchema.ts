@@ -116,9 +116,10 @@ async function seedInterventionConfig() {
     const now = new Date().toISOString()
     for (const cfg of Object.values(DEFAULT_INTERVENTION_CONFIGS)) {
       await prisma.$executeRawUnsafe(
-        `INSERT OR IGNORE INTO "InterventionConfig"
+        `INSERT INTO "InterventionConfig"
          ("id","executionType","interventionPct","label","description","updatedAt")
-         VALUES (?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?)
+         ON CONFLICT ("executionType") DO NOTHING`,
         randomUUID(), cfg.executionType, cfg.interventionPct, cfg.label, cfg.description ?? null, now
       )
     }
@@ -135,9 +136,10 @@ async function seedProcessCatalog() {
     const now = new Date().toISOString()
     for (const p of DP_PROCESS_CATALOG) {
       await prisma.$executeRawUnsafe(
-        `INSERT OR IGNORE INTO "DpProcessCatalog"
+        `INSERT INTO "DpProcessCatalog"
          ("id","code","name","description","category","order","active","createdAt")
-         VALUES (?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?)
+         ON CONFLICT ("code") DO NOTHING`,
         randomUUID(), p.code, p.name, p.description ?? null, 'DP', p.order, 1, now
       )
     }
@@ -153,9 +155,10 @@ async function seedActivityCatalog() {
 
     for (const a of DP_ACTIVITY_CATALOG) {
       await prisma.$executeRawUnsafe(
-        `INSERT OR IGNORE INTO "DpActivityCatalog"
+        `INSERT INTO "DpActivityCatalog"
          ("id","processCode","name","description","suggestedLevel","defaultExecution","defaultTimeMin","order","active")
-         VALUES (?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?)
+         ON CONFLICT ("id") DO NOTHING`,
         randomUUID(), a.processCode, a.name, a.description ?? null,
         a.suggestedLevel, a.defaultExecution, a.defaultTimeMin, a.order, 1
       )

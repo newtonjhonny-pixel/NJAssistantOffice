@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   await ensureTable()
   const body = await req.json()
   const id  = randomUUID()
-  const now = new Date().toISOString()
+  const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO "ComplianceObligation"

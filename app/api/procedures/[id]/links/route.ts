@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!target.length) return NextResponse.json({ error: 'Target not found' }, { status: 404 })
 
   const id  = randomUUID()
-  const now = new Date().toISOString()
+  const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
   await prisma.$executeRawUnsafe(
     `INSERT INTO "ProcedureAttachment"
        (id, "documentId", "stepId", "fileName", "fileType", "fileSize", "filePath", "createdAt")

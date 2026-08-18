@@ -99,8 +99,9 @@ export async function POST(req: Request) {
       const id = crypto.randomUUID()
 
       await prisma.$executeRawUnsafe(
-        `INSERT OR IGNORE INTO "DpProcessCatalog" ("id","code","name","description","category","order","active","createdAt")
-         VALUES (?,?,?,?,?,?,?,?)`,
+        `INSERT INTO "DpProcessCatalog" ("id","code","name","description","category","order","active","createdAt")
+         VALUES (?,?,?,?,?,?,?,?)
+         ON CONFLICT ("code") DO NOTHING`,
         id, code.toUpperCase(), name, description ?? null, 'DP', order, 1, new Date().toISOString()
       )
       return NextResponse.json({ ok: true, id })

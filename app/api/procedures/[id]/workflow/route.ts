@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -44,7 +44,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
-  const now  = new Date().toISOString()
+  const now  = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
 
   const docs = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT "workflowStatus", version FROM "ProcedureDocument" WHERE id = ?`, params.id

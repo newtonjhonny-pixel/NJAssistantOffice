@@ -21,7 +21,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const body = await req.json()
   const id   = randomUUID()
-  const now  = new Date().toISOString()
+  const now  = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
 
   // Encode evidence metadata into existing columns (no migration needed)
   // fileType = "__evidencia__:TIPO"

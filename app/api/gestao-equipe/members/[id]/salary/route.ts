@@ -100,8 +100,13 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: 'Salário-base é obrigatório e deve ser maior que zero.' }, { status: 400 })
     }
 
-    const now = new Date().toISOString()
-    const validFromVal = validFrom ? new Date(validFrom).toISOString() : null
+    // "MemberSalary" e do Prisma (createdAt/updatedAt = TIMESTAMP);
+    // "MemberSalaryHistory" e criada por ensureSchema (recordedAt = TEXT).
+    const nowIso  = new Date().toISOString()
+    const nowDate = new Date()
+    // validFrom tambem e misto: TIMESTAMP em "MemberSalary", TEXT em "MemberSalaryHistory"
+    const validFromDate = validFrom ? new Date(validFrom) : null
+    const validFromIso  = validFromDate ? validFromDate.toISOString() : null
 
     // Calcula soma dos componentes → estimatedMonthly
     const calcSum = (baseSalary ?? 0) + (fixedAdditions ?? 0) + (gratification ?? 0) +
@@ -161,13 +166,13 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         calcMonthly,
         estimatedCharges ?? null,
         estimatedCost ?? null,
-        validFromVal,
+        validFromDate,
         adjustmentReason ?? null,
         calcPct,
         prevSalary,
         cargo ?? null,
         observations ?? null,
-        now,
+        nowDate,
         params.id
       )
     } else {
@@ -189,9 +194,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         fixedAdditions ?? null, gratification ?? null, trustFunction ?? null,
         commission ?? null, otherFixed ?? null,
         calcMonthly, estimatedCharges ?? null, estimatedCost ?? null,
-        validFromVal, adjustmentReason ?? null, calcPct, null,
+        validFromDate, adjustmentReason ?? null, calcPct, null,
         cargo ?? null, observations ?? null,
-        now, now
+        nowDate, nowDate
       )
     }
 
@@ -209,8 +214,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       histId, params.id,
       prevSalary, baseSalary,
       salaryType ?? 'MENSAL', calcPct, adjustmentReason ?? null,
-      cargo ?? null, observations ?? null, validFromVal,
-      recordedBy, now
+      cargo ?? null, observations ?? null, validFromIso,
+      recordedBy, nowIso
     )
 
     // Retorna registro atualizado

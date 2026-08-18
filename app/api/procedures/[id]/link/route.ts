@@ -7,7 +7,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   await prisma.$executeRawUnsafe(
     `UPDATE "ProcedureDocument" SET "processId" = ?, "updatedAt" = ? WHERE id = ?`,
     processId ?? null,
-    new Date().toISOString(),
+    new Date(), // TIMESTAMP no PostgreSQL
     params.id,
   )
   return NextResponse.json({ ok: true })
