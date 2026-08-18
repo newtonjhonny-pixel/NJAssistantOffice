@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   ArrowLeft, Presentation, Star, StarOff, Pencil, Share2,
   Brain, GitBranch, LayoutTemplate, BarChart2, Clock,
-  FileText, FileQuestion, Loader2, History, CheckCircle2, Download, Network,
+  FileText, FileQuestion, Loader2, History, CheckCircle2, Download, Network, Layers,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { OrgEditor }         from "./organogram/OrgEditor"
@@ -13,6 +13,12 @@ import { FlowEditor }        from "./flowchart/FlowEditor"
 import { SlideEditor }       from "./slides/SlideEditor"
 import { TeamOrgEditor }     from "./teamorg/TeamOrgEditor"
 import { ProcessOrgEditor }  from "./process-org/ProcessOrgEditor"
+import { MindMapEditor }     from "./mindmap/MindMapEditor"
+import { TimelineEditor }    from "./timeline/TimelineEditor"
+import { InfographicEditor } from "./infographic/InfographicEditor"
+import { ReportEditor }      from "./report/ReportEditor"
+import { ProjectOrgEditor }  from "./project-org/ProjectOrgEditor"
+import { ProjectMapEditor }  from "./project-map/ProjectMapEditor"
 import { AiAssistantPanel }  from "./AiAssistantPanel"
 import { ExportModal }       from "./export/ExportModal"
 import { VersionPanel }      from "./VersionPanel"
@@ -37,16 +43,18 @@ interface PresentationDetail {
 }
 
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  slides:      { label: "Slides",                    icon: Presentation,   color: "text-blue-600",   bg: "bg-blue-50" },
-  organogram:  { label: "Organograma",               icon: Share2,         color: "text-purple-600", bg: "bg-purple-50" },
-  "team-org":    { label: "Organograma de Equipe",          icon: Brain,          color: "text-indigo-600", bg: "bg-indigo-50" },
-  "process-org": { label: "Organograma de Processos",       icon: Network,        color: "text-teal-600",   bg: "bg-teal-50" },
-  flowchart:     { label: "Fluxograma",                     icon: GitBranch,      color: "text-emerald-600",bg: "bg-emerald-50" },
-  mindmap:     { label: "Mapa Mental",               icon: Brain,          color: "text-amber-600",  bg: "bg-amber-50" },
-  timeline:    { label: "Cronograma",                icon: Clock,          color: "text-cyan-600",   bg: "bg-cyan-50" },
-  process:     { label: "Mapa de Processo",          icon: LayoutTemplate, color: "text-orange-600", bg: "bg-orange-50" },
-  infographic: { label: "Infográfico",               icon: BarChart2,      color: "text-rose-600",   bg: "bg-rose-50" },
-  report:      { label: "Relatório Visual",          icon: FileText,       color: "text-slate-600",  bg: "bg-slate-100" },
+  slides:        { label: "Slides",                   icon: Presentation,   color: "text-blue-600",   bg: "bg-blue-50" },
+  organogram:    { label: "Organograma",              icon: Share2,         color: "text-purple-600", bg: "bg-purple-50" },
+  "team-org":    { label: "Organograma de Equipe",    icon: Brain,          color: "text-indigo-600", bg: "bg-indigo-50" },
+  "process-org": { label: "Organograma de Processos", icon: Network,        color: "text-teal-600",   bg: "bg-teal-50" },
+  "project-org": { label: "Organograma de Projetos",  icon: Network,        color: "text-violet-600", bg: "bg-violet-50" },
+  "project-map": { label: "Mapa de Projetos",         icon: Layers,         color: "text-violet-600", bg: "bg-violet-50" },
+  flowchart:     { label: "Fluxograma",               icon: GitBranch,      color: "text-emerald-600",bg: "bg-emerald-50" },
+  mindmap:       { label: "Mapa Mental",              icon: Brain,          color: "text-amber-600",  bg: "bg-amber-50" },
+  timeline:      { label: "Cronograma",               icon: Clock,          color: "text-cyan-600",   bg: "bg-cyan-50" },
+  process:       { label: "Mapa de Processo",         icon: LayoutTemplate, color: "text-orange-600", bg: "bg-orange-50" },
+  infographic:   { label: "Infográfico",              icon: BarChart2,      color: "text-rose-600",   bg: "bg-rose-50" },
+  report:        { label: "Relatório Visual",         icon: FileText,       color: "text-slate-600",  bg: "bg-slate-100" },
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -179,7 +187,7 @@ export function ApresentacaoDetalheClient({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {(data.type === "slides" || data.type === "organogram" || data.type === "team-org" || data.type === "flowchart" || data.type === "process" || data.type === "process-org") && (
+          {(["slides","organogram","team-org","flowchart","process","process-org","mindmap","timeline","infographic","report","project-org","project-map"].includes(data.type)) && (
             <button
               onClick={() => setShowExport(true)}
               title="Exportar apresentação"
@@ -314,11 +322,95 @@ export function ApresentacaoDetalheClient({ id }: { id: string }) {
             setData(d => d ? { ...d, content, status: "editing" } : d)
           }}
         />
+      ) : data.type === "mindmap" ? (
+        <MindMapEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Mapa mental editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
+      ) : data.type === "timeline" ? (
+        <TimelineEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Cronograma editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
+      ) : data.type === "infographic" ? (
+        <InfographicEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Infográfico editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
+      ) : data.type === "report" ? (
+        <ReportEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Relatório visual editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
+      ) : data.type === "project-org" ? (
+        <ProjectOrgEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Organograma de projetos editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
+      ) : data.type === "project-map" ? (
+        <ProjectMapEditor
+          key={data.content?.slice(0, 20)}
+          editorRef={editorRef}
+          initialContent={data.content}
+          onSave={async (content) => {
+            await fetch(`/api/apresentacoes/${id}`, {
+              method:  "PUT",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ content, status: "editing", historyNote: "Mapa de projetos editado" }),
+            })
+            setData(d => d ? { ...d, content, status: "editing" } : d)
+          }}
+        />
       ) : (
         <div className={cn("rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center py-16 gap-3", cfg.bg)}>
           <Icon className={cn("w-10 h-10 opacity-30", cfg.color)} />
           <p className="text-sm font-medium text-slate-500">Editor de {cfg.label}</p>
-          <p className="text-xs text-slate-400">Disponível nas próximas fases de implementação</p>
+          <p className="text-xs text-slate-400">Tipo não reconhecido: {data.type}</p>
         </div>
       )}
 

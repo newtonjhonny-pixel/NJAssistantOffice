@@ -1,7 +1,18 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 
 export const dynamic = 'force-dynamic'
+
+async function ensureSchema() {
+  const cols = [
+    `ALTER TABLE "MemberCompanyLink" ADD COLUMN "endDate"         TEXT`,
+    `ALTER TABLE "MemberCompanyLink" ADD COLUMN "participationPct" REAL`,
+    `ALTER TABLE "MemberCompanyLink" ADD COLUMN "linkStatus"       TEXT DEFAULT 'ATIVO'`,
+  ]
+  for (const sql of cols) {
+    try { await prisma.$executeRawUnsafe(sql) } catch { /* já existe */ }
+  }
+}
 
 function hasOwn(body: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(body, key)
@@ -28,8 +39,9 @@ function nullableText(value: unknown) {
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
+    await ensureSchema()
     const body = await req.json() as Record<string, unknown>
-    const now = new Date().toISOString()
+    const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
     const currentRows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "MemberCompanyLink" WHERE "id" = ${params.id}
     `
@@ -58,6 +70,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (hasOwn(body, 'complexity')) data.complexity = nullableText(body.complexity)
     if (hasOwn(body, 'substitute')) data.substitute = nullableText(body.substitute)
     if (hasOwn(body, 'observations')) data.observations = nullableText(body.observations)
+    if (hasOwn(body, 'endDate')) data.endDate = body.endDate ? new Date(String(body.endDate)) : null
+    if (hasOwn(body, 'participationPct')) data.participationPct = nullableFloat(body.participationPct)
+    if (hasOwn(body, 'linkStatus')) data.linkStatus = nullableText(body.linkStatus)
 
     await (prisma as any).memberCompanyLink.update({
       where: { id: params.id },

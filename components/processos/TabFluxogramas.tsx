@@ -2,16 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  GitBranch, ArrowLeft, FileText, CheckSquare, ClipboardList,
-  Shield, BookOpen, BookMarked, AlertTriangle, ScrollText,
-  ArrowLeftRight, ChevronRight, Loader2, Link2, LayoutPanelLeft,
+  GitBranch, Plus, Link2, MoreHorizontal, Loader2,
+  Copy, Archive, Unlink, ExternalLink, Pencil, Check, X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { FluxoProcessoTab } from "@/components/gestao-equipe/procedimentos/FluxoProcessoTab"
-import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant } from "@xyflow/react"
-import "@xyflow/react/dist/style.css"
-import { BpmnNode } from "@/components/gestao-equipe/procedimentos/BpmnNode"
-import { BpmnLane } from "@/components/gestao-equipe/procedimentos/BpmnLane"
+import { ProcessFlowchartEditor, type ProcessFlowchartRecord } from "./ProcessFlowchartEditor"
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -23,178 +18,252 @@ interface ProcessRecord {
   category: string | null
 }
 
-interface LinkedDoc {
-  id: string
-  type: string
-  title: string
-  process: string | null
-  department: string | null
-  flowCount: number | string
-  updatedAt: string
-}
+// Reutiliza tipo exportado de ProcessFlowchartEditor
+type FlowchartRecord = ProcessFlowchartRecord
 
-interface FlowData {
-  id: string
-  type: "AS_IS" | "TO_BE"
-  content: string
-  updatedAt: string
-}
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const TYPE_ICONS: Record<string, React.ElementType> = {
-  POP: ClipboardList, IT: FileText, CHECKLIST: CheckSquare,
-  POLITICA: Shield, NORMA: BookOpen, MANUAL: BookMarked,
-  CONTINGENCIA: AlertTriangle, TERMO: ScrollText,
+const TYPE_LABELS: Record<string, string> = {
+  OPERACIONAL: "Operacional",
+  BPMN: "BPMN",
+  AS_IS: "AS-IS",
+  TO_BE: "TO-BE",
+  SIMPLIFICADO: "Simplificado",
 }
 const TYPE_COLORS: Record<string, string> = {
-  POP: "bg-blue-100 text-blue-700", IT: "bg-violet-100 text-violet-700",
-  CHECKLIST: "bg-emerald-100 text-emerald-700", POLITICA: "bg-red-100 text-red-700",
-  NORMA: "bg-amber-100 text-amber-700", MANUAL: "bg-cyan-100 text-cyan-700",
-  CONTINGENCIA: "bg-orange-100 text-orange-700", TERMO: "bg-slate-100 text-slate-700",
+  OPERACIONAL: "bg-blue-100 text-blue-700",
+  BPMN: "bg-violet-100 text-violet-700",
+  AS_IS: "bg-amber-100 text-amber-700",
+  TO_BE: "bg-emerald-100 text-emerald-700",
+  SIMPLIFICADO: "bg-slate-100 text-slate-600",
 }
-const TYPE_LABELS: Record<string, string> = {
-  POP: "POP", IT: "IT", CHECKLIST: "Checklist",
-  POLITICA: "Política", NORMA: "Norma", MANUAL: "Manual",
-  CONTINGENCIA: "Contingência", TERMO: "Termo",
+const STATUS_LABELS: Record<string, string> = {
+  RASCUNHO: "Rascunho",
+  EM_REVISAO: "Em revisão",
+  APROVADO: "Aprovado",
+  ARQUIVADO: "Arquivado",
+}
+const STATUS_COLORS: Record<string, string> = {
+  RASCUNHO: "bg-slate-100 text-slate-400",
+  EM_REVISAO: "bg-amber-100 text-amber-600",
+  APROVADO: "bg-emerald-100 text-emerald-700",
+  ARQUIVADO: "bg-red-100 text-red-500",
 }
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
 }
 
-// ─── Comparação Side-by-Side ──────────────────────────────────────────────────
+function hasContent(fc: FlowchartRecord): boolean {
+  if (!fc.content) return false
+  try {
+    const p = JSON.parse(fc.content)
+    return (p.nodes?.length ?? 0) > 0
+  } catch { return false }
+}
 
-function CompareView({ docId, docTitle }: { docId: string; docTitle: string }) {
-  const [asIs, setAsIs] = useState<FlowData | null>(null)
-  const [toBe, setToBe] = useState<FlowData | null>(null)
-  const [loading, setLoading] = useState(true)
+// ─── Modal: Novo Fluxograma ───────────────────────────────────────────────────
 
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/procedures/${docId}/flow?type=AS_IS`).then(r => r.ok ? r.json() : null),
-      fetch(`/api/procedures/${docId}/flow?type=TO_BE`).then(r => r.ok ? r.json() : null),
-    ]).then(([a, t]) => { setAsIs(a); setToBe(t) }).finally(() => setLoading(false))
-  }, [docId])
+interface NovoModalProps {
+  processId: string
+  onClose: () => void
+  onCreated: (fc: FlowchartRecord) => void
+}
 
-  if (loading) return <div className="flex items-center justify-center h-40"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+function NovoFluxogramaModal({ processId, onClose, onCreated }: NovoModalProps) {
+  const [name, setName] = useState("")
+  const [type, setType] = useState("OPERACIONAL")
+  const [description, setDescription] = useState("")
+  const [version, setVersion] = useState("1.0")
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
-  const hasAsIs = asIs && asIs.content && asIs.content !== '{"nodes":[],"edges":[]}'
-  const hasToBe = toBe && toBe.content && toBe.content !== '{"nodes":[],"edges":[]}'
-
-  if (!hasAsIs && !hasToBe) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-        <GitBranch className="w-10 h-10 mb-3 opacity-30" />
-        <p className="font-medium text-slate-600">Nenhum fluxo registrado</p>
-        <p className="text-sm mt-1">Acesse a aba de edição para criar os diagramas AS-IS e TO-BE.</p>
-      </div>
-    )
+  async function handleSave() {
+    if (!name.trim()) { setErr("Nome é obrigatório."); return }
+    setSaving(true); setErr(null)
+    try {
+      const r = await fetch(`/api/processes/${processId}/flowcharts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), type, description: description.trim() || null, version }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setErr(data.error ?? "Erro ao criar."); return }
+      onCreated(data)
+    } catch (e: any) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
-
-  const NODE_TYPES = { bpmnNode: BpmnNode, bpmnLane: BpmnLane }
-
-  const parseFlow = (f: FlowData | null) => {
-    if (!f?.content) return { nodes: [], edges: [] }
-    try { return JSON.parse(f.content) } catch { return { nodes: [], edges: [] } }
-  }
-
-  const asIsFlow = parseFlow(asIs)
-  const toBeFlow = parseFlow(toBe)
-
-  const FlowPanel = ({ flow, label, accent, empty }: {
-    flow: { nodes: unknown[]; edges: unknown[] }
-    label: string
-    accent: string
-    empty: boolean
-  }) => (
-    <div className={cn("rounded-xl border overflow-hidden", accent === "amber" ? "border-slate-200" : "border-blue-200")}>
-      <div className={cn("px-4 py-2 flex items-center gap-2 border-b", accent === "amber" ? "bg-slate-50 border-slate-200" : "bg-blue-50 border-blue-200")}>
-        <span className={cn("w-2 h-2 rounded-full", accent === "amber" ? "bg-amber-400" : "bg-blue-500")} />
-        <span className={cn("text-xs font-semibold", accent === "amber" ? "text-slate-600" : "text-blue-700")}>{label}</span>
-        {empty && <span className={cn("ml-auto text-xs", accent === "amber" ? "text-slate-400" : "text-blue-400")}>Não registrado</span>}
-      </div>
-      {!empty ? (
-        <div style={{ height: 380 }}>
-          <ReactFlow
-            nodes={flow.nodes as never[]}
-            edges={flow.edges as never[]}
-            nodeTypes={NODE_TYPES}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            panOnDrag
-            zoomOnScroll
-            fitView
-          >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e2e8f0" />
-            <Controls showInteractive={false} />
-            <MiniMap nodeStrokeWidth={3} zoomable pannable style={{ height: 80 }} />
-          </ReactFlow>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center h-40 text-slate-200">
-          <GitBranch className="w-8 h-8" />
-        </div>
-      )}
-    </div>
-  )
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-        Comparação AS-IS × TO-BE — {docTitle}
-      </p>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FlowPanel flow={asIsFlow} label="AS-IS — Processo Atual"   accent="amber" empty={!hasAsIs} />
-        <FlowPanel flow={toBeFlow} label="TO-BE — Processo Futuro"  accent="blue"  empty={!hasToBe} />
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GitBranch className="w-5 h-5 text-blue-600" />
+            <h2 className="text-base font-semibold text-slate-800">Novo Fluxograma</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {err && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{err}</div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Nome <span className="text-red-500">*</span></label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Ex: Processo de Compras — Visão Atual"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              onKeyDown={e => e.key === "Enter" && handleSave()}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Tipo</label>
+            <select
+              value={type}
+              onChange={e => setType(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
+            >
+              {Object.entries(TYPE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Descrição</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Objetivo do fluxograma…"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Versão</label>
+            <input
+              value={version}
+              onChange={e => setVersion(e.target.value)}
+              placeholder="1.0"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            />
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancelar</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Criar Fluxograma
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-// ─── DocView ─────────────────────────────────────────────────────────────────
+// ─── Card de fluxograma ───────────────────────────────────────────────────────
 
-type DocViewTab = "editor" | "comparar"
+interface CardProps {
+  fc: FlowchartRecord
+  onOpen: () => void
+  onDuplicate: () => void
+  onArchive: () => void
+  onDelete: () => void
+}
 
-function DocView({ doc, onBack }: { doc: LinkedDoc; onBack: () => void }) {
-  const [tab, setTab] = useState<DocViewTab>("editor")
+function FlowchartCard({ fc, onOpen, onDuplicate, onArchive, onDelete }: CardProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const withContent = hasContent(fc)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
-          <ArrowLeft className="w-4 h-4" /> Voltar
-        </button>
-        <div className="flex items-center gap-2">
-          {(() => { const Icon = TYPE_ICONS[doc.type] ?? FileText; return <Icon className="w-4 h-4 text-blue-600" /> })()}
-          <span className="font-semibold text-slate-800">{doc.title}</span>
-          <span className={cn("text-xs rounded-full px-2 py-0.5 font-medium", TYPE_COLORS[doc.type] ?? "bg-slate-100 text-slate-600")}>
-            {TYPE_LABELS[doc.type] ?? doc.type}
+    <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center gap-3 hover:shadow-md hover:border-blue-200 transition-all group">
+      {/* Ícone tipo */}
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs",
+        TYPE_COLORS[fc.type]?.split(' ')[0] ?? "bg-slate-100"
+      )}>
+        <GitBranch className="w-4 h-4" />
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">
+            {fc.name}
           </span>
+          <span className={cn("text-xs rounded-full px-2 py-0.5 font-medium shrink-0", TYPE_COLORS[fc.type] ?? "bg-slate-100 text-slate-600")}>
+            {TYPE_LABELS[fc.type] ?? fc.type}
+          </span>
+          <span className={cn("text-xs rounded-full px-2 py-0.5 font-medium shrink-0", STATUS_COLORS[fc.status] ?? "bg-slate-100 text-slate-500")}>
+            {STATUS_LABELS[fc.status] ?? fc.status}
+          </span>
+          {fc.version && <span className="text-xs text-slate-400 shrink-0">v{fc.version}</span>}
+          {withContent
+            ? <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium shrink-0">com diagrama</span>
+            : <span className="text-xs bg-slate-100 text-slate-400 rounded-full px-2 py-0.5 shrink-0">sem diagrama</span>
+          }
+        </div>
+        {fc.description && <p className="text-xs text-slate-400 mt-0.5 truncate">{fc.description}</p>}
+        <p className="text-xs text-slate-400 mt-0.5">Atualizado {formatDate(fc.updatedAt)}</p>
+      </div>
+
+      {/* Ações */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onOpen}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Abrir
+        </button>
+
+        {/* Menu contextual */}
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen(v => !v)}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-48 text-sm">
+                <button
+                  onClick={() => { setMenuOpen(false); onDuplicate() }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Copy className="w-3.5 h-3.5 text-violet-500" />
+                  {fc.type === "AS_IS" ? "Duplicar → TO-BE" : "Duplicar"}
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onArchive() }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Archive className="w-3.5 h-3.5 text-amber-500" />
+                  {fc.status === "ARQUIVADO" ? "Restaurar" : "Arquivar"}
+                </button>
+                <div className="border-t border-slate-100 my-1" />
+                <button
+                  onClick={() => { setMenuOpen(false); onDelete() }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                  Excluir
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
-
-      {/* Sub-tabs */}
-      <div className="flex border-b border-slate-200 gap-1">
-        {([
-          { id: "editor"  as DocViewTab, label: "Editor BPMN",  icon: GitBranch },
-          { id: "comparar" as DocViewTab, label: "Comparar AS-IS × TO-BE", icon: LayoutPanelLeft },
-        ]).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
-              tab === t.id
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
-            )}>
-            <t.icon className="w-4 h-4" />{t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "editor"  && <FluxoProcessoTab docId={doc.id} procedureTitle={doc.title} />}
-      {tab === "comparar" && <CompareView docId={doc.id} docTitle={doc.title} />}
     </div>
   )
 }
@@ -202,40 +271,93 @@ function DocView({ doc, onBack }: { doc: LinkedDoc; onBack: () => void }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function TabFluxogramas() {
-  const [processes, setProcesses] = useState<ProcessRecord[]>([])
-  const [selected,  setSelected]  = useState<string>("")
-  const [docs,      setDocs]      = useState<LinkedDoc[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(false)
-  const [openDoc,   setOpenDoc]   = useState<LinkedDoc | null>(null)
-  const [loadingProc, setLoadingProc] = useState(true)
+  const [processes, setProcesses]       = useState<ProcessRecord[]>([])
+  const [selected, setSelected]         = useState("")
+  const [flowcharts, setFlowcharts]     = useState<FlowchartRecord[]>([])
+  const [loadingProc, setLoadingProc]   = useState(true)
+  const [loadingFc, setLoadingFc]       = useState(false)
+  const [openFcId, setOpenFcId]         = useState<string | null>(null)
+  const [showNovo, setShowNovo]         = useState(false)
 
+  // Carrega lista de processos
   useEffect(() => {
     fetch("/api/processes")
       .then(r => r.json())
-      .then(setProcesses)
+      .then(data => setProcesses(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoadingProc(false))
   }, [])
 
-  const loadDocs = useCallback(async (pid: string) => {
-    if (!pid) { setDocs([]); return }
-    setLoadingDocs(true)
+  const loadFlowcharts = useCallback(async (pid: string) => {
+    if (!pid) { setFlowcharts([]); return }
+    setLoadingFc(true)
     try {
-      const rows = await fetch(`/api/processes/${pid}/documents`).then(r => r.json())
-      setDocs(Array.isArray(rows) ? rows : [])
-    } catch { setDocs([]) }
-    finally { setLoadingDocs(false) }
+      const rows = await fetch(`/api/processes/${pid}/flowcharts`).then(r => r.json())
+      setFlowcharts(Array.isArray(rows) ? rows : [])
+    } catch { setFlowcharts([]) }
+    finally { setLoadingFc(false) }
   }, [])
 
-  function handleSelect(pid: string) {
+  function handleSelectProcess(pid: string) {
     setSelected(pid)
-    setOpenDoc(null)
-    loadDocs(pid)
+    setOpenFcId(null)
+    loadFlowcharts(pid)
+  }
+
+  async function handleDuplicate(fc: FlowchartRecord) {
+    const isAsIs = fc.type === "AS_IS"
+    const msg = isAsIs
+      ? `Duplicar "${fc.name}" como TO-BE?\n\nUma cópia será criada com o mesmo conteúdo e tipo TO-BE.`
+      : `Criar uma cópia de "${fc.name}"?`
+    if (!window.confirm(msg)) return
+    try {
+      const r = await fetch(`/api/processes/${selected}/flowcharts/${fc.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      if (!r.ok) { alert("Erro ao duplicar."); return }
+      const novo = await r.json()
+      setFlowcharts(prev => [...prev, novo])
+    } catch { alert("Erro ao duplicar.") }
+  }
+
+  async function handleArchive(fc: FlowchartRecord) {
+    const newStatus = fc.status === "ARQUIVADO" ? "RASCUNHO" : "ARQUIVADO"
+    const r = await fetch(`/api/processes/${selected}/flowcharts/${fc.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (!r.ok) { alert("Erro ao atualizar status."); return }
+    const updated = await r.json()
+    setFlowcharts(prev => prev.map(f => f.id === fc.id ? updated : f))
+  }
+
+  async function handleDelete(fc: FlowchartRecord) {
+    if (!window.confirm(`Excluir "${fc.name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    const r = await fetch(`/api/processes/${selected}/flowcharts/${fc.id}`, { method: "DELETE" })
+    if (!r.ok) { alert("Erro ao excluir."); return }
+    setFlowcharts(prev => prev.filter(f => f.id !== fc.id))
   }
 
   const selectedProcess = processes.find(p => p.id === selected)
 
-  if (openDoc) return <DocView doc={openDoc} onBack={() => setOpenDoc(null)} />
+  // Modo editor: fluxograma aberto
+  if (openFcId && selected) {
+    return (
+      <ProcessFlowchartEditor
+        flowchartId={openFcId}
+        processId={selected}
+        onBack={() => { setOpenFcId(null); loadFlowcharts(selected) }}
+        onDuplicated={novo => {
+          setFlowcharts(prev => [...prev, novo])
+          // Abre o duplicado
+          setOpenFcId(novo.id)
+        }}
+      />
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -252,10 +374,10 @@ export function TabFluxogramas() {
         ) : (
           <select
             value={selected}
-            onChange={e => handleSelect(e.target.value)}
+            onChange={e => handleSelectProcess(e.target.value)}
             className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
           >
-            <option value="">Selecione um processo...</option>
+            <option value="">Selecione um processo…</option>
             {processes.map(p => (
               <option key={p.id} value={p.id}>{p.code ? `${p.code} — ` : ''}{p.name}</option>
             ))}
@@ -263,139 +385,85 @@ export function TabFluxogramas() {
         )}
       </div>
 
-      {/* Documentos vinculados */}
+      {/* Lista de fluxogramas */}
       {selected && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              Documentos vinculados a <span className="text-slate-700">{selectedProcess?.name}</span>
+              Fluxogramas de <span className="text-slate-700">{selectedProcess?.name}</span>
             </p>
-            <p className="text-xs text-slate-400">
-              Para vincular: abra um documento em Procedimentos → selecione este processo
-            </p>
+            <button
+              onClick={() => setShowNovo(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo Fluxograma
+            </button>
           </div>
 
-          {loadingDocs ? (
+          {loadingFc ? (
             <div className="space-y-2">
-              {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-slate-200 rounded-xl animate-pulse" />)}
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-20 bg-slate-100 rounded-xl animate-pulse" />
+              ))}
             </div>
-          ) : docs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-14 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
-              <Link2 className="w-8 h-8 mb-2 opacity-30" />
-              <p className="font-medium text-slate-500">Nenhum documento vinculado</p>
-              <p className="text-sm mt-1">
-                Abra um procedimento → seção "Processo Vinculado" → selecione <strong>{selectedProcess?.name}</strong>
+          ) : flowcharts.length === 0 ? (
+            /* Empty state */
+            <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400">
+              <GitBranch className="w-10 h-10 mb-3 opacity-30" />
+              <p className="font-semibold text-slate-500 text-base">Nenhum fluxograma criado</p>
+              <p className="text-sm mt-1 mb-5 text-slate-400">
+                Crie o primeiro fluxograma diretamente vinculado a este processo.
               </p>
+              <button
+                onClick={() => setShowNovo(true)}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Criar primeiro fluxograma
+              </button>
             </div>
           ) : (
             <div className="space-y-2">
-              {docs.map(doc => {
-                const Icon = TYPE_ICONS[doc.type] ?? FileText
-                const hasFlows = Number(doc.flowCount) > 0
-                return (
-                  <button
-                    key={doc.id}
-                    onClick={() => setOpenDoc(doc)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-5 py-4 flex items-center gap-3 hover:shadow-md hover:border-blue-200 transition-all group text-left"
-                  >
-                    <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", TYPE_COLORS[doc.type]?.split(' ')[0] ?? "bg-slate-100")}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{doc.title}</span>
-                        <span className={cn("text-xs rounded-full px-2 py-0.5 font-medium shrink-0", TYPE_COLORS[doc.type] ?? "bg-slate-100 text-slate-600")}>
-                          {TYPE_LABELS[doc.type] ?? doc.type}
-                        </span>
-                        {hasFlows ? (
-                          <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium shrink-0">
-                            {doc.flowCount} fluxo{Number(doc.flowCount) !== 1 ? 's' : ''}
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-slate-100 text-slate-400 rounded-full px-2 py-0.5 shrink-0">sem fluxo</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">Atualizado {formatDate(doc.updatedAt)}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-400 transition-colors shrink-0" />
-                  </button>
-                )
-              })}
+              {flowcharts.map(fc => (
+                <FlowchartCard
+                  key={fc.id}
+                  fc={fc}
+                  onOpen={() => setOpenFcId(fc.id)}
+                  onDuplicate={() => handleDuplicate(fc)}
+                  onArchive={() => handleArchive(fc)}
+                  onDelete={() => handleDelete(fc)}
+                />
+              ))}
             </div>
           )}
 
-          {/* Métricas de handoffs */}
-          {docs.length > 0 && (
-            <HandoffMetrics processId={selected} docs={docs} />
+          {/* Legenda de tipos */}
+          {flowcharts.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {Object.entries(TYPE_LABELS).map(([v, l]) => (
+                <span key={v} className={cn("text-xs rounded-full px-2.5 py-0.5 font-medium", TYPE_COLORS[v])}>
+                  {l}
+                </span>
+              ))}
+            </div>
           )}
         </>
       )}
-    </div>
-  )
-}
 
-// ─── Métricas de Handoffs ─────────────────────────────────────────────────────
-
-function HandoffMetrics({ processId, docs }: { processId: string; docs: LinkedDoc[] }) {
-  const [metrics, setMetrics] = useState<{ docId: string; title: string; handoffs: number }[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    Promise.all(
-      docs.map(async doc => {
-        if (Number(doc.flowCount) === 0) return { docId: doc.id, title: doc.title, handoffs: 0 }
-        try {
-          const flow = await fetch(`/api/procedures/${doc.id}/flow?type=AS_IS`).then(r => r.ok ? r.json() : null)
-          if (!flow?.content) return { docId: doc.id, title: doc.title, handoffs: 0 }
-          const { nodes, edges } = JSON.parse(flow.content)
-          // Conta edges entre nós de raias diferentes
-          const laneOf: Record<string, string> = {}
-          for (const n of nodes ?? []) {
-            if (n.data?.laneId) laneOf[n.id] = n.data.laneId
-          }
-          let count = 0
-          for (const e of edges ?? []) {
-            if (laneOf[e.source] && laneOf[e.target] && laneOf[e.source] !== laneOf[e.target]) count++
-          }
-          return { docId: doc.id, title: doc.title, handoffs: count }
-        } catch { return { docId: doc.id, title: doc.title, handoffs: 0 } }
-      })
-    ).then(results => {
-      setMetrics(results.filter(r => r.handoffs > 0).sort((a, b) => b.handoffs - a.handoffs))
-    }).finally(() => setLoading(false))
-  }, [processId, docs])
-
-  const total = metrics.reduce((s, m) => s + m.handoffs, 0)
-  if (loading) return null
-  if (total === 0) return null
-
-  return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <ArrowLeftRight className="w-4 h-4 text-amber-600" />
-        <p className="text-sm font-semibold text-amber-800">
-          Métricas de Handoffs — {total} transferência{total !== 1 ? 's' : ''} no processo
-        </p>
-      </div>
-      <div className="space-y-1.5">
-        {metrics.map(m => (
-          <div key={m.docId} className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-amber-800 truncate">{m.title}</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="h-1.5 rounded-full bg-amber-200 w-24 overflow-hidden">
-                <div
-                  className="h-full bg-amber-500 rounded-full"
-                  style={{ width: `${Math.min(100, (m.handoffs / Math.max(...metrics.map(x => x.handoffs))) * 100)}%` }}
-                />
-              </div>
-              <span className="text-xs font-semibold text-amber-700 w-4 text-right">{m.handoffs}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Modal novo fluxograma */}
+      {showNovo && selected && (
+        <NovoFluxogramaModal
+          processId={selected}
+          onClose={() => setShowNovo(false)}
+          onCreated={fc => {
+            setFlowcharts(prev => [...prev, fc])
+            setShowNovo(false)
+            // Abre o editor imediatamente
+            setOpenFcId(fc.id)
+          }}
+        />
+      )}
     </div>
   )
 }

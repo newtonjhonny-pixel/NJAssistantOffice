@@ -1,11 +1,11 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
 
-// â”€â”€ Prefixos de cÃ³digo por tipo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Prefixos de código por tipo ──────────────────────────────────────────────
 const CODE_PREFIX: Record<string, string> = {
   POP:         'POP',
   IT:          'IT',
@@ -22,7 +22,7 @@ async function generateCode(type: string, department?: string): Promise<string> 
   const deptPart = department
     ? department.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3)
     : 'GRL'
-  // Conta quantos docs deste tipo jÃ¡ existem para gerar nÃºmero sequencial
+  // Conta quantos docs deste tipo já existem para gerar número sequencial
   const rows = await prisma.$queryRawUnsafe<{ cnt: number }[]>(
     `SELECT COUNT(*) as cnt FROM "ProcedureDocument" WHERE type = ?`, type
   )
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   const id   = randomUUID()
   const now  = new Date()
 
-  // â”€â”€ CriaÃ§Ã£o a partir de template â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Criação a partir de template ─────────────────────────────────────────
   if (body.templateId) {
     const tplRows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
       `SELECT * FROM "ProcedureDocument" WHERE id = ?`, body.templateId
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
                ?, ?,
                ?, ?)`,
       id, tpl.type,
-      body.title || `CÃ³pia de ${tpl.title}`,
+      body.title || `Cópia de ${tpl.title}`,
       tpl.process     || null,
       tpl.department  || null,
       tpl.responsible || null,
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(rows[0], { status: 201 })
   }
 
-  // â”€â”€ CriaÃ§Ã£o padrÃ£o (do zero) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Criação padrão (do zero) ──────────────────────────────────────────────
   const code = body.code || await generateCode(body.type, body.department)
 
   await prisma.$executeRawUnsafe(

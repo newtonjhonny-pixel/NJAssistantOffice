@@ -1,6 +1,6 @@
-﻿/**
+/**
  * GET  /api/gestao-equipe/intervention-config
- *   Retorna os parÃ¢metros de intervenÃ§Ã£o humana por tipo de execuÃ§Ã£o.
+ *   Retorna os parÃ¢metros de intervenção humana por tipo de execução.
  *
  * PUT  /api/gestao-equipe/intervention-config
  *   Atualiza um ou mais parÃ¢metros.
@@ -45,7 +45,7 @@ export async function GET() {
     return NextResponse.json({ configs: result })
   } catch (e) {
     console.error('[intervention-config GET]', e)
-    return NextResponse.json({ error: 'Erro ao carregar configuraÃ§Ãµes' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao carregar configurações' }, { status: 500 })
   }
 }
 
@@ -55,7 +55,7 @@ export async function PUT(req: Request) {
 
     const body = await req.json() as { executionType: string; interventionPct: number }[]
     if (!Array.isArray(body) || body.length === 0) {
-      return NextResponse.json({ error: 'Payload invÃ¡lido' }, { status: 400 })
+      return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
     }
 
     const now = new Date().toISOString()
@@ -94,7 +94,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ ok: true, updated })
   } catch (e) {
     console.error('[intervention-config PUT]', e)
-    return NextResponse.json({ error: 'Erro ao atualizar configuraÃ§Ãµes' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao atualizar configurações' }, { status: 500 })
   }
 }
 

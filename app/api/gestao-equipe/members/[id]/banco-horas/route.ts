@@ -63,8 +63,10 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     for (const e of entries) {
       if (!compMap.has(e.competence)) compMap.set(e.competence, { credit: 0, debit: 0, adjust: 0, expired: 0 })
       const c = compMap.get(e.competence)!
-      if (e.type === 'LANCAMENTO' || e.type === 'IMPORTACAO') c.credit += e.creditMinutes
-      else if (e.type === 'COMPENSACAO') c.debit += e.debitMinutes
+      if (e.type === 'LANCAMENTO' || e.type === 'IMPORTACAO') {
+        c.credit += Number(e.creditMinutes) || 0
+        c.debit  += Number(e.debitMinutes)  || 0
+      } else if (e.type === 'COMPENSACAO') c.debit += Number(e.debitMinutes) || 0
       else if (e.type === 'AJUSTE') { c.credit += e.creditMinutes; c.debit += e.debitMinutes; c.adjust += e.creditMinutes - e.debitMinutes }
       else if (e.type === 'VENCIMENTO') c.expired += e.debitMinutes
     }

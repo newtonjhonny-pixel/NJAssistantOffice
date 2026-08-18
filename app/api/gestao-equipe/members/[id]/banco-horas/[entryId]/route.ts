@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string; en
     return NextResponse.json(rows[0])
   } catch (e) {
     console.error('[banco-horas PATCH]', e)
-    return NextResponse.json({ error: 'Erro ao atualizar lanÃ§amento' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao atualizar lançamento' }, { status: 500 })
   }
 }
 
@@ -44,11 +44,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string; ent
     `
     await prisma.$executeRaw`
       INSERT INTO "TeamHistory" ("id","memberId","type","title","description","createdAt")
-      VALUES (${randomUUID()}, ${params.id}, 'BANCO_HORAS', 'LanÃ§amento estornado',
+      VALUES (${randomUUID()}, ${params.id}, 'BANCO_HORAS', 'Lançamento estornado',
         ${'Entrada ID: ' + params.entryId}, ${now})
     `
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: 'Erro ao estornar lanÃ§amento' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao estornar lançamento' }, { status: 500 })
   }
 }

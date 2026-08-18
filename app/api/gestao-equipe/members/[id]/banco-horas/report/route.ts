@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import ExcelJS from 'exceljs'
 import jsPDF from 'jspdf'
@@ -67,12 +67,12 @@ async function buildExcel(memberId: string): Promise<Buffer> {
   wb.creator = 'NJ Assistant Office'
   wb.created = new Date()
 
-  // Sheet: Resumo por competÃªncia
-  const ws1 = wb.addWorksheet('CompetÃªncias')
+  // Sheet: Resumo por competência
+  const ws1 = wb.addWorksheet('Competências')
   ws1.columns = [
-    { header: 'CompetÃªncia', key: 'comp', width: 16 },
-    { header: 'CrÃ©ditos', key: 'credit', width: 14 },
-    { header: 'CompensaÃ§Ãµes', key: 'debit', width: 16 },
+    { header: 'Competência', key: 'comp', width: 16 },
+    { header: 'Créditos', key: 'credit', width: 14 },
+    { header: 'Compensações', key: 'debit', width: 16 },
     { header: 'Vencidos', key: 'expired', width: 14 },
     { header: 'Saldo', key: 'balance', width: 14 },
     { header: 'Vencimento', key: 'expiresAt', width: 14 },
@@ -89,16 +89,16 @@ async function buildExcel(memberId: string): Promise<Buffer> {
   ws1.addRow([])
   ws1.addRow({ comp: 'TOTAL', credit: minutesToHHMM(total.credit), debit: minutesToHHMM(total.debit), expired: minutesToHHMM(total.expired), balance: minutesToHHMM(balance) })
 
-  // Sheet: MovimentaÃ§Ãµes
-  const ws2 = wb.addWorksheet('MovimentaÃ§Ãµes')
+  // Sheet: Movimentações
+  const ws2 = wb.addWorksheet('Movimentações')
   ws2.columns = [
     { header: 'Data', key: 'date', width: 14 },
-    { header: 'CompetÃªncia', key: 'comp', width: 14 },
+    { header: 'Competência', key: 'comp', width: 14 },
     { header: 'Tipo', key: 'type', width: 16 },
-    { header: 'CrÃ©dito', key: 'credit', width: 12 },
-    { header: 'DÃ©bito', key: 'debit', width: 12 },
-    { header: 'ResponsÃ¡vel', key: 'resp', width: 20 },
-    { header: 'ObservaÃ§Ã£o', key: 'obs', width: 30 },
+    { header: 'Crédito', key: 'credit', width: 12 },
+    { header: 'Débito', key: 'debit', width: 12 },
+    { header: 'Responsável', key: 'resp', width: 20 },
+    { header: 'Observação', key: 'obs', width: 30 },
   ]
   ws2.getRow(1).eachCell(c => {
     c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
@@ -123,30 +123,30 @@ function buildPDF(data: Awaited<ReturnType<typeof fetchData>>): Buffer {
   doc.rect(0, 0, W, 18, 'F')
   doc.setTextColor(255,255,255)
   doc.setFontSize(13); doc.setFont('helvetica','bold')
-  doc.text('RelatÃ³rio â€” Banco de Horas', W/2, 8, { align: 'center' })
+  doc.text('Relatório — Banco de Horas', W/2, 8, { align: 'center' })
   doc.setFontSize(9); doc.setFont('helvetica','normal')
-  doc.text(`${member?.name ?? ''} | ${member?.role ?? ''}${member?.sector ? ' Â· ' + member.sector : ''}   Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, W/2, 14, { align: 'center' })
+  doc.text(`${member?.name ?? ''} | ${member?.role ?? ''}${member?.sector ? ' · ' + member.sector : ''}   Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, W/2, 14, { align: 'center' })
 
   y = 26
   // Summary row
   doc.setFillColor(241,245,249); doc.rect(10, y-5, W-20, 12, 'F')
   doc.setTextColor(30,41,59); doc.setFontSize(8); doc.setFont('helvetica','bold')
   doc.text(`Saldo Atual: ${minutesToHHMM(balance)}`, 14, y)
-  doc.text(`Total CrÃ©ditos: ${minutesToHHMM(total.credit)}`, 70, y)
-  doc.text(`Total CompensaÃ§Ãµes: ${minutesToHHMM(total.debit)}`, 140, y)
+  doc.text(`Total Créditos: ${minutesToHHMM(total.credit)}`, 70, y)
+  doc.text(`Total Compensações: ${minutesToHHMM(total.debit)}`, 140, y)
   doc.text(`Total Vencidos: ${minutesToHHMM(total.expired)}`, 215, y)
   y += 12
 
   // Table header
   const cols = [
-    { label: 'CompetÃªncia', x: 10, w: 30 },
-    { label: 'CrÃ©ditos', x: 40, w: 28 },
-    { label: 'CompensaÃ§Ãµes', x: 68, w: 32 },
+    { label: 'Competência', x: 10, w: 30 },
+    { label: 'Créditos', x: 40, w: 28 },
+    { label: 'Compensações', x: 68, w: 32 },
     { label: 'Vencidos', x: 100, w: 28 },
     { label: 'Saldo', x: 128, w: 28 },
     { label: 'Vencimento', x: 156, w: 32 },
     { label: 'Dias Restantes', x: 188, w: 32 },
-    { label: 'SituaÃ§Ã£o', x: 220, w: 67 },
+    { label: 'Situação', x: 220, w: 67 },
   ]
   doc.setFillColor(241,245,249); doc.rect(10, y-4, W-20, 7, 'F')
   doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(71,85,105)
@@ -161,7 +161,7 @@ function buildPDF(data: Awaited<ReturnType<typeof fetchData>>): Buffer {
   for (const c of competences) {
     if (y > H - 20) { doc.addPage(); y = 15 }
     const sit = c.balance <= 0 ? 'ZERADO' : c.daysLeft < 0 ? 'VENCIDO' : c.daysLeft <= 30 ? 'ATENCAO' : 'REGULAR'
-    const sitLabel: Record<string,string> = { REGULAR:'Regular', ATENCAO:'AtenÃ§Ã£o', VENCIDO:'Vencido', ZERADO:'Zerado' }
+    const sitLabel: Record<string,string> = { REGULAR:'Regular', ATENCAO:'Atenção', VENCIDO:'Vencido', ZERADO:'Zerado' }
     doc.setTextColor(30,41,59)
     doc.text(competenceLabel(c.comp), cols[0].x, y, { maxWidth: cols[0].w })
     doc.text(minutesToHHMM(c.credit), cols[1].x, y)
@@ -181,7 +181,7 @@ function buildPDF(data: Awaited<ReturnType<typeof fetchData>>): Buffer {
   }
 
   doc.setFontSize(7); doc.setTextColor(148,163,184)
-  doc.text('NJ Assistant Office â€” Banco de Horas', W/2, H-5, { align: 'center' })
+  doc.text('NJ Assistant Office — Banco de Horas', W/2, H-5, { align: 'center' })
   return Buffer.from(doc.output('arraybuffer'))
 }
 
@@ -207,6 +207,6 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     })
   } catch (e) {
     console.error('[banco-horas report GET]', e)
-    return NextResponse.json({ error: 'Erro ao gerar relatÃ³rio' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao gerar relatório' }, { status: 500 })
   }
 }

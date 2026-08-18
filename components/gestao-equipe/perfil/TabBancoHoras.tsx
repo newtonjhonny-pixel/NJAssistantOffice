@@ -30,7 +30,9 @@ interface HBSummary {
 
 interface HBConfig {
   compensationDays: number; alertDaysBeforeExp: number
-  maxCreditHours: number | null; negativeBalance: boolean; observations: string | null
+  maxCreditHours: number | null; negativeBalance: boolean
+  periodoInicio: string | null; periodoFim: string | null
+  observations: string | null
 }
 
 interface HBChartItem { month: string; credit: number; debit: number; balance: number }
@@ -220,7 +222,9 @@ function ConfigForm({ memberId, config, onSaved, onCancel }: { memberId: string;
     alertDaysBeforeExp: String(config.alertDaysBeforeExp),
     maxCreditHours:     config.maxCreditHours != null ? String(config.maxCreditHours) : '',
     negativeBalance:    config.negativeBalance,
-    observations:       config.observations ?? '',
+    periodoInicio:      config.periodoInicio ?? '',
+    periodoFim:         config.periodoFim    ?? '',
+    observations:       config.observations  ?? '',
   })
   const [saving, setSaving] = useState(false)
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
@@ -234,7 +238,9 @@ function ConfigForm({ memberId, config, onSaved, onCancel }: { memberId: string;
         alertDaysBeforeExp: parseInt(form.alertDaysBeforeExp) || 30,
         maxCreditHours:     form.maxCreditHours ? parseInt(form.maxCreditHours) : null,
         negativeBalance:    form.negativeBalance,
-        observations:       form.observations || null,
+        periodoInicio:      form.periodoInicio || null,
+        periodoFim:         form.periodoFim    || null,
+        observations:       form.observations  || null,
       }),
     })
     setSaving(false)
@@ -244,6 +250,22 @@ function ConfigForm({ memberId, config, onSaved, onCancel }: { memberId: string;
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
       <p className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><Settings className="w-4 h-4" /> Configuração</p>
+
+      {/* Período do acordo */}
+      <div>
+        <p className="text-xs font-medium text-slate-600 mb-2">Período do Banco de Horas</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Início do período</label>
+            <input type="date" value={form.periodoInicio} onChange={f('periodoInicio')} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Fim do período</label>
+            <input type="date" value={form.periodoFim} onChange={f('periodoFim')} className={inputCls} />
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <label className={labelCls}>Prazo de compensação (dias)</label>

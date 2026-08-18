@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     body.deadline     ?? null,
   )
 
-  // Se aprovado, avanÃ§a o workflowStatus do documento
+  // Se aprovado, avança o workflowStatus do documento
   if (body.decision === 'APROVADO' && body.nextWorkflowStatus) {
     const doc = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
       `SELECT workflowStatus, version FROM "ProcedureDocument" WHERE id = ?`, params.id

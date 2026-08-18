@@ -587,6 +587,10 @@ model TeamMember {
   salary              MemberSalary?
   hourBankEntries     HourBankEntry[]
   hourBankConfig      HourBankConfig?
+  schedules              EmployeeSchedule[]
+  dailyTimeRecords       DailyTimeRecord[]
+  monthlyTimeCompetences MonthlyTimeCompetence[]
+  calendarExceptions     MemberCalendarException[]
 }
 
 // â”€â”€â”€ CARTEIRA DE EMPRESAS E REMUNERAÃ‡ÃƒO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -598,12 +602,16 @@ model ClientCompany {
   segment        String?
   observations   String?
   active         Boolean  @default(true)
+  ibgeCode         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   memberLinks MemberCompanyLink[]
 
   @@index([active])
+  snapshots      CompanyOperationalSnapshot[]
+  systems        CompanySystem[]
+  processConfigs CompanyProcessConfig[]
 }
 
 model MemberCompanyLink {
@@ -1725,4 +1733,255 @@ model TrainingClass {
 
   @@index([trainingId])
   @@index([status])
+}
+
+// ============================================================================
+// MODULO OPERACIONAL / PONTO / CALENDARIO  (alinhado ao SQL raw de runtime)
+// active / isWorked / flags booleanas usam Int  (0 = false, 1 = true)
+// ============================================================================
+
+model CompanyOperationalSnapshot {
+  id                  String        @id @default(cuid())
+  companyId           String
+  company             ClientCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  competence          String        // MM/YYYY  ex: "08/2026"
+
+  // Status do ciclo: INICIAL | PRE_CALCULADA | EM_PREENCHIMENTO | FECHADA
+  status              String        @default("EM_PREENCHIMENTO")
+  isInitialCompetence Int       @default(0)
+  closedAt            String?
+
+  // Quadro inicial (manual na primeira competência; propagado das anteriores nas demais)
+  headcountInitialActive     Int?
+  headcountInitialApprentice Int?
+  headcountInitialIntern     Int?
+  headcountInitialOnLeave    Int?
+
+  // Movimentações — Admissões (novas contratações)
+  admissionsClt        Int           @default(0)
+  admissionsApprentice Int           @default(0)
+  admissionsIntern     Int           @default(0)
+
+  // Movimentações — Entradas / Transferências recebidas
+  entriesClt           Int           @default(0)
+  entriesApprentice    Int           @default(0)
+  entriesIntern        Int           @default(0)
+
+  // Movimentações — Rescisões
+  terminationsClt      Int           @default(0)
+  terminationsApprentice Int         @default(0)
+  terminationsIntern   Int           @default(0)
+
+  // Movimentações — Saídas / Transferências cedidas
+  exitsClt             Int           @default(0)
+  exitsApprentice      Int           @default(0)
+  exitsIntern          Int           @default(0)
+
+  // Movimentações — Afastamentos
+  newLeaves            Int           @default(0)
+  returnFromLeave      Int           @default(0)
+
+  // Quadro final (calculado e armazenado ao fechar)
+  headcountFinalActive     Int?
+  headcountFinalApprentice Int?
+  headcountFinalIntern     Int?
+  headcountFinalOnLeave    Int?
+
+  // Campos legados (preservados para retrocompatibilidade, não usados na nova UI)
+  // headcountActive / headcountApprentice / headcountIntern / headcountOnLeave
+  // avgAdmissions / avgTerminations / avgVacations / folhasProcessadas
+  // complexity / automationLevel  — estes três migrados para CompanyProcessConfig
+  headcountActive     Int?
+  headcountApprentice Int?
+  headcountIntern     Int?
+  headcountOnLeave    Int?
+  avgAdmissions       Float?
+  avgTerminations     Float?
+  avgVacations        Float?
+  folhasProcessadas   Int?
+  complexity          String?
+  automationLevel     String?
+
+  observations        String?
+  createdAt           String?
+  updatedAt           String? 
+
+  @@unique([companyId, competence])
+  @@index([companyId])
+}
+model CompanySystem {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     ClientCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  systemName  String        // ex: METADADOS, SISMONACO, SECULLUM
+  systemType  String?       // FOLHA | PONTO | ERP | BPO | OUTROS
+  vendor      String?
+  version     String?
+  isActive    Int       @default(1)
+  observations String?
+  createdAt   String?
+  updatedAt   String? 
+
+  @@index([companyId])
+}
+model CompanyProcessConfig {
+  id              String        @id @default(cuid())
+  companyId       String
+  company         ClientCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processType     String        // FOLHA | ADMISSAO | RESCISAO | FERIAS | BENEFICIOS | ENCARGOS | PONTO | ESOCIAL | FGTS | DCTFWEB | OUTROS
+  volume          Float?        // movimentações/mês estimadas
+  automationLevel String?       // ALTO | MEDIO | BAIXO | MANUAL
+  avgTimeMinutes  Float?        // tempo médio de execução em minutos
+  isCritical      Int       @default(0)
+  observations    String?
+  createdAt       String?
+  updatedAt       String? 
+
+  @@unique([companyId, processType])
+  @@index([companyId])
+}
+model WorkCalendarEntry {
+  id           String   @id @default(cuid())
+  date         String   // YYYY-MM-DD
+  year         Int
+  description  String
+  type         String   // FERIADO_NACIONAL | FERIADO_ESTADUAL | FERIADO_MUNICIPAL | FERIADO_EMPRESA | FACULTATIVO | SEM_EXPEDIENTE | ESPECIAL
+  uf           String?
+  municipio    String?
+  ibgeCode     String?  // codigo IBGE 7 digitos do municipio
+  country      String?  @default("Brasil")
+  origin       String?  @default("MANUAL") // OFICIAL | MANUAL | EMPRESA | IMPORTADO | AJUSTE
+  companyId    String?  // null = todos; preenchido = apenas esta empresa
+  unitId       String?  // null = todas as unidades
+  isWorked     Int  @default(0) // feriado trabalhado?
+  observations String?
+  active       Int  @default(1)
+  createdAt    String?
+  updatedAt    String? 
+
+  @@index([date])
+  @@index([year])
+}
+model EmployeeSchedule {
+  id             String              @id @default(cuid())
+  memberId       String
+  member         TeamMember          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  name           String              // ex: "Padrão 8h", "Turno A"
+  weeklyMinutes  Int                 @default(0)   // total de minutos semanais
+  monthlyMinutes Int                 @default(0)   // total de minutos mensais (referência)
+  startDate      String              // YYYY-MM-DD — início da vigência
+  endDate        String?             // YYYY-MM-DD — fim da vigência (null = vigente)
+  observations   String?
+  active         Int             @default(1)
+  createdAt      String?
+  updatedAt      String?            
+
+  days           EmployeeScheduleDay[]
+
+  @@index([memberId])
+  @@index([memberId, startDate])
+}
+model EmployeeScheduleDay {
+  id           String           @id @default(cuid())
+  scheduleId   String
+  schedule     EmployeeSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek    Int              // 0=Dom … 6=Sáb
+  isWorked     Int          @default(1)
+  // Até 3 pares de batida (em formato "HH:MM")
+  entry1       String?          // ex: "08:00"
+  exit1        String?          // ex: "12:00"
+  entry2       String?          // ex: "13:00"
+  exit2        String?          // ex: "17:00"
+  entry3       String?
+  exit3        String?
+  dailyMinutes Int              @default(0)   // minutos previstos neste dia
+  createdAt    String?
+  updatedAt    String?         
+
+  @@unique([scheduleId, dayOfWeek])
+  @@index([scheduleId])
+}
+model DailyTimeRecord {
+  id              String   @id @default(cuid())
+  memberId        String
+  member          TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  date            String   // YYYY-MM-DD
+  dayOfWeek       Int      // 0=Dom … 6=Sáb
+  competence      String   // YYYY-MM
+  dayType         String   @default("UTIL") // UTIL | SABADO | DOMINGO | FERIADO | FOLGA | ESPECIAL
+  calendarEntryId String?  // referência ao WorkCalendarEntry se houver evento nesse dia
+  scheduleId      String?  // escala vigente neste dia
+  plannedMinutes  Int      @default(0)    // minutos previstos (da escala ou calendário)
+  entryMode       String   @default("MARCACAO") // MARCACAO | TOTAL | IMPORTACAO | AJUSTE
+  // Batidas (HH:MM)
+  entry1          String?
+  exit1           String?
+  entry2          String?
+  exit2           String?
+  entry3          String?
+  exit3           String?
+  entry4          String?
+  exit4           String?
+  // Modo TOTAL: horas digitadas diretamente (sem batidas)
+  totalMinutes    Int?     // preenchido quando entryMode = TOTAL ou AJUSTE
+  // Calculados
+  workedMinutes   Int      @default(0)    // minutos efetivamente trabalhados
+  balanceMinutes  Int      @default(0)    // workedMinutes - plannedMinutes (positivo=crédito, negativo=débito)
+  // Classificação do saldo
+  classification  String   @default("PENDENTE") // BANCO | HORA_EXTRA | ABONADO | DESCONTO | COMPENSACAO | SEM_EFEITO | PENDENTE
+  justification   String?  // código de justificativa (ex: FALTA_JUSTIFICADA, ATESTADO...)
+  justificationDesc String?
+  hasAttachment   Int  @default(0)
+  status          String   @default("NAO_PREENCHIDO") // NAO_PREENCHIDO | PREENCHIDO | CONFERIDO | DIVERGENCIA | JUSTIFICADO | PENDENTE | FECHADO
+  source          String   @default("MANUAL")         // MANUAL | IMPORTACAO | INTEGRACAO | AJUSTE
+  sourceType      String?  @default("MANUAL")
+  importBatchId   String?
+  observations    String?
+  createdAt       String?
+  updatedAt       String? 
+
+  @@unique([memberId, date])
+  @@index([memberId])
+  @@index([memberId, competence])
+  @@index([competence])
+}
+model MonthlyTimeCompetence {
+  id                 String     @id @default(cuid())
+  memberId           String
+  member             TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  competence         String     // YYYY-MM
+  plannedMinutes     Int        @default(0)
+  workedMinutes      Int        @default(0)
+  balanceMinutes     Int        @default(0)
+  bankCreditMinutes  Int        @default(0)  // saldo destinado ao banco de horas
+  bankDebitMinutes   Int        @default(0)  // débitos (faltas descontadas)
+  overtimeMinutes    Int        @default(0)  // hora extra paga (não banco)
+  abonoMinutes       Int        @default(0)  // horas abonadas
+  compensationMinutes Int       @default(0)  // horas compensadas
+  pendingCount       Int        @default(0)  // dias ainda pendentes de lançamento
+  status             String     @default("ABERTA") // ABERTA | FECHADA | REABERTA
+  closedAt           String?
+  closedBy           String?
+  bankHoursEntryId   String?    // ID do HourBankEntry criado ao fechar
+  observations       String?
+  createdAt          String?
+  updatedAt          String?   
+
+  @@unique([memberId, competence])
+  @@index([memberId])
+}
+model MemberCalendarException {
+  id             String     @id @default(cuid())
+  memberId       String
+  member         TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  date           String     // YYYY-MM-DD
+  type           String     // FOLGA | COMPENSACAO | FERIAS | AFASTAMENTO | FERIADO_LOCAL | OUTRO
+  description    String?
+  overrideWorked Int    @default(0) // este dia deve ser trabalhado mesmo sendo feriado?
+  plannedMinutes Int        @default(0)     // minutos previstos (0 = dia não trabalhado)
+  createdAt      String?
+  updatedAt      String?   
+
+  @@unique([memberId, date])
+  @@index([memberId])
 }

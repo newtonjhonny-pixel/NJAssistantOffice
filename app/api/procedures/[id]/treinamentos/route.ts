@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const now  = new Date().toISOString()
 
   // fileType = "__treinamento__:MODALIDADE"
-  // fileName = tÃ­tulo do treinamento
+  // fileName = título do treinamento
   // filePath = JSON com campos extras
   const fileType = `${MARKER}${body.modalidade ?? 'PRESENCIAL'}`
   const filePath = JSON.stringify({

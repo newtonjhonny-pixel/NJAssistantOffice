@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
        "evidenceDate", status, "expiresAt", notes, "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    body.title        || 'Nova EvidÃªncia',
+    body.title        || 'Nova Evidência',
     body.type         || 'DOCUMENTO',
     body.description  || null,
     body.processId    || null,

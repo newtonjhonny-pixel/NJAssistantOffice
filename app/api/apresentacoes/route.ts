@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       data: {
         presentationId: item.id,
         action:         "CRIACAO",
-        description:    "ApresentaÃ§Ã£o criada",
+        description:    "Apresentação criada",
       },
     })
 
@@ -67,6 +67,6 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[POST /api/apresentacoes]", message)
-    return NextResponse.json({ error: "NÃ£o foi possÃ­vel criar a apresentaÃ§Ã£o." }, { status: 500 })
+    return NextResponse.json({ error: "Não foi possível criar a apresentação." }, { status: 500 })
   }
 }

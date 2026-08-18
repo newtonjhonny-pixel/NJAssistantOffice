@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const id = randomUUID()
-    const now = new Date().toISOString()
+    const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
     const critical = Boolean(isCritical)
 
     await prisma.$executeRaw`

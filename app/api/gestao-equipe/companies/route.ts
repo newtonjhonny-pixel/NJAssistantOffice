@@ -22,11 +22,21 @@ async function ensureSchema() {
     `ALTER TABLE "ClientCompany" ${addColumn} "city"              TEXT`,
     `ALTER TABLE "ClientCompany" ${addColumn} "state"             TEXT`,
     `ALTER TABLE "ClientCompany" ${addColumn} "country"           TEXT DEFAULT 'Brasil'`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "ibgeCode"          TEXT`,
+  ]
+  const companyExtraCols = [
+    `ALTER TABLE "ClientCompany" ${addColumn} "laborUnionCount"    INTEGER`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "cctCount"           INTEGER`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "establishmentCount" INTEGER`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "filialCount"        INTEGER`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "laborBaseDate"      TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "complexityGeneral"  TEXT`,
+    `ALTER TABLE "ClientCompany" ${addColumn} "situacao"           TEXT DEFAULT 'ATIVA'`,
   ]
   const memberCols = [
     `ALTER TABLE "TeamMember" ${addColumn} "companyId" TEXT`,
   ]
-  for (const sql of [...companyCols, ...memberCols]) {
+  for (const sql of [...companyCols, ...companyExtraCols, ...memberCols]) {
     try { await prisma.$executeRawUnsafe(sql) } catch { /* já existe */ }
   }
 }
@@ -88,7 +98,7 @@ export async function POST(req: Request) {
     const {
       code, name, tradeName, segment, observations,
       establishmentType, parentCompanyId,
-      zipCode, street, number, complement, neighborhood, city, state, country,
+      zipCode, street, number, complement, neighborhood, city, state, country, ibgeCode,
     } = body
     const cnpj = body.cnpj ? onlyDigits(String(body.cnpj)) : null
 
@@ -153,9 +163,9 @@ export async function POST(req: Request) {
       INSERT INTO "ClientCompany" (
         "id","code","name","tradeName","cnpj","segment","observations",
         "establishmentType","parentCompanyId","active",
-        "zipCode","street","number","complement","neighborhood","city","state","country",
+        "zipCode","street","number","complement","neighborhood","city","state","country","ibgeCode",
         "createdAt","updatedAt"
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `,
       id,
       code.trim(),
@@ -175,6 +185,7 @@ export async function POST(req: Request) {
       city?.trim() || null,
       (state?.trim() || '').toUpperCase() || null,
       country?.trim() || 'Brasil',
+      ibgeCode?.trim() || null,
       now, now
     )
 

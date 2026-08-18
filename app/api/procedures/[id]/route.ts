@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -30,11 +30,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const body = await req.json()
   const now  = new Date()
 
-  // type sÃ³ Ã© atualizado quando explicitamente enviado (migraÃ§Ã£o de legado)
+  // type só é atualizado quando explicitamente enviado (migração de legado)
   const typeClause = body.type ? ', type = ?' : ''
   const typeParam  = body.type ? [body.type] : []
 
-  // Snap do documento atual para o histÃ³rico
+  // Snap do documento atual para o histórico
   const before = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT "workflowStatus", status, version FROM "ProcedureDocument" WHERE id = ?`, params.id
   )
@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     body.processId         || null,
     body.status            ?? 'VIGENTE',
     body.version           ?? 'v1.0',
-    // Fase 1 â€” IdentificaÃ§Ã£o
+    // Fase 1 — Identificação
     body.subtitle          ?? null,
     body.category          ?? null,
     body.macroprocess      ?? null,
@@ -97,7 +97,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     body.successorDocument ?? null,
     body.tags              ?? null,
     body.keywords          ?? null,
-    // Fase 1 â€” GovernanÃ§a
+    // Fase 1 — Governança
     body.elaboratedBy            ?? null,
     body.technicalReviewer       ?? null,
     body.qualityReviewer         ?? null,
@@ -118,7 +118,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     params.id,
   )
 
-  // Registrar no histÃ³rico se workflowStatus mudou
+  // Registrar no histórico se workflowStatus mudou
   if (body.workflowStatus && body.workflowStatus !== prev.workflowStatus) {
     const hid = randomUUID()
     await prisma.$executeRawUnsafe(

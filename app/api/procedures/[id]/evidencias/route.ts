@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 import { randomUUID } from 'crypto'
 
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
      VALUES (?, ?, NULL, ?, ?, 0, ?, ?)`,
     id,
     params.id,
-    body.titulo ?? 'EvidÃªncia',
+    body.titulo ?? 'Evidência',
     fileType,
     filePath,
     now,

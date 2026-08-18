@@ -9,9 +9,13 @@ import {
   Users, MessageSquare, Navigation, Umbrella, BookOpen,
   Activity, BookMarked, Briefcase, LayoutDashboard, Plus, Edit2, Trash2,
   Sparkles, X, ChevronDown, AlertTriangle, CheckCircle,
-  Clock, Calendar, RefreshCw, Search, Filter, Eye, Building2, Save, Loader2 as Spin, BarChart2, FileDown,
+  Clock, Calendar, RefreshCw, Search, Filter, Eye, Building2, Save, Loader2 as Spin, BarChart2, FileDown, Upload, Lock,
 } from "lucide-react"
 import { TeamMemberProfileModal } from "./perfil/TeamMemberProfileModal"
+import CompanyDetailModal from "./empresas/CompanyDetailModal"
+import { WorkCalendarManager } from "./calendario/WorkCalendarManager"
+import CentralImportacoes from "@/components/importacoes/CentralImportacoes"
+import TabFechamentoPonto from "./ponto/TabFechamentoPonto"
 import { cn } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1808,6 +1812,7 @@ interface Company {
   branchCount?: number
   zipCode: string | null
   street: string | null
+  ibgeCode: string | null
   number: string | null
   complement: string | null
   neighborhood: string | null
@@ -1867,6 +1872,7 @@ const EMPTY_COMPANY_FORM = {
   establishmentType: 'MATRIZ', parentCompanyId: '',
   zipCode: '', street: '', number: '', complement: '',
   neighborhood: '', city: '', state: '', country: 'Brasil',
+  ibgeCode: '',
   observations: '', active: 'ATIVO',
 }
 
@@ -1902,6 +1908,7 @@ function CompanyForm({
         city:              editing.city              ?? '',
         state:             editing.state             ?? '',
         country:           editing.country           ?? 'Brasil',
+        ibgeCode:          (editing as any).ibgeCode  ?? '',
         observations:      editing.observations      ?? '',
         active:            editing.active            ? 'ATIVO' : 'INATIVO',
       })
@@ -1932,6 +1939,8 @@ function CompanyForm({
         neighborhood: d.bairro     || p.neighborhood,
         city:         d.localidade || p.city,
         state:        d.uf         || p.state,
+        // Ao trocar de CEP, o código IBGE pode ter mudado — limpa para que o usuário atualize se necessário
+        ibgeCode:     p.ibgeCode && (d.uf !== p.state || d.localidade !== p.city) ? '' : p.ibgeCode,
       }))
     } catch { /* silencioso — permite edição manual */ }
     finally { setCepLoading(false) }
@@ -1959,6 +1968,7 @@ function CompanyForm({
         cnpj:            onlyCnpjDigits(form.cnpj) || null,
         zipCode:         form.zipCode.replace(/\D/g, '') || null,
         parentCompanyId: form.establishmentType === 'MATRIZ' ? null : (form.parentCompanyId || null),
+        ibgeCode:        form.ibgeCode?.trim() || null,
         // active só enviado em edição (boolean); criação sempre inicia como ativa
         ...(editing ? { active: form.active === 'ATIVO' } : {}),
       }
@@ -2110,6 +2120,28 @@ function CompanyForm({
           <Lbl>País</Lbl>
           <input value={form.country} onChange={sf('country')} className={IC} placeholder="Brasil" />
         </div>
+        <div className="col-span-2 sm:col-span-2">
+          <Lbl>Código IBGE do Município</Lbl>
+          <input
+            value={form.ibgeCode}
+            onChange={e => { setError(''); setForm(p => ({ ...p, ibgeCode: e.target.value.replace(/\D/g, '').slice(0, 7) })) }}
+            className={IC}
+            placeholder="Ex: 1501402 (Belém/PA)"
+            inputMode="numeric"
+            maxLength={7}
+          />
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            Opcional — permite geração precisa de feriados municipais.{' '}
+            <a
+              href={`https://servicodados.ibge.gov.br/api/v1/localidades/municipios`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-500 hover:underline"
+            >
+              Consultar IBGE →
+            </a>
+          </p>
+        </div>
       </div>
 
       {/* ── Observações ────────────────────────────────────────────────────── */}
@@ -2138,6 +2170,7 @@ function TabEmpresas() {
   const [editing, setEditing]       = useState<Company | null>(null)
   const [expanded, setExpanded]     = useState<Record<string, boolean>>({})
   const [search, setSearch]         = useState('')
+  const [detailCompany, setDetailCompany] = useState<Company | null>(null)
 
   async function load() {
     setLoading(true)
@@ -2261,6 +2294,11 @@ function TabEmpresas() {
 
                   {/* Ações */}
                   <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => setDetailCompany(c)}
+                      title="Ver detalhes"
+                      className="text-slate-400 hover:text-indigo-600 p-1.5 rounded transition-colors">
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => openEdit(c)}
                       title="Editar"
                       className="text-slate-400 hover:text-blue-600 p-1.5 rounded transition-colors">
@@ -2336,6 +2374,14 @@ function TabEmpresas() {
             onCancel={() => setShowForm(false)}
           />
         </Modal>
+      )}
+
+      {/* Modal de detalhes da empresa */}
+      {detailCompany && (
+        <CompanyDetailModal
+          companyId={detailCompany.id}
+          onClose={() => setDetailCompany(null)}
+        />
       )}
     </div>
   )
@@ -3012,6 +3058,9 @@ const TABS = [
   { id: "cargos",            label: "Descrição de Cargos", icon: Briefcase       },
   { id: "empresas",          label: "Empresas",            icon: Building2       },
   { id: "dimensionamento",   label: "Dimensionamento",     icon: BarChart2       },
+  { id: "calendario",        label: "Calendário",          icon: Calendar        },
+  { id: "importacoes",       label: "Importações",         icon: Upload          },
+  { id: "fechamento-ponto",  label: "Fechamento de Ponto", icon: Lock            },
 ]
 
 interface CurrentUser {
@@ -3107,6 +3156,25 @@ export function GestaoEquipeClient() {
         {activeTab === "cargos"         && <TabCargos />}
         {activeTab === "empresas"        && <TabEmpresas />}
         {activeTab === "dimensionamento" && <TabDimensionamento />}
+        {activeTab === "calendario"      && (
+          <div className="p-6">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+              <Calendar size={20} className="text-blue-600" />
+              Calendário de Trabalho
+            </h2>
+            <WorkCalendarManager />
+          </div>
+        )}
+        {activeTab === "importacoes"     && (
+          <div className="p-6">
+            <CentralImportacoes />
+          </div>
+        )}
+        {activeTab === "fechamento-ponto" && (
+          <div className="overflow-y-auto">
+            <TabFechamentoPonto />
+          </div>
+        )}
       </div>
     </div>
   )

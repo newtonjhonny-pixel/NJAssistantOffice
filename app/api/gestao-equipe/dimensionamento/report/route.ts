@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 import ExcelJS from 'exceljs'
 import jsPDF from 'jspdf'
@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic'
 
 async function getDimData() {
   const cfgRows = await prisma.$queryRaw<any[]>`
-    SELECT “capacityRef”,”bandGreen”,”bandBlue”,”bandYellow”,”bandOrange”
-    FROM “CapacityConfig” WHERE “active” = true LIMIT 1
+    SELECT "capacityRef","bandGreen","bandBlue","bandYellow","bandOrange"
+    FROM "CapacityConfig" WHERE "active" = true LIMIT 1
   `
   const rawCfg = cfgRows[0]
   const bandCfg: BandConfig = rawCfg ? {
@@ -24,14 +24,14 @@ async function getDimData() {
   const capacityRef = rawCfg ? Number(rawCfg.capacityRef) : 100
 
   const members = await prisma.$queryRaw<any[]>`
-    SELECT “id”,”name”,”role”,”sector”,”unit” FROM “TeamMember” WHERE “status” = 'ATIVO' ORDER BY “name”
+    SELECT "id","name","role","sector","unit" FROM "TeamMember" WHERE "status" = 'ATIVO' ORDER BY "name"
   `
   const links = await prisma.$queryRawUnsafe<any[]>(`
-    SELECT l.*, c.”name” AS “companyName”
-    FROM “MemberCompanyLink” l
-    JOIN “ClientCompany” c ON c.”id” = l.”companyId”
-    JOIN “TeamMember” m ON m.”id” = l.”memberId”
-    WHERE m.”status” = 'ATIVO'
+    SELECT l.*, c."name" AS "companyName"
+    FROM "MemberCompanyLink" l
+    JOIN "ClientCompany" c ON c."id" = l."companyId"
+    JOIN "TeamMember" m ON m."id" = l."memberId"
+    WHERE m."status" = 'ATIVO'
   `)
 
   const linksByMember = links.reduce<Record<string, any[]>>((acc, l) => {
@@ -66,7 +66,7 @@ async function getDimData() {
   return { bandCfg, capacityRef, rows }
 }
 
-// â”€â”€â”€ Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Excel ────────────────────────────────────────────────────────────────────
 
 async function buildExcel(cfg: BandConfig & { capacityRef: number }, rows: any[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
@@ -84,12 +84,12 @@ async function buildExcel(cfg: BandConfig & { capacityRef: number }, rows: any[]
     { header: 'Processos', key: 'totalProcesses', width: 13 },
     { header: 'Score Total', key: 'totalScore', width: 14 },
     { header: 'Capacidade %', key: 'capacityPct', width: 16 },
-    { header: 'SituaÃ§Ã£o', key: 'band', width: 20 },
+    { header: 'Situação', key: 'band', width: 20 },
   ]
 
   const BAND_COLOR: Record<string, string> = {
-    'DisponÃ­vel': 'FF22C55E', 'Equilibrado': 'FF3B82F6',
-    'AtenÃ§Ã£o': 'FFCA8A04', 'Sobrecarga': 'FFF97316', 'Sobrecarga CrÃ­tica': 'FFEF4444',
+    'Disponível': 'FF22C55E', 'Equilibrado': 'FF3B82F6',
+    'Atenção': 'FFCA8A04', 'Sobrecarga': 'FFF97316', 'Sobrecarga Crítica': 'FFEF4444',
   }
 
   ws.getRow(1).eachCell(cell => {
@@ -111,7 +111,7 @@ async function buildExcel(cfg: BandConfig & { capacityRef: number }, rows: any[]
   }
 
   ws.addRow([])
-  ws.addRow(['ConfiguraÃ§Ã£o', '', `Ref: ${cfg.capacityRef} pts`, `Verde â‰¤${cfg.bandGreen}%`, `Azul â‰¤${cfg.bandBlue}%`, `Amarelo â‰¤${cfg.bandYellow}%`, `Laranja â‰¤${cfg.bandOrange}%`])
+  ws.addRow(['Configuração', '', `Ref: ${cfg.capacityRef} pts`, `Verde â‰¤${cfg.bandGreen}%`, `Azul â‰¤${cfg.bandBlue}%`, `Amarelo â‰¤${cfg.bandYellow}%`, `Laranja â‰¤${cfg.bandOrange}%`])
 
   // Sheet 2: Por empresa
   const ws2 = wb.addWorksheet('Por Empresa')
@@ -135,7 +135,7 @@ async function buildExcel(cfg: BandConfig & { capacityRef: number }, rows: any[]
   return Buffer.from(buf)
 }
 
-// â”€â”€â”€ PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── PDF ──────────────────────────────────────────────────────────────────────
 
 function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffer {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
@@ -144,11 +144,11 @@ function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffe
   let y = 15
 
   const BAND_RGB: Record<string, [number, number, number]> = {
-    'DisponÃ­vel':       [34, 197, 94],
+    'Disponível':       [34, 197, 94],
     'Equilibrado':      [59, 130, 246],
-    'AtenÃ§Ã£o':          [202, 138, 4],
+    'Atenção':          [202, 138, 4],
     'Sobrecarga':       [249, 115, 22],
-    'Sobrecarga CrÃ­tica': [239, 68, 68],
+    'Sobrecarga Crítica': [239, 68, 68],
   }
 
   // Header
@@ -157,7 +157,7 @@ function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffe
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(13)
   doc.setFont('helvetica', 'bold')
-  doc.text('RelatÃ³rio de Dimensionamento de Equipe', pageW / 2, 9, { align: 'center' })
+  doc.text('Relatório de Dimensionamento de Equipe', pageW / 2, 9, { align: 'center' })
   doc.setFontSize(8)
   doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}  |  Ref: ${cfg.capacityRef} pts  |  Verde â‰¤${cfg.bandGreen}%  Azul â‰¤${cfg.bandBlue}%  Amarelo â‰¤${cfg.bandYellow}%  Laranja â‰¤${cfg.bandOrange}%`, pageW / 2, 12.5, { align: 'center' })
 
@@ -174,7 +174,7 @@ function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffe
     { label: 'Processos', x: 176, w: 20 },
     { label: 'Score', x: 196, w: 18 },
     { label: 'Cap. %', x: 214, w: 18 },
-    { label: 'SituaÃ§Ã£o', x: 232, w: 55 },
+    { label: 'Situação', x: 232, w: 55 },
   ]
 
   doc.setFillColor(241, 245, 249)
@@ -199,7 +199,7 @@ function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffe
     doc.setTextColor(30, 41, 59)
     doc.text(r.name, cols[0].x, y, { maxWidth: cols[0].w })
     doc.text(r.role, cols[1].x, y, { maxWidth: cols[1].w })
-    doc.text(r.sector || 'â€”', cols[2].x, y, { maxWidth: cols[2].w })
+    doc.text(r.sector || '—', cols[2].x, y, { maxWidth: cols[2].w })
     doc.text(String(r.companyCount), cols[3].x, y, { maxWidth: cols[3].w })
     doc.text(String(r.totalHeadcount), cols[4].x, y, { maxWidth: cols[4].w })
     doc.text(String(r.totalProcesses), cols[5].x, y, { maxWidth: cols[5].w })
@@ -225,12 +225,12 @@ function buildPDF(cfg: BandConfig & { capacityRef: number }, rows: any[]): Buffe
   // Footer
   doc.setFontSize(7)
   doc.setTextColor(148, 163, 184)
-  doc.text('NJ Assistant Office â€” GestÃ£o de Equipe', pageW / 2, pageH - 5, { align: 'center' })
+  doc.text('NJ Assistant Office — Gestão de Equipe', pageW / 2, pageH - 5, { align: 'center' })
 
   return Buffer.from(doc.output('arraybuffer'))
 }
 
-// â”€â”€â”€ Route â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
   try {
@@ -260,6 +260,6 @@ export async function GET(req: Request) {
     })
   } catch (e) {
     console.error('[dimensionamento/report GET]', e)
-    return NextResponse.json({ error: 'Erro ao gerar relatÃ³rio' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao gerar relatório' }, { status: 500 })
   }
 }

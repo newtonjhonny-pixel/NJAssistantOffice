@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma-sqlite'
 
 export const dynamic = 'force-dynamic'
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function PATCH(req: Request, { params }: { params: { id: string; processId: string } }) {
   try {
     const body = await req.json()
-    const now = new Date().toISOString()
+    const now = new Date() // Date: colunas TIMESTAMP (Prisma) nao aceitam text no PostgreSQL
     const critical = body.isCritical != null ? Boolean(body.isCritical) : null
 
     await prisma.$executeRaw`

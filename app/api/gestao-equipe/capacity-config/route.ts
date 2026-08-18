@@ -40,6 +40,6 @@ export async function PUT(req: Request) {
     const rows = await prisma.$queryRaw<any[]>`SELECT * FROM "CapacityConfig" WHERE "active" = true LIMIT 1`
     return NextResponse.json(rows[0])
   } catch (e) {
-    return NextResponse.json({ error: 'Erro ao salvar configuraÃ§Ã£o' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao salvar configuração' }, { status: 500 })
   }
 }

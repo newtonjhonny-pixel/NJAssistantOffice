@@ -90,7 +90,10 @@ export async function POST(req: Request) {
     if (dup.length) return NextResponse.json({ error: 'Vínculo já existe para este colaborador e empresa' }, { status: 409 })
 
     const id = randomUUID()
-    const now = new Date().toISOString()
+    // Date (nao ISO string): "MemberCompanyLink" e gerenciada pelo Prisma e suas
+    // colunas createdAt/updatedAt/headcountUpdatedAt sao TIMESTAMP no PostgreSQL,
+    // que nao aceita cast implicito de text -> timestamp.
+    const now = new Date()
     const headcountActive = nullableInt(body.headcountActive)
     const headcountApprentice = nullableInt(body.headcountApprentice)
     const headcountIntern = nullableInt(body.headcountIntern)
@@ -103,6 +106,19 @@ export async function POST(req: Request) {
     const establishments = nullableInt(body.establishments) ?? 1
     const headcountUpdatedAt = (headcountActive != null || headcountApprentice != null) ? now : null
     const startDateVal = body.startDate ? new Date(body.startDate) : null
+    const endDateVal   = body.endDate   ? new Date(body.endDate)   : null
+    const participationPct = nullableFloat(body.participationPct)
+    const linkStatus = nullableText(body.linkStatus) ?? 'ATIVO'
+
+    // Garante colunas novas existem
+    const newCols = [
+      `ALTER TABLE "MemberCompanyLink" ADD COLUMN "endDate"         TEXT`,
+      `ALTER TABLE "MemberCompanyLink" ADD COLUMN "participationPct" REAL`,
+      `ALTER TABLE "MemberCompanyLink" ADD COLUMN "linkStatus"       TEXT DEFAULT 'ATIVO'`,
+    ]
+    for (const sql of newCols) {
+      try { await prisma.$executeRawUnsafe(sql) } catch { /* já existe */ }
+    }
 
     await prisma.$executeRaw`
       INSERT INTO "MemberCompanyLink" (
@@ -111,7 +127,7 @@ export async function POST(req: Request) {
         "avgAdmissions","avgTerminations","avgVacations",
         "folhasProcessadas","unions","establishments",
         "systemUsed","automationLevel","complexity",
-        "startDate","substitute","observations",
+        "startDate","endDate","participationPct","linkStatus","substitute","observations",
         "createdAt","updatedAt"
       ) VALUES (
         ${id}, ${memberId}, ${companyId}, ${nullableText(body.memberRole)},
@@ -119,7 +135,8 @@ export async function POST(req: Request) {
         ${avgAdmissions ?? null}, ${avgTerminations ?? null}, ${avgVacations ?? null},
         ${folhasProcessadas ?? null}, ${unions ?? null}, ${establishments},
         ${nullableText(body.systemUsed)}, ${nullableText(body.automationLevel)}, ${nullableText(body.complexity)},
-        ${startDateVal}, ${nullableText(body.substitute)}, ${nullableText(body.observations)},
+        ${startDateVal}, ${endDateVal}, ${participationPct}, ${linkStatus},
+        ${nullableText(body.substitute)}, ${nullableText(body.observations)},
         ${now}, ${now}
       )
     `

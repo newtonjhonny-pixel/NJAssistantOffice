@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
        "dueDate", status, description, notes, "processId", "createdAt", "updatedAt")
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    body.title       || 'Nova ObrigaÃ§Ã£o',
+    body.title       || 'Nova Obrigação',
     body.legalBasis  || null,
     body.category    || 'OUTROS',
     body.responsible || null,

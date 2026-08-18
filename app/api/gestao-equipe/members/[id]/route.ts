@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     },
   })
 
-  // Atualiza companyId via raw SQL se enviado (incluindo null para desvincular)
+  // Atualiza companyId e registration via raw SQL (colunas extras não no schema Prisma)
   if (Object.prototype.hasOwnProperty.call(body, 'companyId')) {
     try {
       await prisma.$executeRawUnsafe(
@@ -66,6 +66,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         companyId || null, params.id
       )
     } catch {}
+  }
+  if (body.registration !== undefined) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamMember" SET "registration" = ? WHERE "id" = ?`,
+        body.registration || null, params.id
+      )
+    } catch { /* coluna pode não existir ainda */ }
+  }
+  if (body.cpf !== undefined) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamMember" SET "cpf" = ? WHERE "id" = ?`,
+        body.cpf || null, params.id
+      )
+    } catch { /* coluna pode não existir ainda */ }
   }
 
   if (status) {

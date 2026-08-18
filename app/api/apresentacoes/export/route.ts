@@ -82,6 +82,175 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+    } else if (type === "project-map" && content) {
+      // ── Mapa de Projetos: 1 slide 16:9 ──────────────────────────────────────
+      pptx.layout = "LAYOUT_WIDE"  // 13.33" × 7.5"
+      const mapData = JSON.parse(content)
+      const slide   = pptx.addSlide()
+      slide.background = { color: "FFFFFF" }
+
+      const SLIDE_W  = 13.33
+      const SLIDE_H  = 7.5
+      const MARGIN   = 0.25
+
+      // Faixa de cabeçalho
+      slide.addShape("rect" as any, {
+        x: 0, y: 0, w: SLIDE_W, h: 0.65,
+        fill: { color: "F1F5F9" },
+        line: { color: "E2E8F0", width: 1 },
+      })
+      slide.addText(mapData.title ?? "Mapa de Projetos", {
+        x: MARGIN, y: 0.08, w: SLIDE_W - 0.5, h: 0.38,
+        fontSize: 20, bold: true, color: "1E293B", valign: "middle", fontFace: "Calibri",
+      })
+      if (mapData.subtitle) {
+        slide.addText(mapData.subtitle, {
+          x: MARGIN, y: 0.43, w: SLIDE_W - 0.5, h: 0.2,
+          fontSize: 10, color: "64748B", valign: "top", fontFace: "Calibri",
+        })
+      }
+
+      const projects  = mapData.projects ?? []
+      const numProj   = projects.length || 1
+      const maxSteps  = Math.max(...projects.map((p: any) => (p.steps ?? []).length), 1)
+
+      const contentX  = MARGIN
+      const contentY  = 0.72
+      const contentW  = SLIDE_W - MARGIN * 2
+      const contentH  = SLIDE_H - contentY - MARGIN * 0.5
+
+      const GAP       = 0.04
+      const rowH      = (contentH - GAP * (numProj - 1)) / numProj
+      const PROJ_W    = Math.min(1.65, contentW * 0.13)
+      const CONN_W    = Math.max(0.18, contentW * 0.02)
+      const stepsW    = contentW - PROJ_W - 0.1
+      const stepW     = Math.max(0.65, (stepsW - CONN_W * (maxSteps - 1)) / maxSteps)
+      const STEP_PAD  = 0.04
+      const stepH     = rowH - STEP_PAD * 2
+
+      const PROJ_STATUS_LABEL: Record<string, string> = {
+        idea: "Ideia", planned: "Planejado", in_progress: "Em andamento",
+        waiting: "Aguardando", done: "Concluido", cancelled: "Cancelado", late: "Atrasado",
+      }
+      const PROJ_STATUS_COLOR: Record<string, string> = {
+        idea: "94A3B8", planned: "3B82F6", in_progress: "F59E0B",
+        waiting: "A855F7", done: "10B981", cancelled: "94A3B8", late: "EF4444",
+      }
+      const STEP_STATUS_BG: Record<string, string> = {
+        not_started: "F8FAFC", planned: "EFF6FF", in_progress: "FFFBEB",
+        waiting: "FAF5FF", blocked: "FEF2F2", done: "ECFDF5", cancelled: "F1F5F9",
+      }
+      const STEP_STATUS_BORDER: Record<string, string> = {
+        not_started: "E2E8F0", planned: "BFDBFE", in_progress: "FCD34D",
+        waiting: "E9D5FF", blocked: "FCA5A5", done: "6EE7B7", cancelled: "E2E8F0",
+      }
+
+      const pHex = (h: string) => h.replace("#","").toUpperCase().slice(0,6)
+      const calcPct = (p: any) => {
+        if (p.progressManual) return p.progress ?? 0
+        const steps = p.steps ?? []
+        if (!steps.length) return 0
+        return Math.round(steps.filter((s: any) => s.status === "done").length / steps.length * 100)
+      }
+
+      projects.forEach((proj: any, pi: number) => {
+        const rowY   = contentY + pi * (rowH + GAP)
+        const pct    = calcPct(proj)
+        const ph     = pHex(proj.color ?? "#3b82f6")
+
+        // Fundo da linha
+        slide.addShape("roundRect" as any, {
+          x: contentX, y: rowY, w: contentW, h: rowH,
+          fill: { color: pi % 2 === 0 ? "F8FAFC" : "FFFFFF" },
+          line: { color: "E2E8F0", width: 0.5 },
+          rectRadius: 0.06,
+        })
+
+        // Project card
+        const pcX = contentX + 0.04
+        const pcY = rowY + STEP_PAD
+        const pcW = PROJ_W - 0.06
+
+        slide.addShape("roundRect" as any, {
+          x: pcX, y: pcY, w: pcW, h: stepH,
+          fill: { color: "FFFFFF" },
+          line: { color: ph, width: 1 },
+          rectRadius: 0.05,
+        })
+        slide.addShape("roundRect" as any, {
+          x: pcX, y: pcY, w: 0.04, h: stepH,
+          fill: { color: ph },
+          line: { color: ph, width: 0 },
+          rectRadius: 0.02,
+        })
+
+        const fs = Math.max(6, Math.round(7.5 * rowH / 0.7))
+        slide.addText(proj.code ?? "", {
+          x: pcX + 0.08, y: pcY + 0.03, w: pcW - 0.1, h: 0.16,
+          fontSize: Math.max(5, fs - 2), bold: true, color: "94A3B8", fontFace: "Calibri",
+        })
+        slide.addText(proj.name ?? "", {
+          x: pcX + 0.08, y: pcY + 0.18, w: pcW - 0.1, h: stepH - 0.38,
+          fontSize: fs, bold: true, color: "1E293B", fontFace: "Calibri", wrap: true,
+        })
+        slide.addText(`${PROJ_STATUS_LABEL[proj.status] ?? proj.status}  ${pct}%`, {
+          x: pcX + 0.08, y: pcY + stepH - 0.2, w: pcW - 0.1, h: 0.18,
+          fontSize: Math.max(5, fs - 2),
+          color: PROJ_STATUS_COLOR[proj.status] ?? "64748B",
+          fontFace: "Calibri", valign: "bottom",
+        })
+
+        // Steps
+        const stepsX = contentX + PROJ_W + 0.06
+        const steps  = proj.steps ?? []
+
+        steps.forEach((step: any, si: number) => {
+          const sx    = stepsX + si * (stepW + CONN_W)
+          const sy    = rowY + STEP_PAD
+          const scBg  = STEP_STATUS_BG[step.status]  ?? "F8FAFC"
+          const scBdr = STEP_STATUS_BORDER[step.status] ?? "E2E8F0"
+
+          slide.addShape("roundRect" as any, {
+            x: sx, y: sy, w: stepW, h: stepH,
+            fill: { color: scBg },
+            line: { color: scBdr, width: 1 },
+            rectRadius: 0.05,
+          })
+
+          // Badge INÍCIO/FIM/MARCO
+          if (step.nodeType && step.nodeType !== "middle") {
+            const bl = step.nodeType === "start" ? "INICIO" : step.nodeType === "end" ? "FIM" : "MARCO"
+            const bc = step.nodeType === "milestone" ? "F59E0B" : ph
+            slide.addShape("roundRect" as any, {
+              x: sx + 0.04, y: sy - 0.01, w: 0.32, h: 0.12,
+              fill: { color: bc }, line: { color: bc, width: 0 }, rectRadius: 0.03,
+            })
+            slide.addText(bl, {
+              x: sx + 0.04, y: sy - 0.015, w: 0.32, h: 0.12,
+              fontSize: 5, bold: true, color: "FFFFFF", fontFace: "Calibri",
+              align: "center", valign: "middle",
+            })
+          }
+
+          slide.addText([
+            { text: `${step.number}. `, options: { bold: true } },
+            { text: step.title ?? "",   options: { bold: false } },
+          ], {
+            x: sx + 0.05, y: sy + 0.04, w: stepW - 0.1, h: stepH - 0.08,
+            fontSize: Math.max(5, Math.round(7 * rowH / 0.7)),
+            color: "1E293B", fontFace: "Calibri", valign: "top", wrap: true,
+          })
+
+          // Conector
+          if (si < steps.length - 1) {
+            slide.addShape("line" as any, {
+              x: sx + stepW + 0.01, y: rowY + rowH / 2, w: CONN_W - 0.02, h: 0,
+              line: { color: ph + "88", width: 1.5, endArrowType: "triangle" },
+            })
+          }
+        })
+      })
+
     } else {
       // Fallback: blank slide with title text
       const slide = pptx.addSlide()

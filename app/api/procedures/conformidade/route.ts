@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prismaSqlite as prisma } from '@/lib/prisma-sqlite'
 
 export const dynamic = 'force-dynamic'
@@ -9,7 +9,7 @@ export async function GET() {
   const d90    = new Date(now.getTime() - 90  * 24 * 3600 * 1000).toISOString()
   const d30    = new Date(now.getTime() - 30  * 24 * 3600 * 1000).toISOString()
 
-  // â”€â”€ Docs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Docs ─────────────────────────────────────────────────────────────────────
   const docs = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT id, type, status, risks, description, title, "createdAt", "updatedAt" FROM "ProcedureDocument"`
   )
@@ -20,13 +20,13 @@ export async function GET() {
   const rascunho= docs.filter(d => d.status === 'RASCUNHO').length
   const obsoleto= docs.filter(d => d.status === 'OBSOLETO').length
 
-  // Docs em rascunho hÃ¡ mais de 30 dias (possÃ­vel abandono)
+  // Docs em rascunho há mais de 30 dias (possível abandono)
   const abandonados = docs.filter(d =>
     d.status === 'RASCUNHO' &&
     (d.updatedAt as string) < d30
   ).map(d => ({ id: d.id, title: d.title, type: d.type, updatedAt: d.updatedAt }))
 
-  // â”€â”€ Riscos crÃ­ticos sem controles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Riscos críticos sem controles ────────────────────────────────────────────
   const riscosCriticos: { docId: string; docTitle: string; risco: string }[] = []
   for (const doc of docs) {
     if (!doc.risks) continue
@@ -47,7 +47,7 @@ export async function GET() {
     } catch { /* skip */ }
   }
 
-  // â”€â”€ Treinamentos pendentes por documento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Treinamentos pendentes por documento ─────────────────────────────────────
   const treinamentos = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT "documentId", "filePath", "fileName" FROM "ProcedureAttachment"
      WHERE "fileType" LIKE '__treinamento__%'`
@@ -70,7 +70,7 @@ export async function GET() {
     pendentesPorDoc[docId].count++
   }
 
-  // â”€â”€ Documentos vigentes sem leitura nos Ãºltimos 90 dias â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Documentos vigentes sem leitura nos últimos 90 dias ──────────────────────
   const leituras = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT "documentId", MAX("createdAt") as "ultimaLeitura" FROM "ProcedureHistory"
      WHERE action = 'LEITURA'
@@ -90,8 +90,8 @@ export async function GET() {
       ultimaLeitura: leituraMap[d.id as string] ?? null,
     }))
 
-  // â”€â”€ Score de conformidade geral â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // FÃ³rmula: base nos vigentes que tÃªm leitura recente e sem riscos crÃ­ticos abertos
+  // ── Score de conformidade geral ───────────────────────────────────────────────
+  // Fórmula: base nos vigentes que têm leitura recente e sem riscos críticos abertos
   const vigentesSemProblema = vigente
     - semLeitura.length
     - riscosCriticos.length

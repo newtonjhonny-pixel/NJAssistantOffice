@@ -55,7 +55,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const {
       code, name, tradeName, segment, observations, active,
       establishmentType, parentCompanyId,
-      zipCode, street, number, complement, neighborhood, city, state, country,
+      zipCode, street, number, complement, neighborhood, city, state, country, ibgeCode,
     } = body
     const cnpjRaw = body.cnpj !== undefined ? (body.cnpj ? onlyDigits(String(body.cnpj)) : null) : undefined
 
@@ -133,6 +133,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (city           !== undefined) push('city',              city?.trim() || null)
     if (state          !== undefined) push('state',             (state?.trim() || '').toUpperCase() || null)
     if (country        !== undefined) push('country',           country?.trim() || null)
+    if (ibgeCode       !== undefined) push('ibgeCode',          ibgeCode?.trim() || null)
 
     if (sets.length === 0)
       return NextResponse.json({ error: 'Nenhum campo para atualizar.' }, { status: 400 })

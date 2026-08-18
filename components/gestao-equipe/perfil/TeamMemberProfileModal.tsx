@@ -9,6 +9,7 @@ import {
   AlertTriangle, CheckCircle2, Save, Plus, Trash2, Lock, Timer,
 } from "lucide-react"
 import { TabBancoHoras, HourBankHeaderSummary } from "./TabBancoHoras"
+import TabPontoDiario from "../ponto/TabPontoDiario"
 import { cn } from "@/lib/utils"
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
@@ -957,13 +958,17 @@ interface MemberCompanyLink {
   id: string; memberId: string; companyId: string
   companyName: string; cnpj: string | null; segment: string | null
   memberRole: string | null
+  // Campos legados (mantidos para leitura, não mais editáveis aqui)
   headcountActive: number | null; headcountApprentice: number | null
   headcountIntern: number | null; headcountOnLeave: number | null
   headcountUpdatedAt: string | null
   avgAdmissions: number | null; avgTerminations: number | null; avgVacations: number | null
   folhasProcessadas: number | null; unions: number | null; establishments: number | null
   systemUsed: string | null; automationLevel: string | null; complexity: string | null
-  startDate: string | null; substitute: string | null; observations: string | null
+  // Campos de gestão do vínculo
+  startDate: string | null; endDate: string | null
+  participationPct: number | null; linkStatus: string | null
+  substitute: string | null; observations: string | null
 }
 
 interface MemberSalaryData {
@@ -1595,10 +1600,8 @@ function TabCarteira({ memberId }: { memberId: string }) {
   const [capKey, setCapKey] = useState(0)
 
   const emptyForm = {
-    companyId: '', memberRole: '', headcountActive: '', headcountApprentice: '',
-    headcountIntern: '', headcountOnLeave: '', avgAdmissions: '', avgTerminations: '',
-    avgVacations: '', folhasProcessadas: '', unions: '', establishments: '',
-    systemUsed: '', automationLevel: '', complexity: '', substitute: '', observations: '',
+    companyId: '', memberRole: '', startDate: '', endDate: '',
+    participationPct: '', linkStatus: 'ATIVO', substitute: '', observations: '',
   }
   const [form, setForm] = useState(emptyForm)
 
@@ -1634,45 +1637,30 @@ function TabCarteira({ memberId }: { memberId: string }) {
     setEditId(l.id)
     setError(null)
     setForm({
-      companyId: l.companyId, memberRole: l.memberRole ?? '',
-      headcountActive: l.headcountActive?.toString() ?? '',
-      headcountApprentice: l.headcountApprentice?.toString() ?? '',
-      headcountIntern: l.headcountIntern?.toString() ?? '',
-      headcountOnLeave: l.headcountOnLeave?.toString() ?? '',
-      avgAdmissions: l.avgAdmissions?.toString() ?? '',
-      avgTerminations: l.avgTerminations?.toString() ?? '',
-      avgVacations: l.avgVacations?.toString() ?? '',
-      folhasProcessadas: l.folhasProcessadas?.toString() ?? '',
-      unions: l.unions?.toString() ?? '',
-      establishments: l.establishments?.toString() ?? '',
-      systemUsed: l.systemUsed ?? '', automationLevel: l.automationLevel ?? '',
-      complexity: l.complexity ?? '', substitute: l.substitute ?? '',
+      companyId: l.companyId,
+      memberRole: l.memberRole ?? '',
+      startDate: l.startDate ? new Date(l.startDate).toISOString().slice(0, 10) : '',
+      endDate: l.endDate ? new Date(l.endDate).toISOString().slice(0, 10) : '',
+      participationPct: l.participationPct?.toString() ?? '',
+      linkStatus: l.linkStatus ?? 'ATIVO',
+      substitute: l.substitute ?? '',
       observations: l.observations ?? '',
     })
     setShowForm(true)
   }
-
-  const intVal  = (s: string) => s === '' ? null : parseInt(s, 10)
-  const floatVal = (s: string) => s === '' ? null : parseFloat(s)
 
   async function save() {
     setSaving(true)
     setError(null)
     try {
       const payload = {
-        companyId: form.companyId, memberRole: form.memberRole || null,
-        headcountActive: intVal(form.headcountActive),
-        headcountApprentice: intVal(form.headcountApprentice),
-        headcountIntern: intVal(form.headcountIntern),
-        headcountOnLeave: intVal(form.headcountOnLeave),
-        avgAdmissions: floatVal(form.avgAdmissions),
-        avgTerminations: floatVal(form.avgTerminations),
-        avgVacations: floatVal(form.avgVacations),
-        folhasProcessadas: intVal(form.folhasProcessadas),
-        unions: intVal(form.unions),
-        establishments: intVal(form.establishments) ?? 1,
-        systemUsed: form.systemUsed || null, automationLevel: form.automationLevel || null,
-        complexity: form.complexity || null, substitute: form.substitute || null,
+        companyId: form.companyId,
+        memberRole: form.memberRole || null,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
+        participationPct: form.participationPct ? parseFloat(form.participationPct) : null,
+        linkStatus: form.linkStatus || 'ATIVO',
+        substitute: form.substitute || null,
         observations: form.observations || null,
       }
       let res: Response
@@ -1712,11 +1700,12 @@ function TabCarteira({ memberId }: { memberId: string }) {
     setCapKey(k => k + 1)
   }
 
-  // Summary
+  // Summary — usa campos legados enquanto não houver snapshots migrados
   const totalEmployees = links.reduce((s, l) =>
     s + (l.headcountActive ?? 0) + (l.headcountApprentice ?? 0) + (l.headcountIntern ?? 0), 0)
   const totalAdmissions = links.reduce((s, l) => s + (l.avgAdmissions ?? 0), 0)
   const totalTerminations = links.reduce((s, l) => s + (l.avgTerminations ?? 0), 0)
+  const activeLinks = links.filter(l => !l.linkStatus || l.linkStatus === 'ATIVO').length
 
   const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
   const selectClass = `${inputClass} bg-white`
@@ -1732,8 +1721,8 @@ function TabCarteira({ memberId }: { memberId: string }) {
       {/* Indicadores da carteira */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: 'Empresas', value: links.length, color: 'text-blue-600' },
-          { label: 'Empregados', value: totalEmployees, color: 'text-slate-700' },
+          { label: 'Empresas ativas', value: activeLinks, color: 'text-blue-600' },
+          { label: 'Total vínculos', value: links.length, color: 'text-slate-500' },
           { label: 'Admissões/mês', value: totalAdmissions.toFixed(1), color: 'text-green-600' },
           { label: 'Rescisões/mês', value: totalTerminations.toFixed(1), color: 'text-red-600' },
         ].map(c => (
@@ -1767,22 +1756,24 @@ function TabCarteira({ memberId }: { memberId: string }) {
         <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-4">
           <p className="text-sm font-semibold text-slate-700">{editId ? 'Editar empresa' : 'Adicionar empresa'}</p>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {!editId && (
-              <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-slate-500 block mb-1">Empresa *</label>
-                <select value={form.companyId} onChange={e => setForm(p => ({ ...p, companyId: e.target.value }))} className={selectClass}>
-                  <option value="">Selecionar empresa...</option>
-                  {companies.filter(c => c.active !== false && !links.some(l => l.companyId === c.id)).map(c => (
-                    <option key={c.id} value={c.id}>{c.name}{c.segment ? ` — ${c.segment}` : ''}</option>
-                  ))}
-                </select>
-                {companies.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">Nenhuma empresa cadastrada. Cadastre em "Empresas" primeiro.</p>
-                )}
-              </div>
-            )}
+          {/* ── Empresa (apenas no cadastro novo) ── */}
+          {!editId && (
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Empresa *</label>
+              <select value={form.companyId} onChange={e => setForm(p => ({ ...p, companyId: e.target.value }))} className={selectClass}>
+                <option value="">Selecionar empresa...</option>
+                {companies.filter(c => c.active !== false && !links.some(l => l.companyId === c.id)).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}{c.segment ? ` — ${c.segment}` : ''}</option>
+                ))}
+              </select>
+              {companies.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Nenhuma empresa cadastrada. Cadastre em "Empresas" primeiro.</p>
+              )}
+            </div>
+          )}
 
+          {/* ── Vínculo ── */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1">Papel do colaborador</label>
               <select value={form.memberRole} onChange={e => setForm(p => ({ ...p, memberRole: e.target.value }))} className={selectClass}>
@@ -1791,71 +1782,45 @@ function TabCarteira({ memberId }: { memberId: string }) {
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Complexidade</label>
-              <select value={form.complexity} onChange={e => setForm(p => ({ ...p, complexity: e.target.value }))} className={selectClass}>
-                <option value="">Não informada</option>
-                {Object.entries(COMPLEXITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              <label className="text-xs font-medium text-slate-500 block mb-1">Status do vínculo</label>
+              <select value={form.linkStatus} onChange={e => setForm(p => ({ ...p, linkStatus: e.target.value }))} className={selectClass}>
+                <option value="ATIVO">Ativo</option>
+                <option value="SUSPENSO">Suspenso</option>
+                <option value="ENCERRADO">Encerrado</option>
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Nível de automação</label>
-              <select value={form.automationLevel} onChange={e => setForm(p => ({ ...p, automationLevel: e.target.value }))} className={selectClass}>
-                <option value="">Não informado</option>
-                {Object.entries(AUTOMATION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Dedicação (%)</label>
+              <input type="number" min="0" max="100" step="5" value={form.participationPct}
+                onChange={e => setForm(p => ({ ...p, participationPct: e.target.value }))}
+                className={inputClass} placeholder="100" />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Sistema utilizado</label>
-              <input value={form.systemUsed} onChange={e => setForm(p => ({ ...p, systemUsed: e.target.value }))} className={inputClass} placeholder="Domínio, RM, SAP..." />
+              <label className="text-xs font-medium text-slate-500 block mb-1">Início da responsabilidade</label>
+              <input type="date" value={form.startDate}
+                onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))} className={inputClass} />
             </div>
-          </div>
-
-          <SectionTitle>Headcount</SectionTitle>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: 'Empregados ativos', key: 'headcountActive' },
-              { label: 'Aprendizes', key: 'headcountApprentice' },
-              { label: 'Estagiários', key: 'headcountIntern' },
-              { label: 'Afastados', key: 'headcountOnLeave' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label}</label>
-                <input type="number" min="0" value={(form as any)[f.key]}
-                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={inputClass} placeholder="0" />
-              </div>
-            ))}
-          </div>
-
-          <SectionTitle>Volumes Mensais (média)</SectionTitle>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Admissões', key: 'avgAdmissions' },
-              { label: 'Rescisões', key: 'avgTerminations' },
-              { label: 'Férias', key: 'avgVacations' },
-              { label: 'Folhas processadas', key: 'folhasProcessadas' },
-              { label: 'Sindicatos/CCTs', key: 'unions' },
-              { label: 'Estabelecimentos', key: 'establishments' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="text-xs font-medium text-slate-500 block mb-1">{f.label}</label>
-                <input type="number" min="0" step="0.1" value={(form as any)[f.key]}
-                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className={inputClass} placeholder="0" />
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-500 block mb-1">Fim da responsabilidade</label>
+              <input type="date" value={form.endDate}
+                onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))} className={inputClass} />
+            </div>
             <div>
               <label className="text-xs font-medium text-slate-500 block mb-1">Substituto</label>
-              <input value={form.substitute} onChange={e => setForm(p => ({ ...p, substitute: e.target.value }))} className={inputClass} placeholder="Nome do substituto" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 block mb-1">Observações</label>
-              <input value={form.observations} onChange={e => setForm(p => ({ ...p, observations: e.target.value }))} className={inputClass} />
+              <input value={form.substitute} onChange={e => setForm(p => ({ ...p, substitute: e.target.value }))}
+                className={inputClass} placeholder="Nome do substituto" />
             </div>
           </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1">Observações do vínculo</label>
+            <input value={form.observations} onChange={e => setForm(p => ({ ...p, observations: e.target.value }))}
+              className={inputClass} placeholder="Observações..." />
+          </div>
+
+          <p className="text-xs text-slate-400 flex items-center gap-1">
+            <span>ℹ️</span> Headcount, volumes e sistemas são gerenciados em <strong>Empresas → Dados Operacionais</strong>.
+          </p>
 
           <div className="flex gap-2 pt-1">
             <button onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200">Cancelar</button>
@@ -1893,13 +1858,13 @@ function TabCarteira({ memberId }: { memberId: string }) {
                             <Badge label={MEMBER_ROLES_COMPANY[l.memberRole] ?? l.memberRole}
                               className="bg-blue-50 text-blue-700 border-blue-100" />
                           )}
-                          {l.complexity && (
-                            <Badge label={COMPLEXITY_LABELS[l.complexity] ?? l.complexity}
-                              className={COMPLEXITY_COLORS[l.complexity] ?? 'bg-slate-100 text-slate-600 border-slate-200'} />
+                          {l.linkStatus && l.linkStatus !== 'ATIVO' && (
+                            <Badge label={l.linkStatus}
+                              className="bg-slate-100 text-slate-500 border-slate-200" />
                           )}
-                          {l.automationLevel && (
-                            <Badge label={AUTOMATION_LABELS[l.automationLevel] ?? l.automationLevel}
-                              className={cn("border-0", AUTOMATION_COLORS[l.automationLevel] ?? '')} />
+                          {l.participationPct != null && (
+                            <Badge label={`${l.participationPct}%`}
+                              className="bg-indigo-50 text-indigo-600 border-indigo-100" />
                           )}
                         </div>
                       </div>
@@ -1918,31 +1883,37 @@ function TabCarteira({ memberId }: { memberId: string }) {
 
                 {isExp && (
                   <div className="px-4 pb-4 pt-1 border-t border-slate-100 bg-slate-50">
-                    <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-                      <div><p className="text-slate-400">Ativos</p><p className="font-medium text-slate-700">{l.headcountActive ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Aprendizes</p><p className="font-medium text-slate-700">{l.headcountApprentice ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Estagiários</p><p className="font-medium text-slate-700">{l.headcountIntern ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Afastados</p><p className="font-medium text-slate-700">{l.headcountOnLeave ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Admissões/mês</p><p className="font-medium text-slate-700">{l.avgAdmissions ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Rescisões/mês</p><p className="font-medium text-slate-700">{l.avgTerminations ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Férias/mês</p><p className="font-medium text-slate-700">{l.avgVacations ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Sindicatos</p><p className="font-medium text-slate-700">{l.unions ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Estab.</p><p className="font-medium text-slate-700">{l.establishments ?? '—'}</p></div>
-                      <div><p className="text-slate-400">Folhas</p><p className="font-medium text-slate-700">{l.folhasProcessadas ?? '—'}</p></div>
-                      {l.systemUsed && <div className="col-span-2"><p className="text-slate-400">Sistema</p><p className="font-medium text-slate-700">{l.systemUsed}</p></div>}
-                      {l.substitute && <div className="col-span-2"><p className="text-slate-400">Substituto</p><p className="font-medium text-slate-700">{l.substitute}</p></div>}
-                      {l.observations && <div className="col-span-4"><p className="text-slate-400">Obs.</p><p className="text-slate-600">{l.observations}</p></div>}
-                      {l.headcountUpdatedAt && (
-                        <div className="col-span-4 text-slate-400">
-                          Headcount atualizado em {fmtDate(l.headcountUpdatedAt)}
-                        </div>
-                      )}
+                    {/* Dados do vínculo */}
+                    <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3 mb-3">
+                      <div><p className="text-slate-400">Status</p><p className="font-medium text-slate-700">{l.linkStatus ?? 'ATIVO'}</p></div>
+                      <div><p className="text-slate-400">Dedicação</p><p className="font-medium text-slate-700">{l.participationPct != null ? `${l.participationPct}%` : '—'}</p></div>
+                      <div><p className="text-slate-400">Início</p><p className="font-medium text-slate-700">{l.startDate ? fmtDate(l.startDate) : '—'}</p></div>
+                      {l.endDate && <div><p className="text-slate-400">Fim</p><p className="font-medium text-slate-700">{fmtDate(l.endDate)}</p></div>}
+                      {l.substitute && <div><p className="text-slate-400">Substituto</p><p className="font-medium text-slate-700">{l.substitute}</p></div>}
+                      {l.observations && <div className="col-span-3"><p className="text-slate-400">Obs.</p><p className="text-slate-600">{l.observations}</p></div>}
                     </div>
+
                     {!l.substitute && (
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-600">
+                      <div className="mb-3 flex items-center gap-1.5 text-xs text-amber-600">
                         <AlertTriangle className="w-3.5 h-3.5" /> Sem substituto cadastrado — risco de concentração
                       </div>
                     )}
+
+                    {/* Resumo operacional legado (se ainda houver dados não migrados) */}
+                    {((l.headcountActive ?? 0) + (l.headcountApprentice ?? 0) + (l.headcountIntern ?? 0)) > 0 && (
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 mb-3">
+                        <p className="font-medium mb-1">⚠️ Dados operacionais legados (ainda não migrados)</p>
+                        <div className="flex gap-3 flex-wrap">
+                          {l.headcountActive != null && <span>Ativos: {l.headcountActive}</span>}
+                          {l.headcountApprentice != null && <span>Aprendizes: {l.headcountApprentice}</span>}
+                          {l.headcountIntern != null && <span>Estagiários: {l.headcountIntern}</span>}
+                          {l.systemUsed && <span>Sistema: {l.systemUsed}</span>}
+                          {l.complexity && <span>Complexidade: {COMPLEXITY_LABELS[l.complexity] ?? l.complexity}</span>}
+                        </div>
+                        <p className="mt-1 text-amber-600">Execute a migração em Empresas → Dados Operacionais.</p>
+                      </div>
+                    )}
+
                     <ProcessesPanel linkId={l.id} />
                     <DpActivitiesPanel linkId={l.id} memberId={memberId} />
                   </div>
@@ -2639,6 +2610,7 @@ const TABS = [
   { id: 'feedbacks',    label: 'Feedbacks',        icon: MessageSquare },
   { id: 'treinamentos', label: 'Treinamentos',     icon: GraduationCap },
   { id: 'ferias',       label: 'Férias',           icon: Umbrella      },
+  { id: 'ponto',        label: 'Ponto Diário',     icon: Clock         },
   { id: 'bancohoras',   label: 'Banco de Horas',   icon: Timer         },
   { id: 'historico',    label: 'Histórico',        icon: Clock         },
   { id: 'remuneracao',  label: 'Remuneração',      icon: DollarSign    },
@@ -2791,6 +2763,7 @@ export function TeamMemberProfileModal({
               {activeTab === 'feedbacks'    && <TabFeedbacksDirecionamentos member={member} />}
               {activeTab === 'treinamentos' && <TabTreinamentosPerfil member={member} />}
               {activeTab === 'ferias'       && <TabFeriasPerfil member={member} />}
+              {activeTab === 'ponto'        && <TabPontoDiario memberId={member.id} />}
               {activeTab === 'bancohoras'   && <TabBancoHoras memberId={member.id} onChanged={() => setHourBankKey(k => k + 1)} />}
               {activeTab === 'historico'    && <TabHistoricoPerfil member={member} />}
               {activeTab === 'remuneracao'  && <TabRemuneracao memberId={member.id} memberName={member.name} showSalary={showSalary} canEdit={canEditSalary} canCreate={canCreateSalary} />}
