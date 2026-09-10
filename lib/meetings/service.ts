@@ -123,9 +123,17 @@ export async function getCurrentRole(): Promise<string> {
   }
 }
 
+/**
+ * Papéis com permissão total.
+ *
+ * `system` é a conta técnica criada na instalação (é o único usuário em
+ * produção). Tratá-la como somente leitura tornaria o módulo inutilizável.
+ * `viewer` — e qualquer papel desconhecido — permanece só leitura.
+ */
+const PRIVILEGED_ROLES = ['admin', 'system'] as const
+
 export function roleAllows(role: string, permission: MeetingPermission): boolean {
-  if (role === 'admin') return true
-  // viewer (e qualquer outro) só lê.
+  if ((PRIVILEGED_ROLES as readonly string[]).includes(role)) return true
   return permission === 'view' || permission === 'print'
 }
 
