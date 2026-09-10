@@ -62,6 +62,7 @@ model Task {
   attachments   TaskAttachment[]
   chats         TaskChat[]
   inboxItem     InboxItem?          @relation(fields: [inboxItemId], references: [id])
+  meetingActions MeetingAction[]
 }
 
 model TaskChat {
@@ -593,6 +594,10 @@ model TeamMember {
   dailyTimeRecords       DailyTimeRecord[]
   monthlyTimeCompetences MonthlyTimeCompetence[]
   calendarExceptions     MemberCalendarException[]
+  meetingsOrganized  Meeting[]              @relation("MeetingOrganizer")
+  meetingParticipations MeetingParticipant[] @relation("MeetingParticipantMember")
+  meetingPresentations  MeetingAgendaItem[]  @relation("MeetingAgendaPresenter")
+  meetingActions        MeetingAction[]      @relation("MeetingActionResponsible")
 }
 
 // ─── CARTEIRA DE EMPRESAS E REMUNERAÇÃO ──────────────────────────────────────
@@ -2021,4 +2026,168 @@ model MemberCalendarException {
 
   @@unique([memberId, date])
   @@index([memberId])
+}
+
+// ─── PAUTAS DE REUNIÕES (submódulo de Anotações) ─────────────────────────────
+// Datas visíveis ao usuário usam String (YYYY-MM-DD / HH:MM) para eliminar
+// qualquer conversão de timezone — o usuário vê exatamente o que cadastrou.
+// Timestamps de auditoria usam DateTime.
+
+model Meeting {
+  id               String    @id @default(cuid())
+  title            String
+  objective        String?
+  type             String    @default("EQUIPE")    // EQUIPE | INDIVIDUAL | ALINHAMENTO | ACOMPANHAMENTO | PROJETO | TREINAMENTO | DIRETORIA | OUTRO
+  status           String    @default("RASCUNHO")  // RASCUNHO | AGENDADA | EM_ANDAMENTO | REALIZADA | CONCLUIDA | CANCELADA | ARQUIVADA
+  category         String?
+  date             String                          // YYYY-MM-DD
+  startTime        String?                         // HH:MM
+  endTime          String?                         // HH:MM
+  location         String?
+  meetingUrl       String?
+  recurrence       String?   @default("NENHUMA")   // NENHUMA | DIARIA | SEMANAL | QUINZENAL | MENSAL | PERSONALIZADA
+  observations     String?
+  finalSummary     String?
+  completedAt      DateTime?
+  completedBy      String?
+  createdBy        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  archivedAt       DateTime?
+
+  organizerId      String?
+  organizer        TeamMember? @relation("MeetingOrganizer", fields: [organizerId], references: [id], onDelete: SetNull)
+
+  duplicatedFromId String?
+  duplicatedFrom   Meeting?  @relation("MeetingDuplicate", fields: [duplicatedFromId], references: [id], onDelete: SetNull)
+  duplicates       Meeting[] @relation("MeetingDuplicate")
+
+  participants MeetingParticipant[]
+  agendaItems  MeetingAgendaItem[]
+  decisions    MeetingDecision[]
+  actions      MeetingAction[]
+  attachments  MeetingAttachment[]
+  history      MeetingHistory[]
+
+  @@index([date])
+  @@index([status])
+  @@index([organizerId])
+  @@index([archivedAt])
+}
+
+model MeetingParticipant {
+  id               String  @id @default(cuid())
+  meetingId        String
+  meeting          Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  // Interno: teamMemberId preenchido. Externo: externalName preenchido.
+  // A API garante que ao menos um dos dois exista.
+  teamMemberId     String?
+  teamMember       TeamMember? @relation("MeetingParticipantMember", fields: [teamMemberId], references: [id], onDelete: Cascade)
+  externalName     String?
+  externalEmail    String?
+  externalRole     String?
+
+  attendanceStatus String  @default("CONVIDADO") // CONVIDADO | CONFIRMADO | PRESENTE | AUSENTE | JUSTIFICADO
+  createdAt        DateTime @default(now())
+
+  @@unique([meetingId, teamMemberId])
+  @@index([meetingId])
+  @@index([teamMemberId])
+}
+
+model MeetingAgendaItem {
+  id               String   @id @default(cuid())
+  meetingId        String
+  meeting          Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  order            Int      @default(0)
+  title            String
+  description      String?
+  discussion       String?                        // HTML do editor compartilhado
+  estimatedMinutes Int?
+  priority         String   @default("NORMAL")    // BAIXA | NORMAL | ALTA | URGENTE
+  status           String   @default("NAO_INICIADO") // NAO_INICIADO | EM_DISCUSSAO | DISCUTIDO | PENDENTE | CONCLUIDO
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  presenterId      String?
+  presenter        TeamMember? @relation("MeetingAgendaPresenter", fields: [presenterId], references: [id], onDelete: SetNull)
+
+  decisions MeetingDecision[]
+  actions   MeetingAction[]
+
+  @@index([meetingId])
+  @@index([meetingId, order])
+}
+
+model MeetingDecision {
+  id           String             @id @default(cuid())
+  meetingId    String
+  meeting      Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  agendaItemId String?
+  agendaItem   MeetingAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: Cascade)
+  description  String
+  createdBy    String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([meetingId])
+  @@index([agendaItemId])
+}
+
+model MeetingAction {
+  id            String             @id @default(cuid())
+  meetingId     String
+  meeting       Meeting            @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  agendaItemId  String?
+  agendaItem    MeetingAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: Cascade)
+
+  description   String
+  responsibleId String?
+  responsible   TeamMember?        @relation("MeetingActionResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  support       String?                              // apoio/participantes (texto livre)
+  dueDate       String?                              // YYYY-MM-DD
+  priority      String   @default("NORMAL")          // BAIXA | NORMAL | ALTA | URGENTE
+  status        String   @default("A_FAZER")         // A_FAZER | EM_ANDAMENTO | AGUARDANDO | CONCLUIDA | CANCELADA
+  completedAt   DateTime?
+  notes         String?
+
+  // Rastreabilidade: preenchido apenas quando o usuário optar por gerar a tarefa.
+  // "Pendências" é uma visão filtrada de Task — por isso não há vínculo separado.
+  taskId        String?
+  task          Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([meetingId])
+  @@index([agendaItemId])
+  @@index([responsibleId])
+  @@index([status])
+}
+
+model MeetingAttachment {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileType  String
+  fileSize  Int
+  filePath  String
+  createdAt DateTime @default(now())
+
+  @@index([meetingId])
+}
+
+model MeetingHistory {
+  id          String   @id @default(cuid())
+  meetingId   String
+  meeting     Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  type        String   // CRIADA | PAUTA_ALTERADA | PARTICIPANTE_ADICIONADO | ...
+  title       String
+  description String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([meetingId])
 }

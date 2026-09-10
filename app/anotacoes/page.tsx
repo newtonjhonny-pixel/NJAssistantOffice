@@ -1,12 +1,12 @@
 import { Suspense } from "react"
-import { NotesClient } from "@/components/notes/NotesClient"
+import { AnotacoesModuleClient } from "@/components/notes/AnotacoesModuleClient"
 
 export const dynamic = "force-dynamic"
 
 export default function AnotacoesPage() {
   return (
     <Suspense>
-      <NotesClient />
+      <AnotacoesModuleClient />
     </Suspense>
   )
 }

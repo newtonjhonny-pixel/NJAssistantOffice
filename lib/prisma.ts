@@ -1,12 +1,38 @@
 import { PrismaClient } from '@prisma/client'
+import type { PrismaClient as PrismaClientType } from '@prisma/client'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+type PrismaClientConstructor = new (opts?: { log?: string[] }) => PrismaClientType
+
+/**
+ * `@prisma/client` é gerado a partir de schema.production.prisma (PostgreSQL),
+ * que é o alvo do build de produção. Em desenvolvimento o DATABASE_URL aponta
+ * para SQLite, então é preciso usar o client compilado para SQLite —
+ * mesma resolução já aplicada em lib/prisma-sqlite.ts.
+ *
+ * Sem isso, toda query feita por este módulo falha em dev com
+ * "Invalid `prisma.*` invocation" (provider incompatível com a URL).
+ */
+function resolvePrismaClient(): PrismaClientConstructor {
+  if (process.env.NODE_ENV === 'production') return PrismaClient as PrismaClientConstructor
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sqliteClient = require('../node_modules/.prisma/client-sqlite') as {
+      PrismaClient: PrismaClientConstructor
+    }
+    return sqliteClient.PrismaClient
+  } catch {
+    return PrismaClient as PrismaClientConstructor
+  }
 }
 
-export const prisma =
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClientType | undefined
+}
+
+export const prisma: PrismaClientType =
   globalForPrisma.prisma ??
-  new PrismaClient({
+  new (resolvePrismaClient())({
     log: ['error'],
   })
 

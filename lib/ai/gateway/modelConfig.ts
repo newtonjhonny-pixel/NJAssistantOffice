@@ -27,6 +27,10 @@ export const MODULE_MODEL_CONFIG: Record<string, Partial<AIModelConfig>> = {
   'central.chat': chatModuleConfig(16000),
   'tasks.chat': chatModuleConfig(16000),
   'notes.chat': chatModuleConfig(1200),
+  // Pautas de Reuniões — assistente de redação (temperatura baixa: reescreve,
+  // não cria conteúdo novo).
+  'meetings.improve': chatModuleConfig(2000, 0.2),
+  'meetings.ata': chatModuleConfig(8000, 0.2),
   'conferencia.checklist-chat': chatModuleConfig(1600),
   'projects.relatorios.analyze': chatModuleConfig(1200),
   'procedures.analyze': chatModuleConfig(1200),

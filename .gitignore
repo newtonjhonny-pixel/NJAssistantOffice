@@ -57,6 +57,10 @@ next-env.d.ts
 !/public/uploads/importacoes/.gitkeep
 /public/uploads/procedures/*
 !/public/uploads/procedures/.gitkeep
+/public/uploads/notes/*
+!/public/uploads/notes/.gitkeep
+/public/uploads/meetings/*
+!/public/uploads/meetings/.gitkeep
 
 # ── Artefatos de deploy / tarballs ────────────────────────────────────────────
 deploy-*.tar
