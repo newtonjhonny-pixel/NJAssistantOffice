@@ -6,8 +6,7 @@
 # cria `.env.production` como symlink para o .env real que a produção já usa.
 #
 # Nome de projeto explícito (`name:`) — o Compose nunca deduz o projeto pelo
-# nome do diretório, então esta stack não colide com a de homologação
-# (`njassistantoffice-homolog`) nem com outros sistemas da VPS.
+# nome do diretório, então esta stack não colide com outros sistemas da VPS.
 #
 # Uso normal: via GitHub Actions (.github/workflows/deploy-prod.yml).
 # Manual, dentro de /opt/njsistemas/apps/njassistantoffice/source:

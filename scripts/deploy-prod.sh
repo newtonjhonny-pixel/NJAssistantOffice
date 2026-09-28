@@ -118,9 +118,6 @@ case "$DB_URL_CHECK" in
   postgres://*|postgresql://*) ;;
   *) unset DB_URL_CHECK; fail "DATABASE_URL ausente ou não-PostgreSQL no env de produção" ;;
 esac
-case "$DB_URL_CHECK" in
-  *njassistantoffice-homolog-db*|*njassistantoffice_homolog*) unset DB_URL_CHECK; fail "DATABASE_URL de produção aponta para homologação — abortado" ;;
-esac
 unset DB_URL_CHECK
 info "DATABASE_URL presente (PostgreSQL)"
 
