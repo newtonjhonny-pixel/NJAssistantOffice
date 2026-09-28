@@ -20,6 +20,8 @@ prisma/*.db-shm
 .env.*.local
 .env.production
 .env.staging
+.env.homolog
+.env.homolog.local
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log

@@ -1,0 +1,147 @@
+name: Deploy homologação (VPS)
+
+# Automático a cada push na branch `homolog` e manual (workflow_dispatch, em
+# qualquer branch — útil para testar uma branch de feature antes do merge).
+# Stack, banco, volumes e .env totalmente separados da produção
+# (docker-compose.homolog.yml + scripts/deploy-homolog.sh). Este workflow não
+# tem nenhum caminho que altere a produção.
+on:
+  push:
+    branches: [homolog]
+  workflow_dispatch: {}
+
+# Grupo próprio (produção usa `njassistantoffice-production`): um nunca
+# bloqueia o outro. Sem cancelamento: interromper no meio de uma migration
+# deixaria a homologação em estado indefinido.
+concurrency:
+  group: njassistantoffice-homolog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy NJ Assistant Office (homologação)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout do commit a implantar
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validar scripts
+        run: bash -n scripts/deploy-homolog.sh
+
+      - name: Conferir secrets obrigatórios
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          faltando=""
+          [ -n "$SSH_HOST" ]        || faltando="$faltando SSH_HOST"
+          [ -n "$SSH_USER" ]        || faltando="$faltando SSH_USER"
+          [ -n "$SSH_PRIVATE_KEY" ] || faltando="$faltando SSH_PRIVATE_KEY"
+          if [ -n "$faltando" ]; then
+            echo "::error::Secrets ausentes:$faltando (Settings > Secrets and variables > Actions > Secrets)"
+            exit 1
+          fi
+          echo "Secrets presentes."
+
+      - name: Preparar chave SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -eu
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          porta="${SSH_PORT:-22}"
+          if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$porta" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "::warning::SSH_KNOWN_HOSTS não definido — host key aceita na primeira conexão (TOFU). Cadastre o secret para fixar a chave."
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $porta
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            LogLevel ERROR
+            ConnectTimeout 15
+            ConnectionAttempts 2
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          EOF
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts ~/.ssh/config
+
+      - name: Testar conectividade SSH (até 3 tentativas)
+        run: |
+          for tentativa in 1 2 3; do
+            if ssh vps 'docker compose version >/dev/null && echo conectado'; then exit 0; fi
+            [ "$tentativa" -lt 3 ] && { echo "Tentativa $tentativa falhou. Nova tentativa em 10s..."; sleep 10; }
+          done
+          echo "::error::SSH falhou (ou o usuário não tem acesso ao docker compose)."
+          exit 1
+
+      - name: Empacotar e enviar o source do commit
+        run: |
+          set -eu
+          arq="/tmp/njassistantoffice-homolog-${GITHUB_SHA}.tar.gz"
+          git archive --format=tar.gz -o "$arq" "${GITHUB_SHA}"
+          ls -lh "$arq"
+          for tentativa in 1 2 3; do
+            if scp -q "$arq" "vps:$arq"; then exit 0; fi
+            [ "$tentativa" -lt 3 ] && { echo "Envio falhou. Nova tentativa em 10s..."; sleep 10; }
+          done
+          echo "::error::Não foi possível enviar o source após 3 tentativas."
+          exit 1
+
+      # O script vai para um arquivo na VPS (único comando que lê STDIN) e roda
+      # numa segunda sessão com `ssh -n`: `docker compose build/run` também lê
+      # STDIN e consumiria o resto do script se ele chegasse por `bash -s`.
+      - name: Executar deploy de homologação na VPS
+        env:
+          PUBLIC_URL: ${{ vars.NJAO_HOMOLOG_URL }}
+        shell: bash
+        run: |
+          set -eu
+          remoto="/tmp/njassistantoffice-homolog-deploy-${GITHUB_SHA}.sh"
+          # shellcheck disable=SC2029
+          {
+            printf 'export PUBLIC_URL=%q\n' "${PUBLIC_URL:-}"
+            cat scripts/deploy-homolog.sh
+          } | ssh vps "umask 077; cat > $remoto"
+          # shellcheck disable=SC2029  # expansão no cliente é intencional
+          ssh -n vps "bash $remoto $GITHUB_SHA /tmp/njassistantoffice-homolog-${GITHUB_SHA}.tar.gz; rc=\$?; rm -f $remoto; exit \$rc"
+
+      - name: Conferir SHA implantado
+        run: |
+          set -eu
+          implantado="$(ssh vps 'cat /opt/njsistemas/apps/njassistantoffice-homolog/DEPLOYED_COMMIT')"
+          echo "DEPLOYED_COMMIT: $implantado"
+          [ "$implantado" = "$GITHUB_SHA" ] || { echo "::error::SHA implantado diverge do SHA do workflow"; exit 1; }
+          {
+            echo "### Deploy de homologação concluído"
+            echo ""
+            echo "- Commit: \`$GITHUB_SHA\` (ref: \`${GITHUB_REF_NAME}\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Limpar credenciais e artefatos temporários
+        if: always()
+        run: |
+          ssh -n vps "rm -f /tmp/njassistantoffice-homolog-${GITHUB_SHA}.tar.gz /tmp/njassistantoffice-homolog-deploy-${GITHUB_SHA}.sh" 2>/dev/null || true
+          shred -u ~/.ssh/id_deploy 2>/dev/null || rm -f ~/.ssh/id_deploy
+          rm -f ~/.ssh/config "/tmp/njassistantoffice-homolog-${GITHUB_SHA}.tar.gz"

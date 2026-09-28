@@ -1,0 +1,123 @@
+# ==============================================================================
+# NJ Assistant Office — stack de HOMOLOGAÇÃO (mesma VPS da produção)
+#
+# Isolada da produção em tudo:
+#   - projeto Compose próprio (`name: njassistantoffice-homolog`);
+#   - banco PRÓPRIO: container Postgres desta stack, NÃO o njsistemas-postgres;
+#   - volumes próprios (pgdata e uploads com prefixo njassistantoffice_homolog_);
+#   - container, imagem e .env próprios (.env.homolog, não versionado).
+# Nada aqui referencia recursos de produção; as duas stacks sobem juntas sem
+# colidir.
+#
+# Uso normal: via GitHub Actions (.github/workflows/deploy-homolog.yml).
+# Manual, dentro de /opt/njsistemas/apps/njassistantoffice-homolog/source:
+#   docker compose -f docker-compose.homolog.yml build app
+#   docker compose -f docker-compose.homolog.yml up -d db
+#   docker compose -f docker-compose.homolog.yml --profile migrate run --rm -T migrate migrate deploy --schema=./prisma/schema.prisma
+#   docker compose -f docker-compose.homolog.yml up -d --no-deps app
+#
+# Schema via `prisma migrate deploy` (as mesmas migrations da produção) — assim
+# homologação valida exatamente o que vai para produção. Não use `db push`:
+# o schema.production.prisma não modela todas as tabelas criadas pelas
+# migrations e o db push as apagaria.
+# ==============================================================================
+
+name: njassistantoffice-homolog
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: njassistantoffice-homolog-db
+    restart: unless-stopped
+    env_file:
+      - .env.homolog
+    volumes:
+      - njassistantoffice_homolog_pgdata:/var/lib/postgresql/data
+    networks:
+      - njassistantoffice_homolog_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    image: njassistantoffice-homolog:latest
+    container_name: njassistantoffice-app-homolog
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.homolog
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      RUN_MIGRATIONS: "false"
+    expose:
+      - "3000"
+    volumes:
+      - njassistantoffice_homolog_uploads:/app/public/uploads
+    networks:
+      # Rede por onde o Nginx Proxy Manager alcança os apps (mesma da produção).
+      - njsistemas_internal
+      # Rede privada só desta stack, para falar com o banco de homologação.
+      - njassistantoffice_homolog_db
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Prisma CLI sob demanda (profile `migrate`). Só enxerga o banco desta stack.
+  migrate:
+    image: njassistantoffice-homolog:latest
+    profiles:
+      - migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.homolog
+    environment:
+      NODE_ENV: production
+    entrypoint: ["node", "./node_modules/prisma/build/index.js"]
+    command: ["migrate", "status", "--schema=./prisma/schema.prisma"]
+    networks:
+      - njassistantoffice_homolog_db
+
+volumes:
+  njassistantoffice_homolog_pgdata:
+    name: njassistantoffice_homolog_pgdata
+  njassistantoffice_homolog_uploads:
+    name: njassistantoffice_homolog_uploads
+
+networks:
+  njsistemas_internal:
+    name: njsistemas_internal
+    external: true
+  njassistantoffice_homolog_db:
+    name: njassistantoffice_homolog_db
+    internal: true

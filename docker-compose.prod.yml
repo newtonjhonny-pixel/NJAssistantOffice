@@ -1,38 +1,119 @@
+# ==============================================================================
+# NJ Assistant Office — stack de PRODUÇÃO (VPS Hostinger)
+#
+# Este arquivo NÃO contém credenciais. As variáveis sensíveis vêm de
+# `.env.production` (não versionado). Na VPS o deploy (scripts/deploy-prod.sh)
+# cria `.env.production` como symlink para o .env real que a produção já usa.
+#
+# Nome de projeto explícito (`name:`) — o Compose nunca deduz o projeto pelo
+# nome do diretório, então esta stack não colide com a de homologação
+# (`njassistantoffice-homolog`) nem com outros sistemas da VPS.
+#
+# Uso normal: via GitHub Actions (.github/workflows/deploy-prod.yml).
+# Manual, dentro de /opt/njsistemas/apps/njassistantoffice/source:
+#   docker compose -f docker-compose.prod.yml build app
+#   docker compose -f docker-compose.prod.yml --profile migrate run --rm -T migrate migrate status --schema=./prisma/schema.prisma
+#   docker compose -f docker-compose.prod.yml up -d --no-deps app
+#
+# NUNCA use `prisma db push`, `migrate reset` ou `--accept-data-loss` aqui:
+# o schema.production.prisma diverge das migrations versionadas (tabelas
+# criadas por migration e acessadas via SQL cru), e db push as apagaria.
+# ==============================================================================
+
+name: njassistantoffice
+
 services:
-  njassistantoffice:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
     image: njassistantoffice:prod
     container_name: njassistantoffice-app
     restart: unless-stopped
+
     env_file:
-      - .env
+      - .env.production
+
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: "3000"
       HOSTNAME: 0.0.0.0
+      # Migrations nunca rodam no start do container em produção — são etapa
+      # controlada do deploy (serviço `migrate`, com backup e auditoria antes).
       RUN_MIGRATIONS: "false"
       NEXTAUTH_URL: https://assistant.nevion.com.br
       NEXT_PUBLIC_APP_URL: https://assistant.nevion.com.br
+
     expose:
       - "3000"
+
+    # Uploads gravados em runtime (public/uploads). Volume nomeado e externo:
+    # sobrevive a rebuild/recriação e `docker compose down -v` não o apaga.
     volumes:
-      - ./logs:/app/logs
+      - njassistantoffice_prod_uploads:/app/public/uploads
+
+    networks:
+      njassistantoffice_network:
+        aliases:
+          - njassistantoffice
+      njsistemas_internal:
+        # Alias de compatibilidade: scripts/vps/05-npm-setup.sh configurou o
+        # proxy host do NPM com forward_host "njassistantoffice". Com o alias,
+        # o NPM alcança este container tanto por esse nome quanto por
+        # "njassistantoffice-app".
+        aliases:
+          - njassistantoffice
+
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 90s
-    networks:
-      - njassistantoffice_network
-      - njsistemas_internal
+      start_period: 60s
+
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
-networks:
-  njassistantoffice_network:
+  # ----------------------------------------------------------------------------
+  # Prisma CLI sob demanda (profile `migrate`, nunca sobe com a stack).
+  # Mesma imagem do app: o runner já carrega prisma CLI + migrations.
+  #   ... --profile migrate run --rm -T migrate migrate status --schema=./prisma/schema.prisma
+  #   ... --profile migrate run --rm -T migrate migrate deploy --schema=./prisma/schema.prisma
+  # ----------------------------------------------------------------------------
+  migrate:
+    image: njassistantoffice:prod
+    profiles:
+      - migrate
+    restart: "no"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+    entrypoint: ["node", "./node_modules/prisma/build/index.js"]
+    command: ["migrate", "status", "--schema=./prisma/schema.prisma"]
+    networks:
+      - njsistemas_internal
+
+volumes:
+  njassistantoffice_prod_uploads:
+    name: njassistantoffice_prod_uploads
     external: true
+
+networks:
+  # Rede própria do NJ Assistant Office, pré-existente na VPS. Externa: esta
+  # stack se conecta, não cria nem altera.
+  njassistantoffice_network:
+    name: njassistantoffice_network
+    external: true
+  # Rede compartilhada onde vivem o njsistemas-postgres e o Nginx Proxy Manager.
   njsistemas_internal:
+    name: njsistemas_internal
     external: true

@@ -48,6 +48,16 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copia artefatos do build standalone
 COPY --from=builder /app/public ./public
+
+# Uploads gravados em runtime (lib/uploads/attachments.ts e rotas de anexos).
+# O diretório precisa pertencer ao usuário nextjs: em deploy ele é montado como
+# volume nomeado, e um volume vazio herda dono/permissões deste caminho da imagem.
+RUN mkdir -p /app/public/uploads/tasks /app/public/uploads/central \
+      /app/public/uploads/importacoes /app/public/uploads/procedures \
+      /app/public/uploads/notes /app/public/uploads/meetings \
+      /app/public/uploads/job-roles \
+ && chown -R nextjs:nodejs /app/public/uploads
+
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

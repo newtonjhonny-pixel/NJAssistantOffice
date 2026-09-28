@@ -110,6 +110,7 @@ Acesse: `http://localhost:3000`
 - **Banco:** PostgreSQL 16 dedicado
 - **Proxy:** Nginx Proxy Manager
 - **SSL:** Let's Encrypt
+- **Deploy:** GitHub Actions → VPS, com homologação e produção separadas — ver [`docs/DEPLOY-VPS.md`](docs/DEPLOY-VPS.md)
 
 ---
 

@@ -1,0 +1,162 @@
+name: Deploy produção (VPS)
+
+# SOMENTE disparo manual, SOMENTE a partir da `main`, e exige digitar
+# "deploy". Nunca roda em push. Pode exigir aprovação adicional em
+# Settings > Environments > production (required reviewers).
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Digite "deploy" para confirmar a atualização de PRODUÇÃO'
+        required: true
+        default: ''
+
+# Nunca dois deploys de produção ao mesmo tempo; nunca cancela um em andamento.
+concurrency:
+  group: njassistantoffice-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy NJ Assistant Office (produção)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: production
+      url: https://assistant.nevion.com.br
+
+    steps:
+      - name: Validar confirmação e branch
+        env:
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: |
+          if [ "$CONFIRMAR" != "deploy" ]; then
+            echo "::error::Confirmação inválida. Digite exatamente: deploy"
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Produção só é implantada a partir da main (ref atual: $GITHUB_REF)"
+            exit 1
+          fi
+
+      - name: Checkout do commit a implantar
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validar scripts
+        run: bash -n scripts/deploy-prod.sh
+
+      - name: Conferir secrets obrigatórios
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          V_HOST: ${{ vars.SSH_HOST != '' }}
+          V_KEY: ${{ vars.SSH_PRIVATE_KEY != '' }}
+        run: |
+          faltando=""
+          [ -n "$SSH_HOST" ]        || faltando="$faltando SSH_HOST"
+          [ -n "$SSH_USER" ]        || faltando="$faltando SSH_USER"
+          [ -n "$SSH_PRIVATE_KEY" ] || faltando="$faltando SSH_PRIVATE_KEY"
+          if [ -n "$faltando" ]; then
+            echo "::error::Secrets ausentes:$faltando"
+            if [ "$V_HOST" = "true" ] || [ "$V_KEY" = "true" ]; then
+              echo "Os valores estão cadastrados como VARIABLES — recadastre como SECRETS e apague as variables."
+            fi
+            exit 1
+          fi
+          echo "Secrets presentes."
+
+      - name: Preparar chave SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -eu
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          porta="${SSH_PORT:-22}"
+          if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$porta" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "::warning::SSH_KNOWN_HOSTS não definido — host key aceita na primeira conexão (TOFU). Cadastre o secret para fixar a chave."
+          fi
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $SSH_HOST
+            User $SSH_USER
+            Port $porta
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+            LogLevel ERROR
+            ConnectTimeout 15
+            ConnectionAttempts 2
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          EOF
+          chmod 600 ~/.ssh/id_deploy ~/.ssh/known_hosts ~/.ssh/config
+
+      - name: Testar conectividade SSH (até 3 tentativas)
+        run: |
+          for tentativa in 1 2 3; do
+            if ssh vps 'docker compose version >/dev/null && echo conectado'; then exit 0; fi
+            [ "$tentativa" -lt 3 ] && { echo "Tentativa $tentativa falhou. Nova tentativa em 10s..."; sleep 10; }
+          done
+          echo "::error::SSH falhou (ou o usuário não tem acesso ao docker compose)."
+          exit 1
+
+      - name: Empacotar e enviar o source do commit
+        run: |
+          set -eu
+          arq="/tmp/njassistantoffice-prod-${GITHUB_SHA}.tar.gz"
+          git archive --format=tar.gz -o "$arq" "${GITHUB_SHA}"
+          ls -lh "$arq"
+          for tentativa in 1 2 3; do
+            if scp -q "$arq" "vps:$arq"; then exit 0; fi
+            [ "$tentativa" -lt 3 ] && { echo "Envio falhou. Nova tentativa em 10s..."; sleep 10; }
+          done
+          echo "::error::Não foi possível enviar o source após 3 tentativas."
+          exit 1
+
+      # Sem retry de propósito: este step altera produção. Reexecutar um deploy
+      # interrompido é decisão humana.
+      - name: Executar deploy de produção na VPS
+        shell: bash
+        run: |
+          set -eu
+          remoto="/tmp/njassistantoffice-prod-deploy-${GITHUB_SHA}.sh"
+          # shellcheck disable=SC2029
+          ssh vps "umask 077; cat > $remoto" < scripts/deploy-prod.sh
+          # shellcheck disable=SC2029  # expansão no cliente é intencional
+          ssh -n vps "bash $remoto $GITHUB_SHA /tmp/njassistantoffice-prod-${GITHUB_SHA}.tar.gz; rc=\$?; rm -f $remoto; exit \$rc"
+
+      - name: Conferir SHA implantado
+        run: |
+          set -eu
+          implantado="$(ssh vps 'cat /opt/njsistemas/apps/njassistantoffice/DEPLOYED_COMMIT')"
+          echo "DEPLOYED_COMMIT: $implantado"
+          [ "$implantado" = "$GITHUB_SHA" ] || { echo "::error::SHA implantado diverge do SHA do workflow"; exit 1; }
+          {
+            echo "### Deploy de produção concluído"
+            echo ""
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- URL: https://assistant.nevion.com.br"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Limpar credenciais e artefatos temporários
+        if: always()
+        run: |
+          ssh -n vps "rm -f /tmp/njassistantoffice-prod-${GITHUB_SHA}.tar.gz /tmp/njassistantoffice-prod-deploy-${GITHUB_SHA}.sh" 2>/dev/null || true
+          shred -u ~/.ssh/id_deploy 2>/dev/null || rm -f ~/.ssh/id_deploy
+          rm -f ~/.ssh/config "/tmp/njassistantoffice-prod-${GITHUB_SHA}.tar.gz"
